@@ -1,0 +1,557 @@
+import Foundation
+import MapperRawLog
+import MC1Services
+import SurveyKit
+import UIKit
+
+// MARK: - Signal Mapper Wiring
+
+extension AppState {
+  /// Brings passive coverage capture up for a connection, or tears it down when the M0
+  /// debug flag is off (docs/SIGNAL_MAPPER_V2.md §2.3, §7 "M0").
+  ///
+  /// The engine is per-connection because its RX source is: `RxLogService` is rebuilt with
+  /// every `ServiceContainer`, and a stream from a torn-down container never yields again.
+  /// The *store* is not per-connection — cells belong to places, not to radios — so
+  /// reconnecting continues folding into the same rows.
+  ///
+  /// A running survey **run** is not ended here (M3.5 §2.6): the probe engine of the old
+  /// stack is stopped and its counters folded into the run, and once the new stack is up
+  /// the probe session restarts against it silently — no prompts, same runID, same focus.
+  func wireSignalMapper(services: ServiceContainer) {
+    // Re-wiring replaces the capture stack a running survey folds into, so the current
+    // probe engine ends here whichever branch follows — folding into a replaced engine
+    // would silently lose its tail. The run itself survives.
+    suspendProbeEngineForRewire()
+
+    let previousTransition = signalMapperStartTask
+    previousTransition?.cancel()
+
+    guard MapperTuningStore().isCaptureEnabled || signalMapperRideSession != nil else {
+      tearDownSignalMapper()
+      return
+    }
+
+    let tuning = MapperTuningStore()
+    let fixes = MapperFixCache.live(
+      locationService: locationService,
+      movementHints: services.movementHintRelay,
+      tuning: tuning
+    )
+    let router = mapperFixRouter()
+    let engine = SignalMapperCaptureEngine(
+      source: services.rxLogService,
+      txHeardSource: services.heardRepeatsService,
+      ackSource: services.messageService,
+      store: services.dataStore,
+      fixProvider: router,
+      // Passed only when something is genuinely classifying motion. An unauthorized relay
+      // reports `.stationary` forever, and handing that to the engine would mark every
+      // observation as dwell and eventually declare the user's whole commute an anchor —
+      // so "we don't know" is passed as nil and the anchor policy falls back to volume.
+      movementHints: MovementHintMonitor.authorization == .authorized ? services.movementHintRelay : nil,
+      tuningProvider: tuning,
+      anchorSeedProvider: tuning
+    )
+    signalMapperFixCache = fixes
+    signalMapperEngine = engine
+
+    signalMapperStartTask = Task {
+      // Wait out whichever transition was already in flight, so a stop queued a moment ago
+      // cannot land after the start it was meant to precede.
+      await previousTransition?.value
+      guard !Task.isCancelled else { return }
+      await router.setFallback(fixes)
+      await engine.start()
+      // The raw log is always on since v3 (§7 step 2): a recorder exists whenever capture
+      // is wired, not only while a ride is open. Attached after `start()` so the engine is
+      // already running when rows begin arriving, and after the store's launch maintenance
+      // has had its turn.
+      if let recorder = await self.ensureRawRecorder() {
+        await engine.setRawRecorder(recorder)
+      }
+    }
+
+    // Capture only sees the phone move if something is classifying motion. Never prompts
+    // from here: connecting a radio is not consent to a Motion & Fitness dialog, and on an
+    // auto-reconnect it would land over the launch screen. The prompt belongs to the moment
+    // the user turns capture on — see ``requestMapperMovementHintsIfNeeded()``.
+    startMovementHintsIfAlreadyPermitted()
+
+    // A run that lost its radio resumes probing against the new stack — silently, with no
+    // permission prompts (review C4b: a TCC dialog at 25 km/h, over an in-flight popover
+    // transition, is both unusable and the iOS 26 crash family).
+    if signalMapperRideSession != nil {
+      resumeProbeSessionAfterRewire(services: services)
+    }
+  }
+
+  /// Releases everything ``wireSignalMapper(services:)`` set up, flushing whatever the
+  /// session had buffered. Safe to call when nothing was started.
+  ///
+  /// A running run stays open (§2.6): its probe engine is written off into the run's
+  /// carried counters and the HUD switches to "radio disconnected". The run ends only at
+  /// explicit stop or auto-end — riding out of BLE range must not end the ride.
+  func tearDownSignalMapper() {
+    suspendProbeEngineForRewire()
+    // Our own transmissions stop being recorded exactly when everything else does. The
+    // capture toggle governing only the passive producers would be a rule the user cannot
+    // see: they turned capture off and the log kept growing.
+    mapperSentPacketLogger?.stop()
+
+    let previousTransition = signalMapperStartTask
+    previousTransition?.cancel()
+    signalMapperStartTask = nil
+
+    guard let engine = signalMapperEngine else {
+      signalMapperFixCache = nil
+      Task { await signalMapperFixRouter?.setFallback(nil) }
+      return
+    }
+    let fixes = signalMapperFixCache
+    let router = signalMapperFixRouter
+    signalMapperEngine = nil
+    signalMapperFixCache = nil
+
+    let recorder = mapperRawSampleRecorder
+    signalMapperStartTask = Task {
+      await previousTransition?.value
+      await engine.stop()
+      // The recorder outlives the engine — it is app-lifetime now — so the tail it is
+      // holding has to be written here rather than dying with the stack.
+      await recorder?.flushNow()
+      await fixes?.reset()
+      await router?.setFallback(nil)
+    }
+  }
+
+  /// Stops the current probe engine, folding its counters into the run (when one is
+  /// active) so nothing is lost across a rewire. The shared front half of
+  /// `wireSignalMapper` and `tearDownSignalMapper`.
+  private func suspendProbeEngineForRewire() {
+    if let probe = signalMapperProbeEngine {
+      signalMapperProbeEngine = nil
+      let session = signalMapperRideSession
+      Task {
+        let final = await probe.stopSession()
+        await MainActor.run {
+          session?.accumulate(final)
+        }
+      }
+    }
+    if let session = signalMapperRideSession, session.isRadioConnected {
+      session.isRadioConnected = false
+      session.recordRadioLink(up: false)
+    }
+    surveySessionOwnsCaptureStack = false
+  }
+
+  /// Re-runs the wiring so a change to the capture toggle takes effect now rather than at
+  /// the next connect.
+  func applySignalMapperCaptureSetting() {
+    // Before the wiring, so the engine is built with a movement provider if the user grants
+    // permission here rather than having to wait for the next connect to see one.
+    requestMapperMovementHintsIfNeeded()
+
+    guard let services else {
+      tearDownSignalMapper()
+      return
+    }
+    wireSignalMapper(services: services)
+  }
+
+  /// Starts movement classification for the mapper, prompting for Motion & Fitness if that
+  /// is what it takes.
+  ///
+  /// The mapper owns this dependency rather than inheriting it. Its movement hints used to
+  /// arrive only if the signal-bars feature happened to have asked for the permission
+  /// first, which meant a user who enabled coverage capture and never touched signal bars
+  /// got a relay stuck on `.stationary` for good: §2.2's "on movement, request a fresh fix"
+  /// never fired, and the dwell signal anchor detection reads was uniformly wrong.
+  ///
+  /// Called when capture is switched on, which is the one moment the prompt is
+  /// proportionate — the same rule signal bars applies when the user opens its table.
+  /// Declining is survivable: the fix gate's speed-scaled displacement budget needs no
+  /// permission, and anchor detection falls back to observation volume.
+  func requestMapperMovementHintsIfNeeded() {
+    guard MapperTuningStore().isCaptureEnabled else { return }
+    guard MovementHintMonitor.authorization.canDeliverUpdates else { return }
+    guard let services, !movementHintMonitor.isRunning else { return }
+    startMovementHints(services: services)
+  }
+
+  /// Whether the mapper still wants movement classification running.
+  ///
+  /// Read by signal bars' teardown, which shares the one monitor: switching bars off must
+  /// not silently take the mapper's hints away with it. A running survey session counts
+  /// the same as the capture toggle — its fix gate reads the same hints.
+  var signalMapperNeedsMovementHints: Bool {
+    MapperTuningStore().isCaptureEnabled || signalMapperProbeEngine != nil
+      || signalMapperRideSession != nil
+  }
+
+  /// The app-lifetime fix router, created on first use (needs `locationService`, which
+  /// outlives every connection).
+  func mapperFixRouter() -> MapperFixRouter {
+    if let router = signalMapperFixRouter { return router }
+    let router = MapperFixRouter(locationService: locationService)
+    signalMapperFixRouter = router
+    return router
+  }
+
+  // MARK: - Survey runs (M3 sessions, M3.5 rides)
+
+  /// Starts a survey run. The only entry point that may show permission prompts — the
+  /// user just asked to survey, which is exactly when a location or Motion & Fitness
+  /// dialog is proportionate. Everything else (rewire resume) goes through
+  /// ``resumeProbeSessionAfterRewire(services:)`` and prompts for nothing.
+  ///
+  /// Returns false when no radio is connected: probes need a session to transmit through.
+  @discardableResult
+  func startSignalMapperSurvey(focusTargets: [MapperProbeTarget] = []) async -> Bool {
+    guard let services else { return false }
+    guard signalMapperRideSession == nil else {
+      // Already running: a non-empty selection is a focus update; an argless re-entry
+      // (the old UI path) changes nothing.
+      if !focusTargets.isEmpty {
+        await setSurveyFocusTargets(focusTargets)
+      }
+      return true
+    }
+
+    locationService.requestPermissionIfNeeded()
+    requestSurveyMovementHints()
+
+    // The ride's run row, and the label on the already-running recorder. Failing to open
+    // it degrades the run to aggregates-only rather than blocking it — but that
+    // degradation is loud in the summary sheet.
+    let recorder = await openRun(focusTargets: focusTargets)
+    let session = SignalMapperRideSession(
+      runID: recorder?.runID ?? UUID(),
+      startedAt: Date(),
+      focusTargets: focusTargets,
+      recorder: recorder?.recorder
+    )
+    session.focusProbeInterval = max(4, MapperTuningStore().tuning.focusProbeIntervalSeconds)
+    session.currentTxPowerDbm = { [weak self] in
+      self?.services?.adaptivePowerService.confirmedRadioDbm
+    }
+    signalMapperRideSession = session
+
+    // Live location for the whole run — keyed to the run, not the connection (review 3b:
+    // the rider is still riding during a BLE drop, and GPS re-acquisition after a
+    // restart costs 2–10 s of samples).
+    locationService.startContinuousUpdates()
+    await mapperFixRouter().setLiveMode(true)
+    session.startBreadcrumbs(fixProvider: mapperFixRouter())
+    updateMapperIdleTimer()
+
+    // The mapper must not stack its traces on top of signal bars' independent prober at
+    // full cadence (review C3: two uncoordinated schedulers, one duty-cycle budget) — but
+    // *stopping* bars was the wrong lever. It bought nothing in viewer mode, where the
+    // radio runs its own prober; it emptied the table the toolbar pill mirrors, so the
+    // pill collapsed to a glyph for the whole ride; and it threw away the warm target set
+    // this very session then warm-starts from, which is why a rewire used to cost a run
+    // every repeater it knew: `stop()` rebuilds the bars table empty, and `warmTargets`
+    // *is* that table. Backing off leaves it populated; the ordering against
+    // `startProbeSession` below is incidental, since the cadence scale has no bearing on
+    // what the table already holds (Rafael, 2026-08-30).
+    await services.signalBarsEngine.setSurveyActive(true)
+
+    await startProbeSession(services: services)
+    return true
+  }
+
+  /// Builds the probe engine against the current stack and starts it. Shared by the
+  /// user-initiated start and the silent rewire resume.
+  private func startProbeSession(services: ServiceContainer) async {
+    guard let session = signalMapperRideSession else { return }
+
+    if signalMapperEngine == nil {
+      let tuning = MapperTuningStore()
+      let fixes = MapperFixCache.live(
+        locationService: locationService,
+        movementHints: services.movementHintRelay,
+        tuning: tuning
+      )
+      let router = mapperFixRouter()
+      let engine = SignalMapperCaptureEngine(
+        source: services.rxLogService,
+        txHeardSource: services.heardRepeatsService,
+        ackSource: services.messageService,
+        store: services.dataStore,
+        fixProvider: router,
+        movementHints: MovementHintMonitor.authorization == .authorized ? services.movementHintRelay : nil,
+        tuningProvider: tuning,
+        anchorSeedProvider: tuning
+      )
+      signalMapperFixCache = fixes
+      signalMapperEngine = engine
+      surveySessionOwnsCaptureStack = true
+      // Chain on the in-flight transition exactly like the ambient path (review C4d: a
+      // session-scoped start racing a stopping engine builds two engines flushing into
+      // one store).
+      let previousTransition = signalMapperStartTask
+      signalMapperStartTask = Task {
+        await previousTransition?.value
+        await router.setFallback(fixes)
+        await engine.start()
+      }
+      await signalMapperStartTask?.value
+    }
+
+    guard let engine = signalMapperEngine else { return }
+    // Only ever *attaches*. A nil ride recorder means the raw store failed to open, and
+    // passing it through would detach the app-lifetime recorder the ambient wiring
+    // already gave this engine.
+    if let recorder = session.recorder ?? mapperRawSampleRecorder {
+      await engine.setRawRecorder(recorder)
+    }
+
+    let probe = SignalMapperProbeEngine(
+      session: services.session,
+      sink: engine,
+      warmTargets: services.signalBarsEngine,
+      store: services.dataStore,
+      fixProvider: mapperFixRouter(),
+      tuningProvider: MapperTuningStore(),
+      rawRecorder: session.recorder
+    )
+    signalMapperProbeEngine = probe
+    await probe.setFocusTargets(session.focusTargets)
+    // A range ride pins the fine tier: at 15–30 km/h the automatic tier flaps across its
+    // hysteresis band and sampling density becomes a function of traffic lights.
+    await probe.setTierOverride(.fine)
+    await probe.startSession(pathHashMode: connectedDevice?.pathHashMode ?? 0)
+    session.isRadioConnected = true
+    session.noteNewEngineGeneration()
+  }
+
+  /// Restarts the probe session after a BLE rewire — silently: no prompts, same run.
+  private func resumeProbeSessionAfterRewire(services: ServiceContainer) {
+    guard let session = signalMapperRideSession else { return }
+    Task {
+      await self.signalMapperStartTask?.value
+      guard self.signalMapperRideSession === session, self.signalMapperProbeEngine == nil else { return }
+      // Signal bars restarted with the connection at its normal cadence; put it back on
+      // the ride's backoff. Its table stays populated, so the probe session below still
+      // warm-starts from real targets instead of rediscovering from nothing.
+      await services.signalBarsEngine.setSurveyActive(true)
+      session.recordRadioLink(up: true)
+      await self.startProbeSession(services: services)
+    }
+  }
+
+  /// Ends the running survey run, returning its cumulative counters for the completion
+  /// sheet — or nil when nothing was running.
+  func stopSignalMapperSurvey() async -> SignalMapperProbeEngine.SessionSnapshot? {
+    guard let session = signalMapperRideSession else { return nil }
+
+    if let probe = signalMapperProbeEngine {
+      signalMapperProbeEngine = nil
+      let final = await probe.stopSession()
+      session.accumulate(final)
+    }
+    signalMapperRideSession = nil
+
+    session.stopBreadcrumbs()
+    await mapperFixRouter().setLiveMode(false)
+    locationService.stopContinuousUpdates()
+    updateMapperIdleTimer()
+
+    var totals = session.carried
+    totals.isRunning = false
+    totals.startedAt = session.startedAt
+
+    // Close out the ride's slice of the log: the recorder keeps running with no run
+    // label, so the engine keeps its recorder and only the stamp comes off. `setRunID`
+    // flushes on its way through, so the ride's tail lands under the ride's id.
+    await session.recorder?.setRunID(nil)
+    if let store = mapperRawLogStore {
+      let runID = session.runID
+      let carried = session.carried
+      try? await store.accumulateCounters(
+        runID: runID,
+        probesSent: carried.probesSent,
+        tracesSent: carried.tracesSent,
+        discoversSent: carried.discoversSent,
+        repliesHeard: carried.traceRepliesHeard + carried.discoverResponsesHeard,
+        probesLost: carried.probesLost,
+        cellsProbed: carried.cellsProbed
+      )
+      try? await store.endRun(runID, at: Date())
+    }
+
+    if surveySessionOwnsCaptureStack {
+      surveySessionOwnsCaptureStack = false
+      // The toggle is still off; the stack existed only for this session. `tearDown`
+      // flushes the buffered tail before stopping, so the session's last cells land.
+      tearDownSignalMapper()
+    } else {
+      // Ambient capture keeps running, but the completion sheet reloads the map *now* —
+      // without this, the session's last half-minute sits in the buffer until the next
+      // scheduled flush and the sheet appears over a map missing its own ending.
+      await signalMapperEngine?.flushNow()
+    }
+
+    // Back to full cadence. The engine was never stopped, so there is nothing to rewire
+    // and no window where the pill's label collapses.
+    //
+    // Waiting the in-flight wiring transition out first is load-bearing: `wireSignalBars`
+    // re-applies the backoff from inside its own task, reading the session flag on its way
+    // past. A reconnect racing a run's end could otherwise apply `true` *after* this
+    // `false` and leave the engine on the ride cadence with no ride (analysis 6.4). The
+    // task handle is the existing convention for ordering these two.
+    if let services {
+      let pendingWiring = signalBarsStartTask
+      await pendingWiring?.value
+      await services.signalBarsEngine.setSurveyActive(false)
+    }
+    return totals
+  }
+
+  /// Updates the lock-on selection mid-run.
+  func setSurveyFocusTargets(_ targets: [MapperProbeTarget]) async {
+    guard let session = signalMapperRideSession else { return }
+    session.focusTargets = Array(targets.prefix(SignalMapperProbeEngine.maxFocusTargets))
+    await signalMapperProbeEngine?.setFocusTargets(session.focusTargets)
+    if let store = mapperRawLogStore {
+      try? await store.updateFocusTargets(
+        runID: session.runID,
+        hexIDs: session.focusTargets.map(\.id.hex)
+      )
+    }
+  }
+
+  /// Screen-awake, owned here and keyed on *run active ∧ scene active* — never on view
+  /// visibility: the session outlives the coverage view, and navigating to Chats
+  /// mid-ride must not let the screen sleep (review M16). `.inactive` (Control Centre, a
+  /// notification banner) keeps it on; only a real background clears it, and the
+  /// foreground-only capture story means the run is effectively paused then anyway.
+  func updateMapperIdleTimer(scenePhaseIsBackground: Bool = false) {
+    let wantAwake = signalMapperRideSession != nil && !scenePhaseIsBackground
+      && MapperTuningStore().tuning.rideKeepsScreenAwake
+    UIApplication.shared.isIdleTimerDisabled = wantAwake
+  }
+
+  /// Scene-phase hook for the run's auto-end rule (review F6): 10 cumulative background
+  /// minutes, or the 6 h hard cap, ends the run as if the user had tapped stop.
+  func handleRideScenePhaseChange(isActive: Bool) {
+    guard let session = signalMapperRideSession else { return }
+    updateMapperIdleTimer(scenePhaseIsBackground: !isActive)
+    if session.noteScenePhase(isActive: isActive) {
+      Task { _ = await stopSignalMapperSurvey() }
+    }
+  }
+
+  // MARK: - Raw log plumbing
+
+  /// Opens (or reuses) the raw store, running launch maintenance the first time.
+  ///
+  /// Maintenance is: orphaned runs get their `endedAt` stamped, everything past the
+  /// retention window is deleted — rows first, whatever run they name, because since v3
+  /// most rows name none — and then the derived per-cell summaries are rebuilt *if the
+  /// table is empty*, which is the first launch after step 3 and no other
+  /// (``MapperRawLogStore/rebuildAllSummariesIfEmpty()``, two counts on every later one).
+  /// The rebuild runs after the purge on purpose: folding rows that are about to be
+  /// deleted would produce a cache the very next statement contradicts.
+  ///
+  /// Called by the capture wiring *and* by the coverage screen, which since step 4 reads
+  /// its map from this store and may open it with capture switched off entirely.
+  ///
+  /// Returning nil degrades the mapper to aggregates-only rather than blocking capture;
+  /// the raw store failing to open must never cost the user their coverage map.
+  func resolveMapperRawLogStore() async -> MapperRawLogStore? {
+    if let existing = mapperRawLogStore { return existing }
+    guard let fresh = try? MapperRawLogStore.live() else { return nil }
+    mapperRawLogStore = fresh
+    let tuning = MapperTuningStore().tuning
+    _ = try? await fresh.reconcileOrphanRuns(now: Date())
+    _ = try? await fresh.purgeExpired(retentionDays: tuning.rawRetentionDays, now: Date())
+    _ = try? await fresh.rebuildAllSummariesIfEmpty()
+    return fresh
+  }
+
+  /// Opens (or reuses) the raw store and the one app-lifetime recorder, and starts the
+  /// sent-packet logger against them.
+  @discardableResult
+  func ensureRawRecorder() async -> MapperRawSampleRecorder? {
+    if let recorder = mapperRawSampleRecorder {
+      startSentPacketLogger(recorder: recorder)
+      return recorder
+    }
+
+    guard let store = await resolveMapperRawLogStore() else { return nil }
+
+    // Continue the table's numbering rather than restarting at zero: `seq` orders the
+    // store now, not one ride, and a launch that reused numbers would make the order
+    // ambiguous for every row written after it.
+    let startingSeq = await (try? store.nextSeq()) ?? 0
+    let recorder = MapperRawSampleRecorder(
+      store: store,
+      runID: nil,
+      startingSeq: startingSeq,
+      // A per-ride backstop only. Outside a ride nothing is capped — retention is the
+      // bound (§2).
+      cap: MapperTuningStore().tuning.rawSampleCapPerSession
+    )
+    mapperRawSampleRecorder = recorder
+    startSentPacketLogger(recorder: recorder)
+    return recorder
+  }
+
+  /// Subscribes the sent-packet logger to the message stream, building it on first use.
+  ///
+  /// Lives *inside* the capture wiring rather than beside the message stream, because
+  /// "capture is on" is what makes recording our own transmissions legitimate: the toggle
+  /// has to govern every producer, not only the passive ones. `tearDownSignalMapper`
+  /// unsubscribes it for the same reason.
+  ///
+  /// Re-entrant by design — `wireSignalMapper` runs on every reconnect, and rebuilding a
+  /// working subscription each time would drop whatever event was in flight.
+  private func startSentPacketLogger(recorder: MapperRawSampleRecorder) {
+    guard let services, let store = mapperRawLogStore else { return }
+    if mapperSentPacketLogger == nil {
+      mapperSentPacketLogger = MapperSentPacketLogger(
+        recorder: recorder,
+        store: store,
+        fixProvider: mapperFixRouter(),
+        messages: services.dataStore
+      )
+    }
+    guard let logger = mapperSentPacketLogger, !logger.isRunning else { return }
+    logger.start(events: messageEventStream.events())
+  }
+
+  /// Opens the ride's run row and stamps its id onto the running recorder.
+  ///
+  /// The recorder is *not* replaced: it has been recording since capture came up, and
+  /// swapping it at ride start would drop whatever it was holding and restart the
+  /// sequence. A ride is a label, and this is where the label goes on.
+  private func openRun(focusTargets: [MapperProbeTarget]) async -> (runID: UUID, recorder: MapperRawSampleRecorder)? {
+    guard let recorder = await ensureRawRecorder(), let store = mapperRawLogStore else { return nil }
+
+    let device = connectedDevice
+    guard let runID = try? await store.createRun(
+      radioID: device?.id,
+      frequency: device?.frequency,
+      bandwidth: device?.bandwidth,
+      spreadingFactor: device?.spreadingFactor,
+      codingRate: device?.codingRate,
+      txPower: device?.txPower,
+      focusTargetHexIDs: focusTargets.map(\.id.hex),
+      startedAt: Date()
+    ) else { return nil }
+
+    await recorder.setRunID(runID)
+    return (runID, recorder)
+  }
+
+  /// The session-scoped twin of ``requestMapperMovementHintsIfNeeded()`` — same prompt,
+  /// same fallback story, gated on the session rather than the capture toggle.
+  private func requestSurveyMovementHints() {
+    guard MovementHintMonitor.authorization.canDeliverUpdates else { return }
+    guard let services, !movementHintMonitor.isRunning else { return }
+    startMovementHints(services: services)
+  }
+}

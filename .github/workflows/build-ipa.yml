@@ -18,11 +18,11 @@ permissions:
 
 jobs:
   build:
-    runs-on: macos-26
+    runs-on: xcode-27
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           submodules: recursive
           fetch-depth: 2
@@ -62,28 +62,32 @@ jobs:
         if: steps.version_check.outputs.should_build == 'true' || github.event_name == 'workflow_dispatch'
         run: |
           brew tap FelixHerrmann/tap
-          brew install xcodegen swiftgen swift-package-list
+          brew trust FelixHerrmann/tap
+          brew install make xcodegen swiftgen swift-package-list
+          echo "$(brew --prefix make)/libexec/gnubin" >> "$GITHUB_PATH"
 
       - name: Generate Xcode project
         if: steps.version_check.outputs.should_build == 'true' || github.event_name == 'workflow_dispatch'
-        run: xcodegen generate
+        run: make generate
 
       - name: Update acknowledgements
         if: steps.version_check.outputs.should_build == 'true' || github.event_name == 'workflow_dispatch'
         run: |
-          mkdir -p PocketMesh.xcodeproj/project.xcworkspace/xcshareddata/swiftpm
-          xcodebuild -resolvePackageDependencies -project PocketMesh.xcodeproj -clonedSourcePackagesDirPath ./SourcePackages
-          swift-package-list PocketMesh.xcodeproj --custom-source-packages-path ./SourcePackages --output-type settings-bundle --requires-license --output-path PocketMesh
+          mkdir -p MC1.xcodeproj/project.xcworkspace/xcshareddata/swiftpm
+          xcodebuild -resolvePackageDependencies -project MC1.xcodeproj -clonedSourcePackagesDirPath ./SourcePackages
+          swift-package-list MC1.xcodeproj --custom-source-packages-path ./SourcePackages --output-type settings-bundle --requires-license --output-path MC1
           rm -rf SourcePackages
 
       - name: Build Debug
         if: steps.version_check.outputs.should_build == 'true' || github.event_name == 'workflow_dispatch'
         run: |
           xcodebuild build \
-            -scheme PocketMesh \
+            -project MC1.xcodeproj \
+            -scheme MC1 \
             -configuration Debug \
             -destination "generic/platform=iOS" \
             -derivedDataPath ./DerivedData \
+            -xcconfig ci/sideload.xcconfig \
             CODE_SIGN_IDENTITY="-" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO
@@ -92,10 +96,12 @@ jobs:
         if: steps.version_check.outputs.should_build == 'true' || github.event_name == 'workflow_dispatch'
         run: |
           xcodebuild build \
-            -scheme PocketMesh \
+            -project MC1.xcodeproj \
+            -scheme MC1 \
             -configuration Release \
             -destination "generic/platform=iOS" \
             -derivedDataPath ./DerivedData \
+            -xcconfig ci/sideload.xcconfig \
             CODE_SIGN_IDENTITY="-" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO
@@ -104,47 +110,40 @@ jobs:
         if: steps.version_check.outputs.should_build == 'true' || github.event_name == 'workflow_dispatch'
         run: |
           mkdir -p Payload
-          cp -r DerivedData/Build/Products/Debug-iphoneos/PocketMesh.app Payload/
-          zip -r "PocketMesh-Debug-${{ steps.version.outputs.version }}.ipa" Payload
+          cp -r DerivedData/Build/Products/Debug-iphoneos/MC1.app Payload/
+          zip -r "MeshCore-One-Debug-${{ steps.version.outputs.version }}.ipa" Payload
           rm -rf Payload
 
       - name: Package Release IPA
         if: steps.version_check.outputs.should_build == 'true' || github.event_name == 'workflow_dispatch'
         run: |
           mkdir -p Payload
-          cp -r DerivedData/Build/Products/Release-iphoneos/PocketMesh.app Payload/
-          zip -r "PocketMesh-Release-${{ steps.version.outputs.version }}.ipa" Payload
+          cp -r DerivedData/Build/Products/Release-iphoneos/MC1.app Payload/
+          zip -r "MeshCore-One-Release-${{ steps.version.outputs.version }}.ipa" Payload
           rm -rf Payload
 
       - name: Upload Debug IPA
         if: steps.version_check.outputs.should_build == 'true' || github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
-          name: PocketMesh-Debug-${{ steps.version.outputs.version }}
-          path: PocketMesh-Debug-${{ steps.version.outputs.version }}.ipa
+          name: MeshCore-One-Debug-${{ steps.version.outputs.version }}
+          path: MeshCore-One-Debug-${{ steps.version.outputs.version }}.ipa
 
       - name: Upload Release IPA
         if: steps.version_check.outputs.should_build == 'true' || github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
-          name: PocketMesh-Release-${{ steps.version.outputs.version }}
-          path: PocketMesh-Release-${{ steps.version.outputs.version }}.ipa
+          name: MeshCore-One-Release-${{ steps.version.outputs.version }}
+          path: MeshCore-One-Release-${{ steps.version.outputs.version }}.ipa
 
-      - name: Create tag
-        if: steps.version_check.outputs.should_build == 'true'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag "v${{ steps.version.outputs.version }}"
-          git push origin "v${{ steps.version.outputs.version }}"
-
-      - name: Create Draft Release
+      - name: Create tag and draft release
         if: steps.version_check.outputs.should_build == 'true' || github.event_name == 'workflow_dispatch'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ steps.version.outputs.version }}
-          draft: true
-          name: PocketMesh ${{ steps.version.outputs.version }}
-          files: |
-            PocketMesh-Debug-${{ steps.version.outputs.version }}.ipa
-            PocketMesh-Release-${{ steps.version.outputs.version }}.ipa
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v${{ steps.version.outputs.version }}" \
+            --draft \
+            --title "MeshCore One ${{ steps.version.outputs.version }}" \
+            --target "${{ github.sha }}" \
+            "MeshCore-One-Debug-${{ steps.version.outputs.version }}.ipa" \
+            "MeshCore-One-Release-${{ steps.version.outputs.version }}.ipa"

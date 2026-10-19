@@ -23,8 +23,10 @@ dependencies: [
 ```swift
 import MeshCore
 
-// Create a BLE transport and session
-let transport = BLETransport(deviceName: "MeshCore")
+// Create a WiFi transport and session.
+// For Bluetooth LE, implement MeshTransport over your platform's BLE stack.
+let transport = WiFiTransport()
+await transport.setConnectionInfo(host: "192.168.1.100", port: 5000)
 let session = MeshCoreSession(transport: transport)
 
 // Start the session
@@ -165,17 +167,30 @@ for await state in await session.connectionState {
 }
 ```
 
-### Binary Protocol (Remote Node Queries)
+### Remote Node Queries (Status, Telemetry, Binary)
+
+Binary exchanges (status, telemetry, owner info, neighbours, MMA, ACL, regions)
+send once, then retransmit the same frame until a matching reply arrives or
+`binaryRequestOverallTimeout` (default 40s) elapses. Set
+`binaryRequestRetransmitInterval` to `nil` to disable retransmits. Spacing is
+`max(floor, suggestedTimeoutMs × binaryRetransmitRTTHeadroom)` (headroom 2)
+because companion `est_timeout` is outbound airtime×path, not a full return RTT.
+Companion firmware keeps one pending tag per request class and replaces it on
+each send, so only the latest `messageSent` tag matches `.binaryResponse`.
+Typed status pushes still match by public-key prefix.
 
 ```swift
-// Request status from remote node
+// Status via CMD_SEND_STATUS_REQ (firmware matches by pubkey)
 let status = try await session.requestStatus(from: publicKey)
 print("Remote battery: \(status.battery) mV, uptime: \(status.uptime)s")
 
-// Request telemetry
+// For room servers, use a typed request so the correct status layout is decoded.
+let roomStatus = try await session.requestStatus(from: roomContact)
+
+// Telemetry via CMD_SEND_TELEMETRY_REQ
 let telemetry = try await session.requestTelemetry(from: publicKey)
 
-// Request MMA (Min/Max/Average) data
+// MMA / neighbours / ACL use CMD_SEND_BINARY_REQ
 let mma = try await session.requestMMA(from: publicKey, start: startDate, end: endDate)
 
 // Request neighbors list
@@ -290,15 +305,28 @@ MeshCore/
 ├── Session/
 │   ├── ContactManager.swift         # Contact list management
 │   ├── MeshCoreSession.swift        # Main session actor
-│   ├── RequestContext.swift         # Request/response context
+│   ├── RequestContext.swift         # Command-response serializer
 │   └── SessionConfiguration.swift   # Session configuration
 └── Transport/
-    ├── BLETransport.swift           # CoreBluetooth implementation
     ├── MeshTransport.swift          # Transport protocol
     ├── MockTransport.swift          # Testing mock
     ├── WiFiFrameCodec.swift         # WiFi frame encoding/decoding
     └── WiFiTransport.swift          # WiFi transport implementation
 ```
+
+## Versioning & Distribution
+
+MeshCore ships as a Swift Package consumed from source as a path dependency:
+
+```swift
+dependencies: [
+    .package(path: "../MeshCore")
+]
+```
+
+It is built alongside the consuming app rather than published as a standalone,
+independently versioned package, so there are no library-specific release tags
+to pin against.
 
 ## License
 

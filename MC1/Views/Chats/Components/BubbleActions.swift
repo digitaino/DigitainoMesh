@@ -1,0 +1,46 @@
+import CoreLocation
+import MC1Services
+import SwiftUI
+import UIKit
+
+/// Per-row action wiring for `MessageBubbleView`. Each closure is invoked
+/// in response to a user interaction on a bubble and forwards to the
+/// owning view model or environment.
+///
+/// Pinned to `@MainActor` because the closures call into `ChatViewModel`
+/// (an `@Observable @MainActor` class). Not `Sendable`; bubble views
+/// already run on the main actor.
+///
+/// Action callbacks are intentionally excluded from `Equatable` on the
+/// bubble views: closure identity is not stable across body invocations,
+/// so comparing them would defeat the equatable optimization. The
+/// rendering invariant is that action wiring stays a function of the
+/// message identity, which is captured by `MessageItem.id`.
+@MainActor
+struct BubbleActions {
+  let onRetryMessage: (MessageDTO) -> Void
+  /// No-repeats retry card: resend at the power currently in force.
+  let onResendSamePower: (MessageDTO) -> Void
+  /// No-repeats retry card: escalate one power rung, then resend.
+  let onResendAtNextPower: (MessageDTO) -> Void
+  let onLongPress: (MessageDTO) -> Void
+  /// Swipe-right-to-reply. Routes to the same handler as the actions sheet's Reply,
+  /// so the swipe is a shortcut to that action rather than a second implementation.
+  let onReply: (MessageDTO) -> Void
+  let onImageTap: (MessageDTO) -> Void
+  /// Duplicate-run badge tap: toggle the run containing this message.
+  let onToggleDuplicateRun: (UUID) -> Void
+  let onRetryInlineImage: (UUID) -> Void
+  let onRequestPreviewFetch: (UUID) -> Void
+  let onManualPreviewFetch: (UUID) -> Void
+  let onMapPreviewTap: (CLLocationCoordinate2D) -> Void
+  /// Shared-route card tap: open the path map for a route embedded in the text.
+  /// The message rides along for its radio ID, which hop resolution needs.
+  let onShowSharedRoute: (SharedRoute, MessageDTO) -> Void
+  /// Map snapshot providers, injected so the bubble resolves, requests, and
+  /// retries thumbnails without reaching `MapSnapshotStore.shared`.
+  let snapshotResolver: (MapSnapshotRequest) -> UIImage?
+  let requestSnapshot: (MapSnapshotRequest) -> Void
+  let retrySnapshot: (MapSnapshotRequest) -> Void
+  let onTranslationAction: (UUID) -> Void
+}

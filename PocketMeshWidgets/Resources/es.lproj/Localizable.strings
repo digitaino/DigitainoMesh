@@ -1,6 +1,0 @@
-/* Widget localization — Spanish */
-
-"Disconnected" = "Desconectado";
-"Disconnected %@ ago" = "Desconectado hace %@";
-"%lld packets per minute" = "%lld paquetes por minuto";
-"Battery %lld percent" = "Batería %lld por ciento";

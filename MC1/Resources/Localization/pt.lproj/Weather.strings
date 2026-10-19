@@ -1,0 +1,1762 @@
+/*
+  Weather.strings
+  MC1
+
+  Portuguese translation of strings for the Weather tool (docs/MESHWX.md).
+  AI-translated - please verify with native speakers.
+*/
+
+// MARK: - Tool
+
+/* Location: ToolSelection.swift - Tool selection label and screen title */
+"weather.title" = "Meteorologia";
+
+/* Location: WeatherToolView.swift - Cancel button in alerts and sheets */
+"weather.common.cancel" = "Cancelar";
+
+/* Location: WeatherRadioView.swift - Done button closing the sheet */
+"weather.common.done" = "Concluído";
+
+/* Location: WeatherPlacePickerView.swift - Accessibility label for a checkmark */
+"weather.common.selected" = "Selecionado";
+
+/* Location: WeatherToolModel.swift - Name for the source when no weather radio is known; starts lowercase, capitalised by the app at a sentence start */
+"weather.bot.generic" = "o rádio meteorológico";
+
+/* Location: WeatherFormatting.swift - Name for a weather radio heard without an advert, %@ is its four-digit hex id */
+"weather.bot.heardOnly" = "Rádio meteorológico %@";
+
+// MARK: - Header
+
+/* Location: WeatherCopy.swift - Header second line while waiting for a location fix */
+"weather.header.locating" = "A localizar…";
+
+/* Location: WeatherCopy.swift - Header second line when location permission is denied */
+"weather.header.locationOff" = "Localização desativada";
+
+/* Location: WeatherPlacePageView.swift - Header link opening the Settings app */
+"weather.header.settings" = "Definições";
+
+// MARK: - Banners
+
+/* Location: WeatherCopy.swift - Banner when your radio's firmware cannot deliver weather, %@ is the version like "1.14" */
+"weather.banner.firmware" = "O seu rádio tem o firmware %@. A meteorologia requer o MeshCore 1.15 ou mais recente.";
+
+/* Location: WeatherCopy.swift - Banner when no channel slot holds #meshwx */
+"weather.banner.channelMissing" = "O #meshwx não está configurado no seu rádio.";
+
+/* Location: WeatherPlacePageView.swift - Banner button that offers to add #meshwx */
+"weather.banner.addChannel" = "Adicionar canal";
+
+/* Location: WeatherCopy.swift - Banner when no weather radio is known */
+"weather.banner.noBot" = "Ainda não foi ouvido nenhum rádio meteorológico. Aparecem como nós com nomes como WX-AUS.";
+
+
+/* Location: WeatherToolView.swift - Banner when every weather radio there is to ask shares its name or id with another radio (phase 2). %@ is the name, or the four hex digits */
+"weather.banner.botConflict" = "Dois rádios usam %@. Escolha um em Rádios meteorológicos para pedir o tempo.";
+/* Location: WeatherToolView.swift - Alert title before writing #meshwx to your radio */
+"weather.channel.alert.title" = "Adicionar o #meshwx ao seu rádio?";
+
+/* Location: WeatherToolView.swift - Alert message before writing #meshwx to your radio */
+"weather.channel.alert.message" = "Os rádios meteorológicos transmitem no #meshwx. A chave do canal vem do nome, por isso não há nada secreto para partilhar.";
+
+/* Location: WeatherToolView.swift - Alert button that writes #meshwx to your radio */
+"weather.channel.alert.add" = "Adicionar canal";
+
+/* Location: WeatherToolModel.swift - Error when every channel slot is taken */
+"weather.channel.full" = "Não há slot de canal livre. Remova um canal em Conversas para abrir espaço.";
+
+/* Location: WeatherToolModel.swift - Error when Add is tapped before your radio's channel sync has finished */
+"weather.channel.notSynced" = "O seu rádio ainda está a sincronizar os canais. Tente novamente quando terminar.";
+
+/* Location: WeatherToolModel.swift - Error when the slot the app chose is in use on your radio, %lld is the slot number */
+"weather.channel.slotInUse" = "O slot %lld do seu rádio está em utilização, por isso nada foi alterado.";
+
+// MARK: - Place
+
+/* Location: WeatherScreenBuilder.swift - Label for a location with no town or station nearby */
+"weather.place.thisLocation" = "esta localização";
+
+/* Location: WeatherUpdateControl.swift - Button and sheet title for the one place control */
+"weather.place.places" = "Locais";
+
+/* Location: WeatherToolView.swift - Item in the title's menu that opens the Places sheet */
+"weather.place.manage" = "Adicionar ou editar locais…";
+
+/* Location: WeatherToolView.swift - Accessibility label for the pager's dots, %1$lld is the page on screen and %2$lld how many there are */
+"weather.place.pageOf" = "Página %1$lld de %2$lld";
+
+/* Location: WeatherConditionsSection.swift - Card line with no place chosen */
+"weather.place.choosePrompt" = "Escolha um local em Locais para ver o tempo.";
+
+/* Location: WeatherAlertRow.swift - Button asking for a fresh location fix */
+"weather.place.updateLocation" = "Atualizar localização";
+
+/* Location: WeatherConditionsSection.swift - Quiet line for a place outside the radio's area; never says there are no alerts */
+"weather.place.outsideArea" = "Aqui os avisos não são transmitidos — puxa para baixo para verificar.";
+
+/* Location: WeatherConditionsSection.swift - The one button that may ask for location permission */
+"weather.place.useMyLocation" = "Usar a minha localização";
+
+/* Location: WeatherConditionsSection.swift - My location page before permission, above the one tap that asks for it */
+"weather.place.useMyLocationPrompt" = "Vê a meteorologia onde estás.";
+
+/* Location: WeatherCopy.swift - Radio row, how old the alert list is. %@ is a time like "8:02 PM" */
+"weather.radioRow.alertsAsOf" = "avisos com dados de %@";
+
+/* Location: WeatherCopy.swift - Radio row when no alert list has ever arrived */
+"weather.radioRow.noAlertList" = "ainda sem lista de avisos";
+
+/* Location: WeatherFormatting.swift - A forecast point named after a site in a town. %1$@ is the town, %2$@ the site like "Luis Munoz Marin International Airport" */
+
+// MARK: - Alerts card
+
+/* Location: WeatherFormatting.swift - When an alert in effect ends within 12 hours. %1$@ is a time like "11:41 PM", %2$@ the time left, "weather.alerts.left", like "40 min left" */
+"weather.alerts.until" = "até %1$@ · %2$@";
+/* Revision 12: an alert that ends more than 12 hours from now, "until Fri 19:00" */
+"weather.alerts.untilOnly" = "até %@";
+/* Revision 12: an alert not in effect yet, "from Wed 19:00 until Fri 19:00" */
+"weather.alerts.fromUntil" = "de %1$@ até %2$@";
+/* Revision 12: time left on an alert ending within 12 hours, "40 min left" */
+"weather.alerts.left" = "faltam %@";
+
+/* Location: WeatherCopy.swift - Row line for a warning cancelled as upgraded whose replacement has not arrived */
+"weather.alerts.upgraded" = "Nível elevado — substituto não recebido";
+
+/* Location: WeatherCopy.swift - Row line for an alert here that just expired, %@ is a duration like "3 min" */
+"weather.alerts.expired" = "Expirou há %@ · nenhuma atualização recebida";
+
+
+/* Location: WeatherCopy.swift - Row line for an alert here that another weather radio cancelled, though a radio still sends it (phase 2). %1$@ is a duration like "3 h", %2$@ the radio that cancelled it, "WX-SAT 2B11" */
+"weather.alerts.ended" = "Cancelado há %1$@ por %2$@";
+/* Location: WeatherCopy.swift - Row line while area outlines load */
+"weather.alerts.checking" = "A verificar onde fica…";
+
+/* Location: WeatherPlacePageView.swift - Other alerts covering the place, beside the banner, %lld is how many */
+"weather.alerts.more" = "+%lld mais";
+
+/* Location: WeatherAlertsListView.swift - Source line under the alert status, %@ is the radio's name */
+"weather.alerts.source" = "Avisos do National Weather Service via %@";
+
+/* Location: WeatherAlertsListView.swift - Source line with no known radio */
+"weather.alerts.sourceGeneric" = "Avisos do National Weather Service via rádios meteorológicos";
+
+/* Location: WeatherFormatting.swift - One area. %1$@ is its name, %2$@ its state */
+"weather.alerts.area" = "%1$@, %2$@";
+
+/* Location: WeatherCopy.swift - Where an alert away from the place is. %1$@ is its first area like "Llano County", %2$@ a distance like "105 km W" */
+"weather.alerts.areaDistance" = "%1$@ · %2$@";
+
+/* Location: WeatherScreenBuilder.swift - A county name, %@ is the name like "Bell" */
+"weather.area.county" = "Condado de %@";
+
+// MARK: - Alert status line
+
+/* Location: WeatherCopy.swift - Status line with no place */
+"weather.alertStatus.noPlace" = "Escolha um local para ver que avisos o abrangem";
+
+/* Location: WeatherCopy.swift - Status line outside coverage. %1$@ is the place, %2$@ the radio's name */
+"weather.alertStatus.outOfCoverage" = "%1$@ fica fora da área de %2$@, por isso os avisos aí são desconhecidos.";
+
+/* Location: WeatherCopy.swift - Status line before any alert list arrived, %@ is the radio's name */
+"weather.alertStatus.notChecked" = "Este telefone ainda não recebeu a lista de avisos que %@ transmite, por isso não consegue saber se há avisos ativos. A lista chega de 3 em 3 horas.";
+
+/* Location: WeatherCopy.swift - Status line when the radio has never received anything from the Weather Service. %@ is the radio's name at the start of a sentence */
+"weather.alertStatus.feedNone" = "%@ não recebeu nada do serviço meteorológico. Os novos avisos podem não chegar até si.";
+
+/* Location: WeatherCopy.swift - Status line when the radio's own Weather Service office has sent nothing for over 4 hours, which is usual on a quiet night. %1$@ is the radio's name at the start of a sentence, %2$@ a duration like "5 h" */
+"weather.alertStatus.feedQuiet" = "%1$@ não recebe nada do seu centro do serviço meteorológico há %2$@. É normal numa noite calma, mas a fonte de dados também pode estar em baixo.";
+
+/* Location: WeatherCopy.swift - Status line with your radio not connected, %@ is a time like "11:02 PM" */
+"weather.alertStatus.radioOffline" = "O seu rádio não está ligado. Última lista de avisos com dados de %@.";
+
+/* Location: WeatherCopy.swift - Status line after a gap in messages, %@ is the radio's name */
+"weather.alertStatus.missedMessages" = "Este telefone perdeu mensagens de %@. Podem faltar alguns avisos.";
+
+/* Location: WeatherCopy.swift - Status line for an old alert list, %@ is a time like "8:02 PM" */
+"weather.alertStatus.listOld" = "Última lista de avisos com dados de %@.";
+
+/* Location: WeatherCopy.swift - Status line for an old location fix, %@ is an age like "3 h old" */
+"weather.alertStatus.locationOld" = "A sua localização foi obtida %@.";
+
+/* Location: WeatherCopy.swift - Status line when no station report has come in the last day, so the radio's area is unknown. %@ is the radio's name at the start of a sentence */
+"weather.alertStatus.coverageUnknown" = "%@ ainda não enviou o relatório das estações, por isso a área que cobre não é conhecida. O relatório chega aproximadamente de hora a hora.";
+
+/* Location: WeatherCopy.swift - Status line when the place's office may not be carried. %1$@ is the radio's name, %2$@ the county or place, %3$@ the office like "NWS Fort Worth" */
+"weather.alertStatus.officeNotCovered" = "%1$@ pode não transmitir avisos para %2$@ (%3$@).";
+
+// MARK: - Coverage
+
+/* Location: WeatherCopy.swift - Alert detail, %@ is the place */
+"weather.coverage.covers" = "Abrange %@";
+
+/* Location: WeatherCopy.swift - Alert detail for an alert far away, %@ is the place */
+"weather.coverage.doesNotCover" = "Não abrange %@";
+
+/* Location: WeatherCopy.swift - Alert detail for an alert nearby. %1$@ is the place, %2$@ a distance like "25 km N" */
+"weather.coverage.near" = "Não abrange %1$@ (%2$@)";
+
+/* Location: WeatherCopy.swift - Alert detail while area outlines load, %@ is the place */
+"weather.coverage.checking" = "A verificar se abrange %@…";
+
+/* Location: WeatherCopy.swift - Alert detail and row for an alert with no outline, %@ is the place */
+"weather.coverage.unknown" = "Não se sabe se abrange %@";
+
+// MARK: - Alerts list
+
+/* Location: WeatherAlertsListView.swift - Screen title, %@ is the radio's name */
+"weather.alertsList.title" = "Avisos na área de %@";
+
+/* Location: WeatherAlertsListView.swift - Accessibility label on the map header */
+"weather.alertsList.openMap" = "Mapa de avisos. Abre o mapa completo.";
+
+/* Location: WeatherAlertsListView.swift - Section with no place, %@ is the radio's name */
+"weather.alertsList.all" = "Na área de %@";
+
+/* Location: WeatherAlertsListView.swift - Section of alerts covering the place */
+"weather.alertsList.here" = "Aqui";
+
+/* Location: WeatherAlertsListView.swift - Section of alerts not yet placed against the place */
+"weather.alertsList.unsure" = "Ainda por situar";
+
+/* Location: WeatherAlertsListView.swift - Section of alerts within 50 km */
+"weather.alertsList.near" = "Perto";
+
+/* Location: WeatherAlertsListView.swift - Section of alerts farther away */
+"weather.alertsList.elsewhere" = "Noutros locais";
+
+/* Location: WeatherAlertsListView.swift - Section of alerts the list named that never arrived */
+"weather.alertsList.listedHeader" = "Em falta neste telefone";
+
+/* Location: WeatherAlertsListView.swift - Row line for an alert the list named that never arrived */
+"weather.alertsList.notReceived" = "Listado, não recebido";
+
+/* Location: WeatherAlertsListView.swift - Row line for an alert the list named that the radio said it didn't have when asked. %@ is the radio's name */
+"weather.alertsList.notAvailable" = "Listado, mas %@ não o tinha quando foi pedido";
+
+// MARK: - Alert detail
+
+/* Location: WeatherAlertDetailView.swift - Shown when the alert is no longer held; no reason is claimed */
+"weather.alertDetail.gone" = "Já não está guardado neste telefone";
+
+/* Location: WeatherAlertDetailView.swift - Section of the alert's tags */
+"weather.alertDetail.details" = "Detalhes";
+
+/* Location: WeatherAlertDetailView.swift - Section of the areas the alert names */
+"weather.alertDetail.areas" = "Áreas";
+
+/* Location: WeatherAlertDetailView.swift - Area kind */
+"weather.alertDetail.county" = "Condado";
+
+/* Location: WeatherAlertDetailView.swift - Area kind */
+"weather.alertDetail.zone" = "Zona de previsão";
+
+/* Location: WeatherAlertDetailView.swift - Section with the warning's narrative */
+"weather.alertDetail.fullText" = "Texto completo";
+
+/* Location: WeatherAlertDetailView.swift - Issuing office, %@ is like "NWS Austin/San Antonio" */
+"weather.alertDetail.issuedBy" = "Emitido por %@";
+
+
+/* Location: WeatherAlertDetailView.swift - Which weather radios hold the alert (phase 2). %@ is a list like "WX-AUS 1D04, WX-SAT 2B11" */
+"weather.alertDetail.from" = "de %@";
+/* Location: WeatherAlertDetailView.swift - When this phone received the warning, %@ is a time */
+"weather.alertDetail.received" = "recebido %@";
+
+/* Location: WeatherAlertDetailView.swift - When NWS issued the warning (spec §3, revision 5), shown in place of the receipt time whenever the wire carried it. %@ is a time */
+"weather.alertDetail.issued" = "emitido %@";
+
+// MARK: - Tags
+
+/* Location: WeatherFormatting.swift - Hail tag, %@ is inches */
+"weather.tag.hail" = "Granizo %@ in";
+
+/* Location: WeatherFormatting.swift - Wind tag, %lld is miles per hour */
+"weather.tag.wind" = "Vento %lld mph";
+
+/* Location: WeatherFormatting.swift - Tornado tag, %@ is the confidence wording */
+"weather.tag.tornado" = "Tornado: %@";
+
+/* Location: WeatherFormatting.swift - Flood source tag, %@ is the source wording */
+"weather.tag.floodSource" = "Origem da cheia: %@";
+
+/* Location: WeatherFormatting.swift - Flood damage tag, %@ is the damage wording */
+"weather.tag.floodDamage" = "Danos de cheia repentina: %@";
+
+/* Location: WeatherFormatting.swift - Tornado tag value */
+"weather.tornadoTag.possible" = "possível";
+
+/* Location: WeatherFormatting.swift - Tornado tag value */
+"weather.tornadoTag.radarIndicated" = "indicado por radar";
+
+/* Location: WeatherFormatting.swift - Tornado tag value */
+"weather.tornadoTag.observed" = "observado";
+
+/* Location: WeatherFormatting.swift - Flood source tag value */
+"weather.floodSourceTag.radar" = "radar";
+
+/* Location: WeatherFormatting.swift - Flood source tag value */
+"weather.floodSourceTag.radarAndGauge" = "radar e escala hidrométrica";
+
+/* Location: WeatherFormatting.swift - Flood source tag value */
+"weather.floodSourceTag.observed" = "observado";
+
+/* Location: WeatherFormatting.swift - Flood damage tag value */
+"weather.floodDamageTag.considerable" = "consideráveis";
+
+/* Location: WeatherFormatting.swift - Flood damage tag value */
+"weather.floodDamageTag.catastrophic" = "catastróficos";
+
+// MARK: - Now card
+
+/* Location: WeatherConditionsSection.swift - Accessibility label for the current conditions card, which has no visible title */
+"weather.now.summary" = "Condições atuais";
+
+/* Location: WeatherConditionsSection.swift - Now card with no observations, %@ is the radio's name */
+"weather.now.empty" = "Ainda sem condições atuais. %@ transmite-as de hora a hora.";
+
+/* Location: WeatherCopy.swift - No reading good enough for the place: the ask. %1$@ is the place, %2$@ the radio's name, %3$@ an airport code like KAQO */
+"weather.conditions.ask" = "Ainda sem condições atuais para %1$@. Puxa para baixo para pedir %3$@ a %2$@.";
+
+/* Location: WeatherCopy.swift - No good reading and nothing can be asked at all, so the sentence does not offer the pull. %1$@ is the place, %2$@ an airport code like KAQO */
+"weather.conditions.askBlocked" = "Ainda sem condições atuais para %1$@. A estação mais próxima é %2$@.";
+
+/* Location: WeatherCopy.swift - One card for a place with no reading and no forecast, %@ is the place */
+"weather.empty.title" = "Ainda sem meteorologia para %@.";
+
+/* Location: WeatherCopy.swift - The station worth asking about, %1$@ is an airport code like KAQO, %2$@ a distance */
+"weather.empty.station" = "Estação mais próxima %1$@, %2$@";
+
+/* Location: WeatherCopy.swift - The station worth asking about, distance unknown, %@ is an airport code like KAQO */
+"weather.empty.stationOnly" = "Estação mais próxima %@";
+
+/* Location: WeatherCopy.swift - The forecast point worth asking about, %1$@ is its name, %2$@ a distance */
+"weather.empty.point" = "Ponto de previsão mais próximo %1$@, %2$@";
+
+/* Location: WeatherCopy.swift - The forecast point worth asking about, distance unknown, %@ is its name */
+"weather.empty.pointOnly" = "Ponto de previsão mais próximo %@";
+
+/* Location: WeatherCopy.swift - What to do about an empty place, %@ is the radio's name */
+"weather.empty.ask" = "Puxa para baixo ou toca em Atualizar para pedir a %@.";
+
+/* Location: WeatherCopy.swift - Nothing near enough to ask about, %@ is the place */
+"weather.empty.nothing" = "Não há nenhuma estação meteorológica nem ponto de previsão perto de %@.";
+
+/* Location: WeatherConditionsSection.swift - Apparent temperature, %@ is a temperature */
+"weather.now.feelsLike" = "Sensação de %@";
+
+/* Location: WeatherConditionsSection.swift - Wind, %@ is like "SSE 12" */
+"weather.now.wind" = "Vento %@";
+
+/* Location: WeatherConditionsSection.swift - Relative humidity, %lld is percent */
+"weather.now.humidity" = "Humidade %lld%%";
+
+/* Location: WeatherCopy.swift - Which report a reading came in. %1$@ is the radio's name, %2$@ a time like "11:18 PM" */
+"weather.now.report" = "no relatório de %1$@ de %2$@";
+
+/* Location: WeatherCopy.swift - No station close enough for its reading to be shown (40 km). %1$@ is the place, %2$@ the nearest station's town, %3$@ a distance */
+"weather.now.noneNearby" = "Nenhuma estação meteorológica perto de %1$@. Mais próxima: %2$@, %3$@.";
+
+/* Location: WeatherCopy.swift - No station close enough for its reading to be shown (40 km), distance unknown. %1$@ is the place, %2$@ the nearest station's town */
+"weather.now.noneNearbyUnknown" = "Nenhuma estação meteorológica perto de %1$@. Mais próxima: %2$@.";
+
+/* Location: WeatherConditionsSection.swift - Above the temperature when the reading is 25-40 km off: shown, but attributed to its station, never as the town's. %1$@ is the station's town, %2$@ a distance */
+"weather.now.nearbyReading" = "Leitura mais próxima: %1$@, a %2$@";
+
+/* Location: WeatherConditionsSection.swift - The same, distance unknown. %1$@ is the station's town */
+"weather.now.nearbyReadingUnknown" = "Leitura mais próxima: %1$@";
+
+/* Location: WeatherCopy.swift - Link to the stations screen, %1$lld is how many stations came in the radio's batch (two or more), %2$@ the radio's name */
+"weather.now.stationsInArea" = "%1$lld estações na área de %2$@";
+
+/* Location: WeatherCopy.swift - Link to the stations screen with one station in the radio's batch, %@ is the radio's name */
+"weather.now.stationsInAreaOne" = "1 estação na área de %@";
+
+/* Location: WeatherCopy.swift - Link to the stations screen when answers to single-station requests are held as well. %1$lld is every station the screen shows, %2$lld how many came in the radio's batch, %3$@ the radio's name */
+"weather.now.stationsWithArea" = "%1$lld estações meteorológicas, %2$lld na área de %3$@";
+
+/* Location: WeatherCopy.swift - Link to the stations screen when none came in a batch, %lld is how many (two or more) */
+"weather.now.stations" = "%lld estações meteorológicas";
+
+/* Location: WeatherCopy.swift - Link to the stations screen with one station, none in a batch */
+"weather.now.stationsOne" = "1 estação meteorológica";
+
+// MARK: - Sky
+
+/* Location: WeatherFormatting.swift - Sky condition */
+"weather.sky.clear" = "Céu limpo";
+
+/* Location: WeatherFormatting.swift - Sky condition */
+"weather.sky.few" = "Pouco nublado";
+
+/* Location: WeatherFormatting.swift - Sky condition */
+"weather.sky.scattered" = "Parcialmente nublado";
+
+/* Location: WeatherFormatting.swift - Sky condition */
+"weather.sky.broken" = "Muito nublado";
+
+/* Location: WeatherFormatting.swift - Sky condition */
+"weather.sky.overcast" = "Encoberto";
+
+/* Location: WeatherFormatting.swift - Sky condition */
+"weather.sky.fog" = "Nevoeiro";
+
+/* Location: WeatherFormatting.swift - Sky condition */
+"weather.sky.smoke" = "Fumo";
+
+/* Location: WeatherFormatting.swift - Sky condition */
+"weather.sky.haze" = "Névoa seca";
+
+/* Location: WeatherFormatting.swift - Sky condition */
+"weather.sky.rain" = "Chuva";
+
+/* Location: WeatherFormatting.swift - Sky condition */
+"weather.sky.snow" = "Neve";
+
+/* Location: WeatherFormatting.swift - Sky condition */
+"weather.sky.thunderstorm" = "Trovoada";
+
+/* Location: WeatherFormatting.swift - Sky condition */
+"weather.sky.drizzle" = "Chuvisco";
+
+/* Location: WeatherFormatting.swift - Sky condition */
+"weather.sky.mist" = "Neblina";
+
+/* Location: WeatherFormatting.swift - Sky condition */
+"weather.sky.squall" = "Rajadas fortes";
+
+/* Location: WeatherFormatting.swift - Sky condition */
+"weather.sky.dust" = "Poeira levantada";
+
+/* Location: WeatherFormatting.swift - Wind, %1$@ is a compass point and %2$lld the speed in mph */
+"weather.wind.speed" = "%1$@ %2$lld";
+
+/* Location: WeatherFormatting.swift - Wind with a gust, %1$@ is the wind and %2$lld the gust in mph */
+"weather.wind.gusting" = "%1$@ com rajadas de %2$lld";
+
+/* Location: WeatherFormatting.swift - Wind speed zero */
+"weather.wind.calm" = "calmo";
+
+// MARK: - Forecast card
+
+/* Location: WeatherForecastSection.swift - Forecast card title with no place */
+"weather.forecast.titleGeneric" = "Previsão";
+
+/* Location: WeatherForecastSection.swift - When the forecast was issued, %@ is a time or an age like "14 h ago" */
+"weather.forecast.issued" = "emitida %@";
+
+/* Location: WeatherCopy.swift - Nothing held for the place's point, %@ is the place */
+"weather.forecast.missing" = "Ainda sem previsão para %@.";
+
+/* Location: WeatherCopy.swift - Nothing held, and the nearest point is over 10 km away. %1$@ is the place, %2$@ the point's name, %3$@ its distance like "60 km" */
+"weather.forecast.missingFar" = "Ainda sem previsão para %1$@. O ponto de previsão mais próximo é %2$@, a %3$@.";
+
+/* Location: WeatherForecastSection.swift - Accessibility summary, %lld is how many forecast rows */
+"weather.forecast.accessibility.rows" = "%lld entradas";
+
+/* Location: WeatherCopy.swift - High only, %@ is a temperature */
+"weather.forecast.high" = "Máxima %@";
+
+/* Location: WeatherCopy.swift - Low only, %@ is a temperature */
+"weather.forecast.low" = "Mínima %@";
+
+/* Location: WeatherCopy.swift - High and low. %1$@ is the high, %2$@ the low */
+"weather.forecast.highLow" = "%1$@ / %2$@";
+
+/* Location: WeatherCopy.swift - Chance of rain, %lld is percent */
+"weather.forecast.rain" = "%lld%% de chuva";
+
+/* Location: WeatherCopy.swift - Chance of rain carried by the night of a day row, %lld is percent */
+"weather.forecast.rainTonight" = "%lld%% de chuva esta noite";
+
+/* Location: WeatherCopy.swift - Forecast row label */
+"weather.forecast.label.today" = "Hoje";
+
+/* Location: WeatherCopy.swift - Forecast row label */
+"weather.forecast.label.tonight" = "Esta noite";
+
+/* Location: WeatherCopy.swift - Forecast row label */
+"weather.forecast.label.tomorrow" = "Amanhã";
+
+/* Location: WeatherCopy.swift - Forecast row label */
+"weather.forecast.label.tomorrowNight" = "Amanhã à noite";
+
+/* Location: WeatherCopy.swift - Forecast row label for a later night, %@ is a weekday */
+"weather.forecast.label.night" = "%@ à noite";
+
+/* Location: WeatherCopy.swift - Forecast hazard word */
+"weather.forecast.hazard.thunder" = "Trovoada";
+
+/* Location: WeatherCopy.swift - Forecast hazard word */
+"weather.forecast.hazard.wintry" = "Neve ou gelo";
+
+/* Location: WeatherCopy.swift - Forecast hazard word */
+"weather.forecast.hazard.windy" = "Vento forte";
+
+/* Location: WeatherCopy.swift - Forecast hazard word */
+"weather.forecast.hazard.fog" = "Nevoeiro";
+
+// MARK: - Stations
+
+/* Location: WeatherStationsView.swift - Stations screen title */
+"weather.stations.title" = "Estações meteorológicas";
+
+/* Location: WeatherStationsView.swift - Stations screen header, %@ is the radio's name */
+"weather.stations.intro" = "Estações meteorológicas de aeroportos. %@ transmite as leituras de hora a hora.";
+
+/* Location: WeatherStationsView.swift - Section of stations from the radio's scheduled hourly report */
+"weather.stations.scheduled" = "Do relatório horário";
+
+/* Location: WeatherStationsView.swift - Section of stations from single-station answers seen on the channel; never says who asked */
+"weather.stations.answers" = "De respostas no canal";
+
+/* Location: WeatherStationsView.swift - Row detail when a reading came from another radio, %@ is that radio's name */
+"weather.stations.fromBot" = "de %@";
+
+/* Location: WeatherStationsView.swift - When a reading was taken, %@ is a time */
+"weather.stations.asOf" = "dados de %@";
+
+/* Location: WeatherStationsView.swift - Distance from the place. %1$@ is a distance like "3 km NW", %2$@ the place */
+"weather.stations.fromPlace" = "%1$@ de %2$@";
+
+/* Location: WeatherStationsView.swift - Reading field */
+"weather.station.temperature" = "Temperatura";
+
+/* Location: WeatherStationsView.swift - Reading field */
+"weather.station.feelsLike" = "Sensação térmica";
+
+/* Location: WeatherStationsView.swift - Reading field */
+"weather.station.sky" = "Céu";
+
+/* Location: WeatherStationsView.swift - Reading field */
+"weather.station.wind" = "Vento";
+
+/* Location: WeatherStationsView.swift - Reading field */
+"weather.station.humidity" = "Humidade";
+
+/* Location: WeatherStationsView.swift - Percent value, %lld is percent */
+"weather.station.percent" = "%lld%%";
+
+/* Location: WeatherStationsView.swift - Reading field */
+"weather.station.dewPoint" = "Ponto de orvalho";
+
+/* Location: WeatherStationsView.swift - Reading field */
+"weather.station.pressure" = "Pressão";
+
+/* Location: WeatherStationsView.swift - Pressure value, %@ is inches of mercury */
+"weather.station.inchesOfMercury" = "%@ inHg";
+
+/* Location: WeatherStationsView.swift - Reading field */
+"weather.station.visibility" = "Visibilidade";
+
+/* Location: WeatherStationsView.swift - Section with METAR and TAF */
+"weather.station.airportReports" = "Relatórios de aeroporto (codificados)";
+
+/* Location: WeatherStationsView.swift - Why a station's reading is old: the radio's hourly report does not carry it */
+"weather.station.notInBatch" = "Fornecida a pedido, não no relatório horário";
+
+/* Location: WeatherStationsView.swift - Station screen with no reading received yet */
+"weather.station.nothingHeld" = "Ainda não há leituras desta estação.";
+
+// MARK: - Text reports
+
+/* Location: WeatherReportsView.swift - Reports screen title and root row */
+"weather.reports.title" = "Relatórios de texto do serviço meteorológico";
+
+/* Location: WeatherReportsView.swift - Product title */
+"weather.reports.discussion.title" = "Discussão da previsão";
+
+/* Location: WeatherReportsView.swift - Product description; says what the product is, never where a copy came from */
+"weather.reports.discussion.description" = "Notas do meteorologista, técnicas";
+
+/* Location: WeatherReportsView.swift - Product title */
+"weather.reports.outlook.title" = "Perspetiva de tempo perigoso";
+
+/* Location: WeatherReportsView.swift - Product description; says what the product is, never where a copy came from */
+"weather.reports.outlook.description" = "Perigos previstos para a próxima semana";
+
+/* Location: WeatherReportsView.swift - Product title */
+"weather.reports.storms.title" = "Relatos de tempestade";
+
+/* Location: WeatherReportsView.swift - Product description */
+"weather.reports.storms.description" = "Relatos de granizo, vento e tornados feitos por observadores";
+
+/* Location: WeatherReportsView.swift - Product title */
+"weather.reports.rainfall.title" = "Totais de precipitação";
+
+/* Location: WeatherReportsView.swift - Product description */
+"weather.reports.rainfall.description" = "Totais recentes dos udómetros";
+
+/* Location: WeatherReportsView.swift - Product title */
+"weather.reports.space.title" = "Meteorologia espacial";
+
+/* Location: WeatherReportsView.swift - Product description */
+"weather.reports.space.description" = "Tempestades solares e condições de rádio";
+
+/* Location: WeatherReportsView.swift - Row opening the state list, %@ is the state's name like "Texas" */
+"weather.reports.stateRow" = "Estado: %@";
+
+/* Location: WeatherReportsView.swift - State row value when no state is known */
+"weather.reports.noState" = "não definido";
+
+/* Location: WeatherReportsView.swift - State list title */
+"weather.reports.stateTitle" = "Estado";
+
+/* Location: WeatherReportsView.swift - When this phone received a text, %@ is a time */
+"weather.reports.received" = "recebido %@";
+
+/* Location: WeatherReportsView.swift - Marker where a part of a text never arrived */
+"weather.reports.missingPart" = "\n[parte em falta]\n";
+
+/* Location: WeatherReportsView.swift - Shown instead of Ask when the request needs a place */
+"weather.reports.needsPlace" = "Escolha um local para pedir isto.";
+
+/* Location: WeatherReportsView.swift - Shown when nothing is held for a product */
+"weather.reports.nothingYet" = "Ainda nada recebido.";
+
+/* Location: WeatherReportsView.swift - Header part for a text nobody here asked for, whose office or state the wire never carries */
+"weather.reports.unknownArea" = "área desconhecida";
+
+/* Location: WeatherReportsView.swift, WeatherForecastSection.swift - Header part for an answer this phone never asked for; lowercase, joined with a middot */
+"weather.reports.overheard" = "ouvido em #meshwx";
+
+/* Location: WeatherReportsView.swift - Last line of a reply the weather radio had to cut; a sentence, joined to the source line with a middot */
+"weather.reports.cut" = "Encurtado para rádio";
+
+// MARK: - Where the data came from
+
+/* Location: WeatherReportsView.swift, WeatherForecastSection.swift, WeatherAlertDetailView.swift - Where the weather radio got the data: off its own satellite dish. Nothing is shown when the radio doesn't say. */
+"weather.source.goes" = "Via satélite GOES";
+
+/* Location: WeatherReportsView.swift, WeatherForecastSection.swift, WeatherAlertDetailView.swift - Where the weather radio got the data: fetched over the internet */
+"weather.source.internet" = "Via internet";
+
+/* Location: WeatherReportsView.swift, WeatherForecastSection.swift, WeatherAlertDetailView.swift - Where the weather radio got the data: built from both the satellite and the internet */
+"weather.source.mixed" = "Via GOES e internet";
+
+// MARK: - Requests
+
+/* Location: WeatherAlertRow.swift - Request button */
+"weather.request.askAlerts" = "Pedir avisos";
+
+/* Location: WeatherCopy.swift - Request button that asks for one alert the list named but this phone never received, %@ is the alert's name like "Tornado Warning" */
+"weather.request.askWarning" = "Pedir %@";
+
+/* Location: WeatherReportsView.swift - Request button */
+"weather.request.askLatest" = "Pedir o mais recente";
+
+/* Location: WeatherAlertDetailView.swift - Request button */
+"weather.request.askFullText" = "Pedir texto completo";
+
+/* Location: WeatherStationsView.swift - Request button for the coded current conditions */
+"weather.request.askMetar" = "Pedir METAR (condições)";
+
+/* Location: WeatherStationsView.swift - Request button for the coded airport forecast */
+"weather.request.askTaf" = "Pedir TAF (previsão)";
+
+/* Location: WeatherAskControl.swift - Note under the first request button on a screen */
+"weather.request.publicNote" = "Todos os que estão a ouvir o #meshwx recebem a resposta.";
+
+/* Location: WeatherCopy.swift - Request on the air, %@ is the radio's name */
+"weather.request.pending" = "A perguntar a %@…";
+
+/* Location: WeatherCopy.swift - The one retry on the air */
+"weather.request.retrying" = "A perguntar novamente…";
+
+/* Location: WeatherCopy.swift - Status while the third send of a request goes out by flood, after the route to the radio was forgotten */
+"weather.request.flooding" = "A perguntar novamente por flood…";
+
+/* Location: WeatherCopy.swift - Another request is on the air */
+"weather.request.waiting" = "À espera de outra resposta…";
+
+/* Location: WeatherCopy.swift - An answer arrived. %1$@ is the radio's name, %2$@ a time */
+"weather.request.answeredAt" = "%1$@ respondeu às %2$@";
+
+/* Location: WeatherCopy.swift - An answer arrived that changed nothing. %1$@ is the radio's name, %2$@ a time */
+"weather.request.answeredNothingNew" = "%1$@ respondeu às %2$@ · nada de novo";
+
+/* Location: WeatherCopy.swift - A forecast answer with nothing newer than what is shown, %@ is the radio's name */
+"weather.request.noNewerForecast" = "Nenhuma previsão mais recente de %@";
+
+/* Location: WeatherCopy.swift - A readings answer with nothing newer than what is shown, %@ is the radio's name */
+"weather.request.noNewerReadings" = "Nenhuma leitura mais recente de %@";
+
+/* Location: WeatherCopy.swift - An answer the channel already delivered, so nothing was sent. %@ is a time ago like "40 s ago" */
+"weather.request.received" = "Recebido %@";
+
+/* Location: WeatherCopy.swift - An answer already delivered, with what it was as of. %1$@ is like "Received 40 s ago", %2$@ like "list as of 3:02 PM" */
+"weather.request.receivedContent" = "%1$@ · %2$@";
+
+/* Location: WeatherCopy.swift - Content time of an alert list or warnings answer, %@ is a time */
+"weather.request.contentList" = "lista com dados de %@";
+
+/* Location: WeatherCopy.swift - Content time of a station readings answer, %@ is a time */
+"weather.request.contentReadings" = "leituras com dados de %@";
+
+/* Location: WeatherCopy.swift - Content time of a forecast answer, %@ is a time */
+"weather.request.contentIssued" = "emitida %@";
+
+/* Location: WeatherCopy.swift - No answer from a silent radio, which may be out of range or dropping requests because it is busy. %1$@ is a time, %2$@ the radio's name */
+"weather.request.noAnswer" = "Sem resposta às %1$@ — %2$@ pode estar fora de alcance ou ocupado.";
+
+/* Location: WeatherCopy.swift - No answer from a radio that was heard, which drops requests silently when busy. %1$@ is the radio's name, %2$@ a time */
+"weather.request.heardNoAnswer" = "%1$@ foi ouvido mas não respondeu às %2$@. Pode estar ocupado.";
+
+/* Location: WeatherCopy.swift - No answer although your radio confirmed the weather radio received the request: it may be busy, or its answer was lost on the way back. %1$@ is the radio's name, %2$@ a time */
+"weather.request.receivedNoAnswer" = "%1$@ recebeu o pedido, mas nenhuma resposta chegou a este telefone até às %2$@. Pode estar ocupado ou a resposta pode ter-se perdido.";
+
+/* Location: WeatherCopy.swift - Your radio refused to send the request, %@ is a time */
+"weather.request.failed" = "O seu rádio não conseguiu enviar isto às %@.";
+
+/* Location: WeatherToolModel.swift - Request refused inside the five-second spacing */
+"weather.request.rateLimited" = "Aguarde alguns segundos entre pedidos";
+
+/* Location: WeatherCopy.swift - Caption for a radio not heard for 90 minutes. %1$@ is the radio's name, %2$@ a time */
+"weather.request.quiet" = "%1$@ sem sinal desde %2$@ — pode não responder";
+
+/* Location: WeatherCopy.swift - In place of a request button with your radio not connected, %@ is the weather radio's name */
+"weather.request.blocked.offline" = "Ligue o seu rádio para perguntar a %@";
+
+/* Location: WeatherCopy.swift - In place of a request button on old firmware */
+"weather.request.blocked.firmware" = "O firmware do seu rádio não consegue pedir meteorologia";
+
+/* Location: WeatherCopy.swift - In place of a request button without #meshwx */
+"weather.request.blocked.channel" = "Adicione o #meshwx ao seu rádio para perguntar";
+
+/* Location: WeatherCopy.swift - In place of a request button with no weather radio */
+"weather.request.blocked.noBot" = "Ainda não há rádio meteorológico a quem perguntar";
+
+/* Location: WeatherCopy.swift - In place of a request button for a weather radio heard without an advert */
+"weather.request.blocked.notAnnounced" = "Só é possível perguntar depois de se anunciar";
+
+
+/* Location: WeatherAskControl.swift - In place of a request button while two radios share the only weather radio's name or id (phase 2) */
+"weather.request.blocked.botConflict" = "Escolha um rádio meteorológico para perguntar";
+/* Location: WeatherCopy.swift - The radio has no data, %@ is its name */
+"weather.request.notAvailable.noData" = "%@ ainda não tem dados para isso";
+
+/* Location: WeatherCopy.swift - The radio did not recognize the place, %@ is its name */
+"weather.request.notAvailable.unknownPlace" = "%@ não reconheceu esse local";
+
+/* Location: WeatherCopy.swift - The radio does not support the request, %@ is its name */
+"weather.request.notAvailable.unsupported" = "%@ não consegue fazer isso";
+
+/* Location: WeatherCopy.swift - The radio reported an error, %@ is its name */
+"weather.request.notAvailable.error" = "%@ teve um erro";
+
+/* Location: WeatherCopy.swift - The radio is rate limited, %@ is its name */
+"weather.request.notAvailable.busy" = "%@ está ocupado, tente novamente dentro de alguns minutos";
+
+/* Location: WeatherCopy.swift - The radio declined for an unknown reason, %@ is its name */
+"weather.request.notAvailable.other" = "%@ não consegue responder a isso";
+
+// MARK: - Update
+
+/* Location: WeatherUpdateControl.swift - The one request button on a place or station screen */
+"weather.update.button" = "Atualizar";
+
+/* Location: WeatherCopy.swift - What a pull or the Update button will ask for. %1$@ is the radio's name, %2$@ a list like "alert list, readings" */
+"weather.update.asks" = "A pedir a %1$@: %2$@";
+
+/* Location: WeatherCopy.swift - One thing Update asks for, in a list */
+"weather.update.item.alerts" = "lista de avisos";
+
+/* Location: WeatherCopy.swift - One thing Update asks for, outside the radio's own area */
+"weather.update.item.areaAlerts" = "avisos deste condado e desta zona";
+
+/* Location: WeatherCopy.swift - One thing Update asks for, in a list */
+"weather.update.item.readings" = "leituras";
+
+/* Location: WeatherCopy.swift - One thing Update asks for, in a list */
+"weather.update.item.forecast" = "previsão";
+
+/* Location: WeatherCopy.swift - Nothing worth asking for. %1$@ is the radio's name, %2$@ the time the oldest thing held is current as of */
+"weather.update.current" = "Está tudo atualizado · %1$@ %2$@";
+
+/* Location: WeatherCopy.swift - Nothing worth asking for, with no content time to name */
+"weather.update.currentUnknown" = "Está tudo atualizado";
+
+/* Location: WeatherCopy.swift - Nothing sent because the channel just delivered it, which is not the same as being current. %@ is the radio's name at the start of a sentence */
+"weather.update.justReceived" = "%@ respondeu nos últimos 5 minutos";
+
+// MARK: - Units and time
+
+/* Location: WeatherFormatting.swift - Duration in seconds */
+"weather.unit.seconds" = "%lld s";
+
+/* Location: WeatherFormatting.swift - Duration in minutes */
+"weather.unit.minutes" = "%lld min";
+
+/* Location: WeatherFormatting.swift - Duration in hours */
+"weather.unit.hours" = "%lld h";
+
+/* Location: WeatherFormatting.swift - Duration in hours and minutes */
+"weather.unit.hoursMinutes" = "%1$lld h %2$lld min";
+
+/* Location: WeatherFormatting.swift - Duration in days */
+"weather.unit.days" = "%lld d";
+
+/* Location: WeatherFormatting.swift - Distance in kilometres */
+"weather.unit.kilometres" = "%lld km";
+
+/* Location: WeatherFormatting.swift - Distance under one kilometre */
+"weather.unit.underOneKilometre" = "menos de 1 km";
+
+/* Location: WeatherFormatting.swift - Visibility below the smallest whole unit the weather radio sends, %@ is a distance like "1 mi" */
+"weather.unit.under" = "menos de %@";
+
+/* Location: WeatherFormatting.swift - Distance and compass direction. %1$@ is a distance, %2$@ like "NW" */
+"weather.unit.distanceDirection" = "%1$@ %2$@";
+
+/* Location: WeatherFormatting.swift - Time ago, %@ is a duration like "2 min" */
+"weather.time.ago" = "há %@";
+
+/* Location: WeatherFormatting.swift - Time ago under five seconds */
+"weather.time.justNow" = "agora mesmo";
+
+/* Location: WeatherFormatting.swift - Age, %@ is a duration like "3 h" */
+"weather.time.old" = "há %@";
+
+/* Location: WeatherFormatting.swift - Countdown, %@ is a duration like "40 min" */
+"weather.time.within" = "daqui a %@";
+
+/* Location: WeatherFormatting.swift - A time yesterday, %@ is a time like "2:00 PM" */
+"weather.time.yesterday" = "ontem %@";
+
+// MARK: - Place picker
+
+/* Location: WeatherPlacePickerView.swift - Search field prompt */
+"weather.picker.prompt" = "Localidade, código ZIP ou de aeroporto";
+
+/* Location: WeatherPlacePickerView.swift - Shown when a search matches nothing */
+"weather.picker.noResults" = "Nenhum local correspondente";
+
+/* Location: WeatherPlacePickerView.swift - Row for a US ZIP code the phone's ZIP list doesn't have, %@ is the 5-digit ZIP like "20500" */
+"weather.picker.unknownZip" = "Código ZIP %@ desconhecido";
+
+/* Location: WeatherPlacePickerView.swift - Second line of the unknown ZIP code row */
+"weather.picker.unknownZipHint" = "Os códigos ZIP de apartados postais e de algumas empresas não estão na lista. Em alternativa, tente a localidade.";
+
+/* Location: WeatherPlacePickerView.swift - Row for the phone's location */
+"weather.picker.yourLocation" = "A minha localização";
+
+/* Location: WeatherPlacePickerView.swift - Your location row when permission is denied */
+"weather.picker.locationOff" = "Localização desativada";
+
+/* Location: WeatherPlacePickerView.swift - Your location row before permission is asked */
+"weather.picker.allowLocation" = "Toque para permitir o acesso à localização";
+
+/* Location: WeatherPlacePickerView.swift - Your location row when the phone has no fix and nothing is being located */
+"weather.picker.noFix" = "Toque para usar a sua localização";
+
+/* Location: WeatherPlacePickerView.swift - Section of the places kept on this phone */
+"weather.picker.saved" = "Locais guardados";
+
+/* Location: WeatherPlacePickerView.swift - Footer shown only when the phone has no fix and distances are measured from the page on screen, %@ is that place */
+"weather.picker.distancesFrom" = "Distâncias a partir de %@";
+
+/* Location: WeatherPlacePickerView.swift - Shown in place of a distance when the phone has no fix and the tool has no place to measure from either */
+"weather.picker.distanceUnknown" = "Distância desconhecida";
+
+/* Location: WeatherCopy.swift - A Places row with nothing held for its place */
+"weather.picker.noReading" = "—";
+
+/* Location: WeatherPlacePickerView.swift - Swipe action that takes a place off the list */
+"weather.picker.remove" = "Remover";
+
+/* Location: WeatherPlacePickerView.swift - Section of places whose forecasts were heard on the channel; never says who asked */
+"weather.picker.heardOnChannel" = "Ouvido em #meshwx";
+
+/* Location: WeatherPlacePickerView.swift - When somebody's forecast was heard, %@ is a time ago */
+"weather.picker.heard" = "ouvido %@";
+
+// MARK: - About
+
+/* Location: WeatherRadioView.swift - Section header above the five lines that say how asking works */
+"weather.about.howItWorks" = "Como funciona";
+
+/* Location: WeatherRadioView.swift - How it works, first line */
+"weather.about.line1" = "O seu pedido sai em #meshwx, dirigido ao rádio meteorológico.";
+
+/* Location: WeatherRadioView.swift - How it works, second line */
+"weather.about.line2" = "A resposta é transmitida em #meshwx.";
+
+/* Location: WeatherRadioView.swift - How it works, third line */
+"weather.about.line3" = "Todos os telemóveis à escuta a guardam, incluindo as respostas aos pedidos de outras pessoas.";
+
+/* Location: WeatherRadioView.swift - How it works, fourth line */
+"weather.about.line4" = "Pedir gasta tempo de antena que todos partilham.";
+
+
+/* Location: WeatherRadioView.swift - How it works, fifth line: what a request carries about the asker (phase 2) */
+"weather.about.line5" = "Um pedido leva também o início da chave pública do seu rádio e, para A minha localização, as coordenadas que pergunta.";
+/* Location: WeatherRadioView.swift - Section of weather radios */
+"weather.about.radios" = "Rádios meteorológicos";
+
+/* Location: WeatherRadioView.swift - Footer under the weather radios */
+"weather.about.radiosFooter" = "Os pedidos vão para o rádio meteorológico em uso.";
+
+/* Location: WeatherRadioView.swift - Row that lets the app choose the weather radio */
+"weather.about.automatic" = "Escolher automaticamente";
+
+/* Location: WeatherRadioView.swift - Detail under the automatic row, %@ is the radio's name */
+"weather.about.automaticDetail" = "A usar %@";
+
+/* Location: WeatherRadioView.swift - When a weather radio was heard, %@ is a time ago */
+"weather.about.heard" = "ouvido %@";
+
+/* Location: WeatherRadioView.swift - A weather radio never heard */
+"weather.about.notHeard" = "ainda não ouvido";
+
+/* Location: WeatherRadioView.swift - The weather radio's Weather Service feed is healthy */
+"weather.about.feedOK" = "Dados do serviço meteorológico OK";
+
+/* Location: WeatherRadioView.swift - The weather radio's own Weather Service office has sent nothing for over 4 hours, usual on a quiet night. %@ is a duration like "5 h" */
+"weather.about.feedQuiet" = "nada do seu centro do serviço meteorológico há %@";
+
+/* Location: WeatherRadioView.swift - The weather radio has never received anything from the Weather Service */
+"weather.about.feedNone" = "nenhum dado recebido do serviço meteorológico";
+
+/* Location: WeatherRadioView.swift - A weather radio heard without an advert */
+"weather.about.noAdvert" = "ainda não se anunciou";
+
+/* Location: WeatherRadioView.swift - The weather radio requests go to */
+"weather.about.inUse" = "em uso";
+
+
+/* Location: WeatherRadioView.swift - Detail on a weather radio row when two radios share its name or its four hex digits (phase 2). %@ is the name, or the digits */
+"weather.about.conflict" = "dois rádios usam %@";
+
+/* Location: WeatherRadioView.swift - Footer under the weather radios while two radios share a name or an id (phase 2). %@ is the name, or the four hex digits */
+"weather.about.conflictFooter" = "Dois rádios usam %@. A app não usa nenhum deles nem o notifica dos seus alertas até escolher um.";
+/* Location: WeatherRadioView.swift - Channel slot label */
+"weather.about.channelSlot" = "Slot de canal";
+
+/* Location: WeatherRadioView.swift - Channel slot value, %lld is the slot number */
+"weather.about.slot" = "Slot %lld";
+
+/* Location: WeatherRadioView.swift - Channel slot value when #meshwx is not on your radio */
+"weather.about.noSlot" = "Não está no seu rádio";
+
+/* Location: WeatherRadioView.swift - Last weather datagram label */
+"weather.about.lastMessage" = "Última mensagem meteorológica";
+
+/* Location: WeatherRadioView.swift - No weather message received */
+"weather.about.noMessage" = "Nenhuma recebida";
+
+/* Location: WeatherRadioView.swift - Channel slot value while your radio is not connected or still syncing */
+"weather.about.radioOffline" = "O seu rádio não está ligado";
+
+/* Location: WeatherRadioView.swift - Button that forgets the source radio's weather */
+"weather.about.clear" = "Limpar meteorologia recebida";
+
+/* Location: WeatherRadioView.swift - Footer under the clear button, %@ is the radio's name */
+"weather.about.clearFooter" = "Remove deste telefone tudo o que foi recebido de %@.";
+
+/* Location: WeatherRadioView.swift - Alert title before clearing, %@ is the radio's name */
+"weather.about.alert.title" = "Limpar a meteorologia recebida de %@?";
+
+/* Location: WeatherRadioView.swift - Alert message before clearing, %@ is the radio's name */
+"weather.about.alert.message" = "Os avisos, leituras, previsões e relatórios são removidos deste telefone. Voltam à medida que %@ os transmitir.";
+
+/* Location: WeatherRadioView.swift - Alert button that clears */
+"weather.about.alert.clear" = "Limpar";
+
+// MARK: - What the weather radio covers
+
+/* Location: WeatherRadioView.swift - Section header for what the weather radio says it covers */
+"weather.covers.header" = "O que cobre";
+
+/* Location: WeatherRadioView.swift - Row label for the area the radio covers */
+"weather.covers.area" = "Área";
+
+/* Location: WeatherRadioView.swift - The circle the radio stated. %1$@ is a radius like "120 km", %2$@ the place at its centre */
+"weather.covers.circle" = "A menos de %1$@ de %2$@";
+
+/* Location: WeatherRadioView.swift - The radio stated no area filter at all */
+"weather.covers.everywhere" = "Tudo o que a sua ligação ao serviço meteorológico traz";
+
+/* Location: WeatherRadioView.swift - Row label for the forecast zones the radio covers */
+"weather.covers.zones" = "Zonas de previsão";
+
+/* Location: WeatherRadioView.swift - How many zones the radio listed, %lld is two or more */
+"weather.covers.zoneCount" = "%lld zonas";
+
+/* Location: WeatherRadioView.swift - The radio listed one zone */
+"weather.covers.zoneCountOne" = "1 zona";
+
+/* Location: WeatherRadioView.swift - The radio had to cut a list to fit, so what is missing from it may still be covered. %@ is the list it did send */
+"weather.covers.andMore" = "%@, e mais que não enumerou";
+
+/* Location: WeatherRadioView.swift - Row label for the Weather Service offices the radio carries */
+"weather.covers.offices" = "Centros do serviço meteorológico";
+
+/* Location: WeatherRadioView.swift - Row label for how many stations one hourly report can carry */
+"weather.covers.stations" = "Estações por relatório";
+
+/* Location: WeatherRadioView.swift - The cap on one hourly report, %lld is the number */
+"weather.covers.stationCap" = "até %lld";
+
+/* Location: WeatherRadioView.swift - Footer saying when the radio said this. %1$@ is the radio's name, %2$@ a time */
+"weather.covers.stated" = "%1$@ indicou isto; recebido %2$@";
+
+/* Location: WeatherRadioView.swift - Shown when the radio has not said what it covers, %@ is its name at the start of a sentence */
+"weather.covers.none" = "%@ ainda não disse o que cobre.";
+
+/* Location: WeatherRadioView.swift - Footer under the ask, saying what the statement is for */
+"weather.covers.noneFooter" = "Sem isso, este telemóvel não distingue um local fora da área de um sobre o qual nada lhe foi dito, por isso não afirma nenhuma das duas coisas.";
+
+/* Location: WeatherRadioView.swift - Request button asking the radio what it covers */
+"weather.request.askCoverage" = "Perguntar o que cobre";
+
+/* Location: WeatherCopy.swift - One thing Update asks for, in a list */
+"weather.update.item.coverage" = "o que cobre";
+
+
+// MARK: - Your requests
+
+/* Location: WeatherRadioView.swift - Header of this phone's own requests; the newest three are listed */
+"weather.requests.newest" = "Os seus pedidos";
+
+/* Location: WeatherRadioView.swift - Footer under the requests this phone sent */
+"weather.requests.footer" = "O que este telemóvel pediu. Todas as respostas foram transmitidas, por isso também chegaram a quem estava à escuta.";
+
+/* Location: WeatherRadioView.swift - Shown when this phone has asked for nothing */
+"weather.requests.none" = "Este telemóvel ainda não pediu nada.";
+
+/* Location: WeatherRadioView.swift - How a request ended: the answer arrived */
+"weather.requests.answered" = "respondido";
+
+/* Location: WeatherRadioView.swift - How a request ended: nothing came back */
+"weather.requests.noAnswer" = "sem resposta";
+
+/* Location: WeatherRadioView.swift - How a request ended: the radio said it can't serve it */
+"weather.requests.notAvailable" = "não disponível";
+
+/* Location: WeatherRadioView.swift - How a request ended: your own radio would not send it */
+"weather.requests.refused" = "o seu rádio não o conseguiu enviar";
+
+/* Location: WeatherRadioView.swift - A request still on the air */
+"weather.requests.pending" = "à espera de resposta";
+
+
+// MARK: - Request names
+
+/* Location: WeatherCopy.swift - A request and what it named. %1$@ is what was asked for, %2$@ its subject like a state, an office or an airport code */
+"weather.requestName.withSubject" = "%1$@ · %2$@";
+
+/* Location: WeatherCopy.swift - Name of a request for the radio's alert list */
+"weather.requestName.alertList" = "Lista de avisos";
+
+/* Location: WeatherCopy.swift - Name of a request for every active warning */
+"weather.requestName.activeWarnings" = "Avisos ativos";
+
+/* Location: WeatherCopy.swift - Name of a request for warnings naming one area, %@ is a county or zone code like TXZ192 */
+"weather.requestName.areaWarnings" = "Avisos para %@";
+
+/* Location: WeatherCopy.swift - Name of a request for a warning's full text, %@ is the alert's name like "Tornado Warning" */
+"weather.requestName.warningText" = "Texto completo de %@";
+
+/* Location: WeatherCopy.swift - Name of a request for the hourly station readings */
+"weather.requestName.readings" = "Leituras das estações";
+
+/* Location: WeatherCopy.swift - Name of a request for one station, %@ is an airport code like KAUS */
+"weather.requestName.stationReading" = "Leituras de %@";
+
+/* Location: WeatherCopy.swift - Name of a request for a forecast, %@ is a place or forecast point */
+"weather.requestName.forecast" = "Previsão para %@";
+
+/* Location: WeatherCopy.swift - Name of a request for the coded current conditions */
+"weather.requestName.metar" = "METAR";
+
+/* Location: WeatherCopy.swift - Name of a request for the coded airport forecast */
+"weather.requestName.taf" = "TAF";
+
+/* Location: WeatherCopy.swift - Name of a request asking the radio what it covers */
+"weather.requestName.coverage" = "O que cobre";
+
+
+// MARK: - Heard on the channel
+
+/* Location: WeatherRadioView.swift - Footer under what the channel carried; it never says who asked */
+"weather.heard.footer" = "O que o canal transportou recentemente, tanto transmissões como respostas. Este telemóvel não sabe quem perguntou.";
+
+/* Location: WeatherRadioView.swift - One message carrying several stations' readings, %lld is two or more */
+"weather.heard.readings" = "%lld leituras de estações";
+
+/* Location: WeatherRadioView.swift - One message carrying one station's reading */
+"weather.heard.readingsOne" = "1 leitura de estação";
+
+/* Location: WeatherRadioView.swift - A text reply whose subject has no name of its own */
+"weather.heard.text" = "Texto do serviço meteorológico";
+
+
+// MARK: - Cached from the channel
+
+/* Location: WeatherRadioView.swift - Row opening what this phone kept from the channel, %lld is how many things */
+"weather.cache.row" = "Guardado do canal (%lld)";
+
+/* Location: WeatherCachedView.swift - Screen title */
+"weather.cache.title" = "Guardado do canal";
+
+/* Location: WeatherCachedView.swift - Header saying where all of it came from */
+"weather.cache.intro" = "Tudo o que está aqui foi ouvido em #meshwx. Este telemóvel não sabe quem pediu o quê.";
+
+/* Location: WeatherCachedView.swift - Segment showing what is held grouped by kind */
+"weather.cache.byKind" = "Por tipo";
+
+/* Location: WeatherCachedView.swift - Segment showing what is held in the order it arrived */
+"weather.cache.newestFirst" = "Mais recentes primeiro";
+
+/* Location: WeatherCachedView.swift - Group header. %1$@ is the kind of thing, %2$lld how many are held */
+"weather.cache.group" = "%1$@ (%2$lld)";
+
+/* Location: WeatherCachedView.swift - Group of forecasts */
+"weather.cache.forecasts" = "Previsões";
+
+/* Location: WeatherCachedView.swift - Group of coded airport reports */
+"weather.cache.airportReports" = "Relatórios de aeroporto (METAR/TAF)";
+
+/* Location: WeatherCachedView.swift - Group of the full texts of warnings */
+"weather.cache.narratives" = "Textos completos dos avisos";
+
+/* Location: WeatherCachedView.swift - Group of warnings for places other than the one on screen */
+"weather.cache.warningsElsewhere" = "Avisos para outros locais";
+
+// MARK: - Notificações de avisos
+
+/* Location: WeatherAlertNotificationsView.swift - Screen title, and the row that opens it */
+"weather.notifications.title" = "Notificações de avisos";
+
+/* Location: WeatherAlertNotificationsView.swift - Section header over the places being watched */
+"weather.notifications.placesHeader" = "Locais vigiados";
+
+/* Location: WeatherAlertNotificationsView.swift - Shown when no place is watched */
+"weather.notifications.empty" = "Ainda não há nenhum local vigiado. Ligue a campainha ao lado de um local em Locais e um aviso que o cubra dá-lhe conta.";
+
+/* Location: WeatherAlertNotificationsView.swift - A watched place while your radio is connected */
+"weather.notifications.connected" = "A vigiar · rádio ligado";
+
+/* Location: WeatherAlertNotificationsView.swift - A watched place while your radio is not connected and the app does not know since when */
+"weather.notifications.disconnected" = "Sem vigiar — o seu rádio não está ligado";
+
+/* Location: WeatherAlertNotificationsView.swift - A watched place while your radio is not connected, %@ is a time like "8:42 PM" */
+"weather.notifications.disconnectedSince" = "Sem vigiar — rádio desligado desde %@";
+
+/* Location: WeatherAlertNotificationsView.swift - The row for the phone's own position */
+"weather.notifications.myLocation" = "A minha localização";
+
+/* Location: WeatherAlertNotificationsView.swift - How old the position it is matched against is, %@ is an age like "3 h old" */
+"weather.notifications.positionAge" = "Última posição %@";
+
+/* Location: WeatherAlertNotificationsView.swift - No position has been taken yet */
+"weather.notifications.noPosition" = "Ainda sem posição. Abra Meteorologia com a localização ligada para lhe dar uma.";
+
+/* Location: WeatherAlertNotificationsView.swift - Section header over the two opt-in toggles */
+"weather.notifications.alsoHeader" = "Avisar-me também de";
+
+/* Location: WeatherAlertNotificationsView.swift - Toggle for warnings that are not storm warnings */
+"weather.notifications.otherWarnings" = "Outros avisos";
+
+/* Location: WeatherAlertNotificationsView.swift - What the other-warnings toggle covers */
+"weather.notifications.otherWarningsDetail" = "Cheia, tempestade de inverno, vento e o resto, entregues sem som.";
+
+/* Location: WeatherAlertNotificationsView.swift - Toggle for tornado warnings that do not cover the place */
+"weather.notifications.tornadoNearby" = "Avisos de tornado por perto";
+
+/* Location: WeatherAlertNotificationsView.swift - What the nearby-tornado toggle covers */
+"weather.notifications.tornadoNearbyDetail" = "A menos de 50 km, mesmo quando não cobrem o local.";
+
+/* Location: WeatherAlertNotificationsView.swift - Footer saying what always notifies and what never does */
+"weather.notifications.stormsAlways" = "Os avisos de tornado, vento extremo, cheia repentina e trovoada forte que cobrem um local vigiado avisam sempre, com som. As vigilâncias e os boletins nunca o fazem.";
+
+/* Location: WeatherAlertNotificationsView.swift - Footer saying exactly what this can promise */
+"weather.notifications.promise" = "Os avisos só chegam enquanto o seu rádio estiver ligado e ao alcance, e enquanto o DigitainoMesh estiver a funcionar. Isto não substitui um rádio meteorológico da NOAA nem os alertas de emergência do seu telemóvel.";
+
+/* Location: WeatherAlertNotificationsView.swift - Shown when iOS has notifications turned off for the app */
+"weather.notifications.denied" = "As notificações estão desligadas para o DigitainoMesh, por isso uma campainha não pode tocar.";
+
+/* Location: WeatherAlertNotificationsView.swift - Button opening the Settings app */
+"weather.notifications.openSettings" = "Abrir Definições";
+
+/* Location: WeatherPlacePickerView.swift - Accessibility label for a bell that is off, %@ is the place */
+"weather.notifications.startWatching" = "Avisar-me dos avisos para %@";
+
+/* Location: WeatherPlacePickerView.swift - Accessibility label for a bell that is on, %@ is the place */
+"weather.notifications.stopWatching" = "Deixar de avisar dos avisos para %@";
+
+/* Location: WeatherRadioView.swift - How many places are watched, %lld is one or more */
+"weather.notifications.watchingCount" = "%lld vigiados";
+
+/* Location: WeatherRadioView.swift - Shown when nothing is watched */
+"weather.notifications.watchingNone" = "Desligado";
+
+/* Location: WeatherAlertNotificationCopy.swift - Name for the phone's own place in a notification when no town is near enough */
+"weather.notifications.myLocationLabel" = "a sua localização";
+
+/* Location: WeatherAlertNotificationCopy.swift - When a warning ends, in a notification. %@ is a time like "9:41 PM" */
+"weather.notifications.until" = "até %@";
+
+/* Location: WeatherAlertNotificationCopy.swift - A warning near the place, in a notification. %1$@ is a distance and direction like "25 km N", %2$@ the place */
+"weather.notifications.near" = "%1$@ de %2$@";
+
+/* Location: WeatherAlertNotificationCopy.swift - Second line of a notification for a warning drained from the radio's queue */
+"weather.notifications.late" = "Recebido tarde — enviado enquanto o seu rádio estava fora de alcance.";
+
+// MARK: - National alert map
+
+/* Location: WeatherAreaMapView.swift - Screen title, and the row in the alerts list that opens it */
+"weather.areaMap.title" = "Mapa de avisos";
+
+/* Location: WeatherAreaMapView.swift - Under the still map on the card; the full map zooms and answers a tap */
+"weather.areaMap.open" = "Abrir o mapa completo";
+
+/* Location: WeatherAreaMapView.swift - Header of the list of alert kinds the map is showing */
+"weather.areaMap.list" = "O que há neste mapa";
+
+/* Location: WeatherAreaMapView.swift - Button: ask the radio about the tapped area */
+"weather.areaMap.askArea" = "Perguntar sobre esta área";
+
+/* Location: WeatherAreaMapView.swift - The same button when the phone already holds an alert for it */
+"weather.areaMap.askAreaAgain" = "Perguntar de novo";
+
+/* Location: WeatherAreaMapView.swift - Under that button. %@ is the radio's name */
+"weather.areaMap.askAreaFootnote" = "Um pacote para %@, e a resposta chega a todos os que escutam.";
+
+/* Location: WeatherAreaMapView.swift - One area in that list. %1$@ is the area's name, %2$@ its state */
+"weather.areaMap.areaIn" = "%1$@, %2$@";
+
+/* Location: WeatherAlertsListView.swift - Row detail before any map has been received */
+"weather.areaMap.never" = "Ainda não foi pedido";
+
+/* Location: WeatherAreaMapView.swift - Shown when no map has been received, and why nothing fetches one by itself */
+"weather.areaMap.empty" = "Ainda não há mapa. Nada o pede sozinho — um mapa custa vários pacotes ao canal partilhado, por isso espera pelo teu toque.";
+
+/* Location: WeatherAreaMapView.swift - When the radio built the map, %@ is a time like "8:02 PM" */
+"weather.areaMap.asOf" = "Mapa das %@";
+
+/* Location: WeatherAreaMapView.swift - The radio dropped areas to make the map fit */
+"weather.areaMap.cut" = "Cortado para caber: uma área sem cor aqui pode estar na mesma sob um aviso";
+
+/* Location: WeatherAreaMapView.swift - How many areas the map shades, %lld is two or more */
+"weather.areaMap.areas" = "%lld áreas sob um aviso";
+
+/* Location: WeatherAreaMapView.swift - The map shades one area */
+"weather.areaMap.areasOne" = "1 área sob um aviso";
+
+/* Location: WeatherAreaMapView.swift - A complete map that found nothing anywhere, %@ is the radio's name at the start of a sentence */
+"weather.areaMap.clear" = "%@ não encontrou nada sob um aviso em todo o país.";
+
+/* Location: WeatherAreaMapView.swift - Areas the map named that this app has no outline for, so they are not shaded. %lld is two or more */
+"weather.areaMap.noOutline" = "Esta app não tem o contorno de %lld delas, por isso não ficam com cor";
+
+/* Location: WeatherAreaMapView.swift - One area the map named that this app has no outline for */
+"weather.areaMap.noOutlineOne" = "Esta app não tem o contorno de 1 delas, por isso não fica com cor";
+
+/* Location: WeatherAreaMapView.swift - What the held map covers when only warnings and watches were asked for */
+"weather.areaMap.heldWarnings" = "Avisos e vigilâncias";
+
+/* Location: WeatherAreaMapView.swift - What the held map covers when advisories were asked for too */
+"weather.areaMap.heldAll" = "Avisos, vigilâncias e boletins";
+
+/* Location: WeatherAreaMapView.swift - Picker label for how much weather the next map should cover */
+"weather.areaMap.scope" = "O que mapear";
+
+/* Location: WeatherAreaMapView.swift - The narrower scope, which is the default */
+"weather.areaMap.scopeWarnings" = "Avisos e vigilâncias";
+
+/* Location: WeatherAreaMapView.swift - The wider scope, which costs more airtime */
+"weather.areaMap.scopeAll" = "Também boletins";
+
+/* Location: WeatherAreaMapView.swift - Request button asking the radio for the map */
+"weather.areaMap.ask" = "Pedir o mapa";
+
+/* Location: WeatherAreaMapView.swift - What one tap costs, said before it is spent. %lld is a number of packets */
+"weather.areaMap.cost" = "Cerca de %lld pacotes no canal partilhado.";
+
+/* Location: WeatherAreaMapView.swift - The same when one packet is all it costs */
+"weather.areaMap.costOne" = "Cerca de 1 pacote no canal partilhado.";
+
+/* Location: WeatherAreaMapView.swift - Header over the colors used on the map */
+"weather.areaMap.legend" = "O que significam as cores";
+
+/* Location: WeatherAreaMapView.swift - How to ask about one shaded area, %@ is the radio's name */
+"weather.areaMap.tapHint" = "Toca numa área com cor para ver o que %@ disse sobre ela.";
+
+/* Location: WeatherAreaMapView.swift - Accessibility label for the map itself */
+"weather.areaMap.mapLabel" = "Mapa do país, com as áreas sob um aviso a cor";
+
+/* Location: WeatherCopy.swift - The radio's rate limit refused the map (Not available, reason 4). %@ is the radio's name */
+"weather.areaMap.busy" = "Outro rádio pediu o mapa a %@ há pouco — tenta outra vez daqui a alguns minutos.";
+
+/* Location: WeatherCopy.swift - Name of a request for the national alert map */
+"weather.requestName.areaMap" = "Mapa nacional de avisos";
+
+/* Location: WeatherCopy.swift - Name of a request for the national alert map including advisories */
+"weather.requestName.areaMapAll" = "Mapa nacional de avisos · com boletins";
+
+// MARK: - Alert map, revision 10
+
+/* Location: WeatherAreaMapView.swift - Status card: the national part, where a newer scoped part covers some states */
+"weather.areaMap.restOfCountry" = "O resto do país";
+
+/* Location: WeatherAreaMapView.swift - Status card: the national part, where nothing newer covers any state */
+"weather.areaMap.wholeCountry" = "Todo o país";
+
+/* Location: WeatherAreaMapView.swift - Status card: a scoped part whose first packet, which carries the states, never arrived */
+"weather.areaMap.partStatesUnknown" = "Parte do país, estados desconhecidos";
+
+/* Location: WeatherAreaMapView.swift - Status card: a part every one of whose states a newer part now speaks for */
+"weather.areaMap.partReplaced" = "Uma parte mais recente acima cobre estes estados.";
+
+/* Location: WeatherAreaMapView.swift - When one part of the map was built, %@ is a time like "1:40 PM" */
+"weather.areaMap.partAsOf" = "dados de %@";
+
+/* Location: WeatherAreaMapView.swift - Packets of one part never arrived. %1$lld is how many arrived, %2$lld how many were sent */
+"weather.areaMap.partsArrived" = "Chegaram %1$lld de %2$lld partes";
+
+/* Location: WeatherAreaMapView.swift - Button asking the radio to send the packets that never arrived, %lld is two or more */
+"weather.areaMap.askParts" = "Pedir as %lld partes em falta";
+
+/* Location: WeatherAreaMapView.swift - The same button when one packet is missing */
+"weather.areaMap.askPartsOne" = "Pedir a parte em falta";
+
+/* Location: WeatherAreaMapView.swift - What that button costs, %lld is two or more */
+"weather.areaMap.packets" = "%lld pacotes";
+
+/* Location: WeatherAreaMapView.swift - What that button costs when it is one packet */
+"weather.areaMap.packetsOne" = "1 pacote";
+
+/* Location: WeatherAreaMapView.swift - Too many states to name one by one, %lld is four or more */
+"weather.areaMap.stateCount" = "%lld estados";
+
+/* Location: WeatherAreaMapView.swift - Two states in a list, all but the last pair. %1$@ and %2$@ are state names */
+"weather.areaMap.listJoin" = "%1$@, %2$@";
+
+/* Location: WeatherAreaMapView.swift - The last pair of states in a list. %1$@ and %2$@ are state names */
+"weather.areaMap.listJoinAnd" = "%1$@ e %2$@";
+
+/* Location: WeatherAreaMapView.swift - What the held map covers when no part of it is national. %@ is a list of states */
+"weather.areaMap.covers" = "Este mapa cobre %@.";
+
+/* Location: WeatherAreaMapView.swift - Under that: an unshaded state outside the map is unknown, not calm */
+"weather.areaMap.notAsked" = "O resto do país não foi pedido. Um estado fora deste mapa é desconhecido, não está sem avisos.";
+
+/* Location: WeatherAreaMapView.swift - Row opening the state picker, with what is chosen beside it */
+"weather.areaMap.areasToAsk" = "Áreas a pedir";
+
+/* Location: WeatherAreaMapView.swift - The ask button when states are chosen. %@ is a list of state names */
+"weather.areaMap.askStates" = "Pedir %@";
+
+/* Location: WeatherAreaMapView.swift - The ask button when the whole country is chosen */
+"weather.areaMap.askWholeCountry" = "Pedir todo o país";
+
+/* Location: WeatherAreaMapView.swift - Said before the tap when the selection is wider than one request can name. %lld is the limit */
+"weather.areaMap.tooManyStates" = "Mais de %lld estados pede todo o país.";
+
+/* Location: WeatherAreaMapView.swift - The tapped area is on the map but no alert for it has arrived. %@ is a time like "1:20 PM" */
+"weather.areaMap.onMapAsOf" = "No mapa, dados de %@. Detalhes não recebidos.";
+
+/* Location: WeatherAreaMapView.swift - First row of the state picker */
+"weather.areaMap.pickerWholeCountry" = "Todo o país";
+
+/* Location: WeatherAreaMapView.swift - Section header over the state the page's place is in */
+"weather.areaMap.pickerYourState" = "Onde está esta página";
+
+/* Location: WeatherAreaMapView.swift - Section header over the rest of the states */
+"weather.areaMap.pickerEveryState" = "Todos os estados";
+
+/* Location: WeatherAreaMapView.swift - Search field prompt in the state picker */
+"weather.areaMap.pickerSearch" = "Procurar estados";
+
+/* Location: WeatherAreaMapView.swift - How many states are chosen, %lld is one or more */
+"weather.areaMap.pickerSelected" = "%lld selecionados";
+
+/* Location: WeatherAreaMapView.swift - The search in the state picker found nothing */
+"weather.areaMap.pickerNoMatches" = "Nenhum estado corresponde a essa procura.";
+
+/* Location: WeatherAreaMapView.swift - Closes the state picker where it is presented rather than pushed (the web client) */
+"weather.areaMap.pickerDone" = "Concluído";
+
+// MARK: - Text reports: the missing chunks
+
+/* Location: WeatherReportsView.swift - Button asking the radio to send the chunks of a report that never arrived, %lld is two or more */
+"weather.reports.askParts" = "Pedir as %lld partes em falta";
+
+/* Location: WeatherReportsView.swift - The same button when one chunk is missing */
+"weather.reports.askPartsOne" = "Pedir a parte em falta";
+
+// MARK: - Forecast, revision 10
+
+/* Location: WeatherForecastSection.swift - The forecast is for a point the radio picked, which this app cannot name. %@ is the radio's name */
+"weather.forecast.chosenByBot" = "Ponto de previsão escolhido por %@";
+
+/* Location: Asks for a forecast at the place's own coordinate. %@ is the radio's name. On iOS the page's Update sends it and the card carries no button of its own */
+"weather.forecast.askNearby" = "Pedir a %@ uma previsão para aqui";
+
+// MARK: - Request names, revision 10
+
+/* Location: WeatherCopy.swift - Name of a request for the packets of an answer that never arrived. %@ is what the answer was */
+"weather.requestName.parts" = "Partes em falta de %@";
+
+/* Location: WeatherCopy.swift - The same, for an answer this app cannot name */
+"weather.requestName.partsGeneric" = "Partes em falta";
+
+/* Location: WeatherCopy.swift - Name of a request for a forecast at a coordinate. %@ is the coordinate that was asked about */
+"weather.requestName.forecastAt" = "Previsão para %@";
+
+/* Location: WeatherCopy.swift - Name of a request for an alert map of some states. %@ is a list of state names */
+"weather.requestName.areaMapStates" = "Mapa de avisos · %@";
+
+/* Location: WeatherCopy.swift - The same, including advisories. %@ is a list of state names */
+"weather.requestName.areaMapStatesAll" = "Mapa de avisos · %@ · com boletins";
+
+// MARK: - Your requests
+
+/* Location: WeatherRadioView.swift - Row opening the whole request log, %lld is how many it holds */
+"weather.requests.all" = "Todos os pedidos (%lld)";
+
+/* Location: WeatherRadioView.swift - Title of that screen */
+"weather.requests.allTitle" = "Todos os pedidos";
+
+// MARK: - Channel traffic
+
+/* Location: WeatherTrafficView.swift - Row on the radio page, and the title of the timeline it opens */
+"weather.traffic.title" = "Tráfego do canal";
+
+/* Location: WeatherTrafficView.swift - Under that title */
+"weather.traffic.subtitle" = "Tudo o que foi ouvido em #meshwx, o mais recente em baixo.";
+
+/* Location: WeatherTrafficView.swift - Shown while the log is empty */
+"weather.traffic.empty" = "Ainda não se ouviu nada neste canal.";
+
+/* Location: WeatherTrafficView.swift - Empties the log */
+"weather.traffic.clear" = "Limpar";
+
+/* Location: WeatherTrafficView.swift - Title of the confirmation for that */
+"weather.traffic.clearTitle" = "Limpar o registo do canal?";
+
+/* Location: WeatherTrafficView.swift - Body of that confirmation, %lld is how many rows go */
+"weather.traffic.clearMessage" = "Isto remove as %lld linhas que este telemóvel guardou do que passou em #meshwx. A meteorologia guardada não é tocada.";
+
+/* Location: WeatherTrafficView.swift - Name over a request this phone sent */
+"weather.traffic.you" = "Este telemóvel";
+
+/* Location: WeatherTrafficView.swift - Name over a datagram whose header could not be read far enough to name a radio */
+"weather.traffic.unknownSender" = "Remetente desconhecido";
+
+/* Location: WeatherTrafficView.swift - On the detail screen of a datagram the codec could not read */
+"weather.traffic.notDecoded" = "Esta app não conseguiu ler este datagrama.";
+
+/* Location: WeatherTrafficView.swift - Header over the datagram's own facts */
+"weather.traffic.about" = "Este datagrama";
+
+/* Location: WeatherTrafficView.swift - When this phone heard or sent it */
+"weather.traffic.field.when" = "Hora";
+
+/* Location: WeatherTrafficView.swift - Which radio sent it */
+"weather.traffic.field.from" = "De";
+
+/* Location: WeatherTrafficView.swift - How many bytes of airtime it took */
+"weather.traffic.field.size" = "Tamanho";
+
+/* Location: WeatherTrafficView.swift - The radio's own counter for this message */
+"weather.traffic.field.seq" = "Sequência";
+
+/* Location: WeatherTrafficView.swift - Signal-to-noise of the received packet */
+"weather.traffic.field.signal" = "Sinal";
+
+/* Location: WeatherTrafficView.swift - How many repeaters it passed through */
+"weather.traffic.field.hops" = "Saltos";
+
+/* Location: WeatherTrafficView.swift - Which channel slot it arrived on */
+"weather.traffic.field.slot" = "Slot de canal";
+
+/* Location: WeatherTrafficView.swift - The message type nibble the header carries */
+"weather.traffic.field.type" = "Tipo de mensagem";
+
+/* Location: WeatherTrafficView.swift - The MeshCore data type the datagram was sent under */
+"weather.traffic.field.dataType" = "Tipo de dados";
+
+/* Location: WeatherTrafficView.swift - The datagram was drained from your radio's queue, not heard live */
+"weather.traffic.backlog" = "da fila do rádio";
+
+/* Location: WeatherTrafficView.swift - The app had already applied this message */
+"weather.traffic.duplicate" = "duplicado";
+
+/* Location: WeatherTrafficView.swift - Payload length in bytes, %lld is the number */
+"weather.traffic.bytes" = "%lld B";
+
+/* Location: WeatherTrafficView.swift - The radio's counter in a bubble's facts line, %lld is the number */
+"weather.traffic.seq" = "seq %lld";
+
+/* Location: WeatherTrafficView.swift - Signal-to-noise in a bubble's facts line, %@ is a number like "12" */
+"weather.traffic.snr" = "SNR %@ dB";
+
+/* Location: WeatherTrafficView.swift - How many repeaters the packet passed, %lld is two or more */
+"weather.traffic.hops" = "%lld saltos";
+
+/* Location: WeatherTrafficView.swift - The packet passed one repeater */
+"weather.traffic.hopsOne" = "1 salto";
+
+/* Location: WeatherTrafficView.swift - The packet carried no path at all: it was flooded to the mesh */
+"weather.traffic.flood" = "difundido";
+
+/* Location: WeatherTrafficView.swift - Header over what the decoded message says */
+"weather.traffic.fields" = "O que diz";
+
+/* Location: WeatherTrafficView.swift - Header over the raw payload */
+"weather.traffic.hex" = "Bytes";
+
+/* Location: WeatherTrafficView.swift - Shown in place of the sender for a datagram this phone put on the air */
+"weather.traffic.sent" = "Enviado a partir deste dispositivo";
+
+/* Location: WeatherTrafficView.swift - A bubble carrying one alert */
+"weather.traffic.title.warning" = "Aviso";
+
+/* Location: WeatherTrafficView.swift - A bubble saying an alert has ended */
+"weather.traffic.title.cancel" = "Aviso terminado";
+
+/* Location: WeatherTrafficView.swift - A bubble carrying the list of active alerts */
+"weather.traffic.title.digest" = "Lista de avisos";
+
+/* Location: WeatherTrafficView.swift - A bubble carrying station readings */
+"weather.traffic.title.observations" = "Observações";
+
+/* Location: WeatherTrafficView.swift - A bubble carrying a forecast */
+"weather.traffic.title.forecast" = "Previsão";
+
+/* Location: WeatherTrafficView.swift - A bubble carrying one chunk of a text reply */
+"weather.traffic.title.text" = "Relatório de texto";
+
+/* Location: WeatherTrafficView.swift - A bubble saying the radio cannot serve a request */
+"weather.traffic.title.notAvailable" = "Não disponível";
+
+/* Location: WeatherTrafficView.swift - A bubble carrying the radio's statement of its area */
+"weather.traffic.title.coverage" = "O que cobre";
+
+/* Location: WeatherTrafficView.swift - A bubble carrying somebody's request. %@ is the first bytes of their key */
+"weather.traffic.title.request" = "Pedido de %@";
+
+/* Location: WeatherTrafficView.swift - The same bubble for a request this phone sent */
+"weather.traffic.title.requestSent" = "Pedido enviado";
+
+/* Location: WeatherTrafficView.swift - A bubble carrying one packet of an alert map */
+"weather.traffic.title.areaSweep" = "Mapa de avisos";
+
+/* Location: WeatherTrafficView.swift - A bubble whose bytes the codec could not read */
+"weather.traffic.title.unreadable" = "Ilegível";
+
+/* Location: WeatherTrafficView.swift - A bubble of a message type this app does not know */
+"weather.traffic.title.otherData" = "Outros dados";
+
+/* Location: WeatherTrafficView.swift - How many stations a readings message carried, %lld is two or more */
+"weather.traffic.detail.stations" = "%lld estações";
+
+/* Location: WeatherTrafficView.swift - A readings message for one station */
+"weather.traffic.detail.stationsOne" = "1 estação";
+
+/* Location: WeatherTrafficView.swift - How many alerts a list named, %lld is two or more */
+"weather.traffic.detail.alerts" = "%lld avisos";
+
+/* Location: WeatherTrafficView.swift - A list naming one alert */
+"weather.traffic.detail.alertsOne" = "1 aviso";
+
+/* Location: WeatherTrafficView.swift - How many areas one map packet shaded, %lld is two or more */
+"weather.traffic.detail.areas" = "%lld áreas";
+
+/* Location: WeatherTrafficView.swift - One map packet shading one area */
+"weather.traffic.detail.areasOne" = "1 área";
+
+/* Location: WeatherTrafficView.swift - How many Weather Service offices a coverage statement named, %lld is two or more */
+"weather.traffic.detail.offices" = "%lld centros";
+
+/* Location: WeatherTrafficView.swift - A coverage statement naming one office */
+"weather.traffic.detail.officesOne" = "1 centro";
+
+/* Location: WeatherTrafficView.swift - Which packet of a multi-packet answer this is. %1$lld is its number, %2$lld how many there are */
+"weather.traffic.detail.part" = "parte %1$lld de %2$lld";
+
+/* Location: WeatherTrafficView.swift - A forecast for a point the radio picked, which this app's tables cannot name */
+"weather.traffic.detail.botPoint" = "ponto escolhido pelo bot";
+
+/* Location: WeatherTrafficView.swift - A map packet belonging to a sweep of the whole country */
+"weather.traffic.detail.national" = "todo o país";
+
+/* Location: WeatherTrafficView.swift - A map packet of a sweep covering some states, where this packet does not carry which */
+"weather.traffic.detail.scopedUnknown" = "limitado, os estados não estão neste pacote";
+
+/* Location: WeatherTrafficView.swift - The radio dropped entries or text to make the message fit */
+"weather.traffic.detail.cut" = "cortado para caber";
+
+/* Location: WeatherTrafficView.swift - The map packet's sweep carries advisories as well as warnings and watches */
+"weather.traffic.detail.advisories" = "com boletins";
+
+/* Location: WeatherTrafficView.swift - Why the radio could not serve a request (spec reason 0) */
+"weather.traffic.reason.noData" = "sem dados";
+
+/* Location: WeatherTrafficView.swift - Reason 1 */
+"weather.traffic.reason.unknownLocation" = "localização desconhecida";
+
+/* Location: WeatherTrafficView.swift - Reason 2 */
+"weather.traffic.reason.unsupported" = "não suportado";
+
+/* Location: WeatherTrafficView.swift - Reason 3 */
+"weather.traffic.reason.botError" = "erro do bot";
+
+/* Location: WeatherTrafficView.swift - Reason 4 */
+"weather.traffic.reason.rateLimited" = "pedido há muito pouco tempo";
+
+/* Location: WeatherTrafficView.swift - Any other reason */
+"weather.traffic.reason.other" = "sem motivo indicado";
+
+/* Location: WeatherTrafficView.swift - Why an alert ended (spec cancel reason 0) */
+"weather.traffic.cancelReason.cancelled" = "cancelado";
+
+/* Location: WeatherTrafficView.swift - Cancel reason 1 */
+"weather.traffic.cancelReason.expiredEarly" = "terminou mais cedo";
+
+/* Location: WeatherTrafficView.swift - Cancel reason 2: a stronger alert follows, so nothing improved */
+"weather.traffic.cancelReason.upgraded" = "elevado";
+
+// MARK: - Radar, revision 11
+
+/* Location: WeatherRadarSection.swift - The Radar section of a place page, and the radar screen's title */
+"weather.radar.title" = "Radar";
+
+/* Location: WeatherRadarSection.swift - No radar picture is held for the place */
+"weather.radar.empty" = "Ainda sem imagem de radar.";
+
+/* Location: WeatherRadarSection.swift - The ask, %@ is the weather radio's name */
+"weather.radar.ask" = "Pedir a imagem de radar a %@";
+
+/* Location: WeatherRadarSection.swift - The ask once a picture is already on screen */
+"weather.radar.askNewer" = "Pedir uma imagem mais recente";
+
+/* Location: WeatherRadarSection.swift - Under the ask: how often new radar pictures are made */
+"weather.radar.ask.footnote" = "As imagens são feitas a cada 15 minutos, aproximadamente.";
+
+/* Location: WeatherCopy.swift - When the picture was taken, %@ is a clock time */
+"weather.radar.time" = "Imagem das %@";
+
+/* Location: WeatherCopy.swift - Added to the time line once the picture is half an hour old */
+"weather.radar.moved" = "A precipitação deslocou-se desde então.";
+
+/* Location: WeatherCopy.swift - Light precipitation over the place, %@ is the place */
+"weather.radar.here.light" = "Precipitação fraca em %@.";
+
+/* Location: WeatherCopy.swift - Moderate precipitation over the place, %@ is the place */
+"weather.radar.here.moderate" = "Precipitação moderada em %@.";
+
+/* Location: WeatherCopy.swift - Heavy precipitation over the place, %@ is the place */
+"weather.radar.here.heavy" = "Precipitação forte em %@.";
+
+/* Location: WeatherCopy.swift - Nothing falling on the place, %@ is the place */
+"weather.radar.here.dry" = "Seco em %@.";
+
+/* Location: WeatherCopy.swift - The place is inside the tile but outside the radar picture, %@ is the place */
+"weather.radar.here.outside" = "Esta imagem não chega a %@.";
+
+/* Location: WeatherCopy.swift - The nearest precipitation elsewhere on the picture. %1$@ is a distance like "45 km", %2$@ a compass point like "NW" */
+"weather.radar.nearest" = "Precipitação mais próxima a %1$@ %2$@.";
+
+/* Location: WeatherCopy.swift - The nearest heavy core, when it is not the cell already named. %1$@ is a distance, %2$@ a compass point */
+"weather.radar.nearestHeavy" = "Precipitação forte a %1$@ %2$@.";
+
+/* Location: WeatherCopy.swift - Nothing at all on this picture */
+"weather.radar.none" = "Sem precipitação nesta imagem.";
+
+/* Location: WeatherRadarView.swift - Legend swatch, 20 dBZ and up */
+"weather.radar.level.light" = "Fraca";
+
+/* Location: WeatherRadarView.swift - Legend swatch, 35 dBZ and up */
+"weather.radar.level.moderate" = "Moderada";
+
+/* Location: WeatherRadarView.swift - Legend swatch, 50 dBZ and up */
+"weather.radar.level.heavy" = "Forte";
+
+/* Location: WeatherRadarView.swift - Accessibility label for the Local / Regional / Wide control */
+"weather.radar.width" = "Largura";
+
+/* Location: WeatherCopy.swift - The narrowest width, a 2 degree square */
+"weather.radar.width.local" = "Local";
+
+/* Location: WeatherCopy.swift - A 4 degree square */
+"weather.radar.width.regional" = "Regional";
+
+/* Location: WeatherCopy.swift - An 8 degree square */
+"weather.radar.width.wide" = "Amplo";
+
+/* Location: WeatherRadarView.swift - Nothing held for the width on screen */
+"weather.radar.notAsked" = "Ainda não foi pedido.";
+
+/* Location: WeatherRadarView.swift - Some cells are outside the radar picture and are drawn grey, never as dry */
+"weather.radar.partial" = "Parte desta área fica fora da imagem de radar.";
+
+/* Location: WeatherRadarView.swift - The radio halved the detail to fit the picture into one packet */
+"weather.radar.coarse" = "Uma imagem carregada, enviada com metade do detalhe para caber num pacote.";
+
+/* Location: WeatherCopy.swift - Which of the Weather Service mosaics the tile was cut from, %@ is its name */
+"weather.radar.mosaic" = "Recortado do mosaico %@.";
+
+/* Location: WeatherCopy.swift - Refusal reason 0, %@ is the weather radio's name */
+"weather.radar.refused.noPicture" = "%@ não tem uma imagem de radar recente desta área.";
+
+/* Location: WeatherCopy.swift - Refusal reason 2: the radio has no dish */
+"weather.radar.refused.unsupported" = "%@ não recebe imagens de radar.";
+
+/* Location: WeatherCopy.swift - Refusal reason 4: the same picture went out minutes ago */
+"weather.radar.refused.recent" = "%@ enviou esta imagem há poucos minutos e ainda não tem nada mais recente.";
+
+/* Location: WeatherCopy.swift - The group of stored radar tiles on the Cached screen */
+"weather.radar.cached.title" = "Imagens de radar";
+
+/* Location: WeatherCopy.swift - What a radar answer is called in a request row and in channel traffic */
+"weather.radar.request.title" = "Imagem de radar";
+
+/* Location: WeatherTrafficView.swift - How many cells of a tile carry precipitation, %lld is two or more */
+"weather.radar.traffic.cells" = "%lld células com precipitação";
+
+/* Location: WeatherTrafficView.swift - The same when one cell does */
+"weather.radar.traffic.cellsOne" = "1 célula com precipitação";
+
+// MARK: - Radar loops, revision 13
+
+/* Location: WeatherRadarView.swift - Plays the last hour of radar pictures as a loop */
+"weather.radar.loop.play" = "Reproduzir";
+
+/* Location: WeatherRadarView.swift - Pauses the loop on the picture on screen */
+"weather.radar.loop.pause" = "Pausa";
+
+/* Location: WeatherRadarView.swift - Asks the radio for the radar pictures of the last hour */
+"weather.radar.loop.ask" = "Pedir a última hora";
+
+/* Location: WeatherRadarView.swift - Above the loop ask, %lld is the most packets it can cost */
+"weather.radar.loop.cost" = "Até %lld pacotes";
+
+/* Location: WeatherRadarView.swift - Under the loop ask */
+"weather.radar.loop.footnote" = "As imagens que este dispositivo já tem não são enviadas de novo.";
+
+/* Location: WeatherRadarView.swift - The time line while the loop plays. %1$@ is a clock time, %2$lld the picture on screen, %3$lld how many pictures the loop has */
+"weather.radar.loop.frame" = "%1$@ · %2$lld de %3$lld";
+
+/* Location: WeatherRadarView.swift - Two pictures of the loop are more than 20 minutes apart */
+"weather.radar.loop.missing" = "Faltam algumas imagens desta hora.";
+
+/* Location: WeatherCopy.swift - What a loop request is called in a request row */
+"weather.radar.loop.request.title" = "Radar, última hora";
+
+/* Location: WeatherCopy.swift - On the Cached screen, how many pictures of one square are held, %lld is two or more */
+"weather.radar.cached.frames" = "%lld imagens";
+
+/* Location: WeatherRadarView.swift - The radar screen's bottom-bar ask, for a width with no picture yet */
+"weather.radar.askShort" = "Pedir radar";
+
+/* Location: WeatherAskBar.swift - The capsule over the bottom bar: scrolls back up to where a screen's answer landed */
+"weather.askBar.show" = "Mostrar";
+
+/* Location: WeatherAskBar.swift - VoiceOver hint for the Show button in the capsule over the bottom bar */
+"weather.askBar.showHint" = "Volta à resposta.";
+
+/* Location: WeatherToolView.swift - The title menu's way to the alerts list for the radio's area */
+"weather.titleMenu.alerts" = "Avisos";

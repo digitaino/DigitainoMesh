@@ -1,0 +1,595 @@
+import Foundation
+
+/// Why a v5 datagram could not be decoded.
+///
+/// Every case names what was being read and how far the bytes got, because the only
+/// diagnostic an app has for a bad packet is the log line: the radio is gone by then
+/// and the bot will not repeat itself on request.
+public enum MeshWXDecodeError: Error, Sendable, Hashable {
+  /// The payload ended before a field did.
+  case truncated(what: String, need: Int, have: Int)
+  /// A Text chunk's body was not valid UTF-8 (a chunk boundary in the wrong place, or
+  /// a corrupted packet that still passed the frame MAC).
+  case badUTF8
+  /// A Radar tile's quadtree asked for more bits than the packet had (spec revision 11, §13).
+  /// The tree is self-describing, so a packet that ends early describes a grid nobody can draw —
+  /// half of it would be silently dry, which on a radar picture is the worst possible lie.
+  case radarTreeTruncated(bits: Int)
+  /// A partial tile's `bounds` were not a rectangle of its own grid. Refused rather than clamped:
+  /// the bounds are what says which cells are unknown, and a guess there paints unknown ground
+  /// dry or dry ground unknown.
+  case radarBoundsOutsideGrid(row0: UInt8, row1: UInt8, col0: UInt8, col1: UInt8, size: Int)
+}
+
+/// Decodes one v5 datagram (spec §3-§8).
+///
+/// A decoder is the one place in a radio app that must never trap: the bytes come off
+/// the air, a neighbour's firmware may be older or newer, and the type nibble has eight
+/// values reserved for products that do not exist yet. So every length is checked
+/// before it is read, an unknown type yields ``MeshWXPayload/unknown`` rather than an
+/// error (the header still decoded, and `(bot, seq)` tracking depends on it), and
+/// nothing here force-unwraps.
+public enum MeshWXDecoder {
+
+  /// Decode one datagram — the `data` field of a `GRP_DATA` packet with
+  /// `data_type == MeshWXWire.dataType`.
+  public static func decode(_ data: Data) throws -> MeshWXMessage {
+    // Copy into a zero-based array: `Data` sliced off a receive buffer keeps its parent
+    // indices, and reading it as if it started at 0 is a classic out-of-bounds trap.
+    //
+    // Deliberately no upper-bound check: the reference decoder has none, and a bot that
+    // one day overruns the 165-byte budget by a byte should still get its text read
+    // rather than dropped. The *encoder* enforces the limit, which is where it matters.
+    let bytes = [UInt8](data)
+    let header = try decodeHeader(bytes)
+    let payload: MeshWXPayload =
+      switch header.type {
+      case .warning: .warning(try decodeWarning(bytes, header: header))
+      case .cancel: .cancel(try decodeCancel(bytes, header: header))
+      case .digest: .digest(try decodeDigest(bytes))
+      case .observations: .observations(try decodeObservations(bytes, header: header))
+      case .forecast: .forecast(try decodeForecast(bytes))
+      case .text: .text(try decodeText(bytes, header: header))
+      case .notAvailable: .notAvailable(try decodeNotAvailable(bytes))
+      case .coverage: .coverage(try decodeCoverage(bytes, header: header))
+      case .request: .request(try decodeRequest(bytes, header: header))
+      case .areaSweep: .areaSweep(try decodeAreaSweep(bytes, header: header))
+      case .radar: .radar(try decodeRadar(bytes, header: header))
+      case nil: .unknown
+      }
+    return MeshWXMessage(header: header, payload: payload)
+  }
+
+  /// Decode just the 4-byte common header, for dedupe and gap detection before the body
+  /// is worth parsing.
+  public static func decodeHeader(_ data: Data) throws -> MeshWXHeader {
+    try decodeHeader([UInt8](data))
+  }
+
+  // MARK: - Header
+
+  static func decodeHeader(_ bytes: [UInt8]) throws -> MeshWXHeader {
+    try need(bytes, MeshWXWire.headerSize, "header")
+    let typeByte = bytes[3]
+    return MeshWXHeader(
+      seq: bytes[0],
+      bot: u16(bytes, 1),
+      rawType: typeByte >> 4,
+      flags: typeByte & 0x0F
+    )
+  }
+
+  // MARK: - Warning (type 1, spec §3)
+
+  static func decodeWarning(_ bytes: [UInt8], header: MeshWXHeader) throws -> MeshWXWarning {
+    try need(bytes, MeshWXWire.warningFixedSize, "warning")
+    let identity = MeshWXWarningIdentity(event: bytes[4], office: bytes[5], etn: u16(bytes, 6))
+    let expires = u32(bytes, 8)
+    let tags = bytes[12]
+
+    var warning = MeshWXWarning(
+      identity: identity,
+      expiresMinutes: expires,
+      tornado: MeshWXTornadoTag(rawValue: (tags >> 6) & 0x3) ?? .none,
+      floodSource: MeshWXFloodSource(rawValue: (tags >> 4) & 0x3) ?? .none,
+      floodDamage: MeshWXFloodDamage(rawValue: (tags >> 2) & 0x3) ?? .none,
+      hailQuarterInches: bytes[13],
+      windMph: bytes[14],
+      isUpdate: header.flags & MeshWXWire.flagWarningUpdate != 0
+    )
+
+    var offset = MeshWXWire.warningFixedSize
+    if tags & MeshWXWire.tagPolygon != 0 {
+      warning.polygon = try decodePolygon(bytes, at: &offset)
+    }
+    if tags & MeshWXWire.tagAreas != 0 {
+      warning.areas = try decodeAreas(bytes, at: &offset)
+    }
+    // Revision 5 (spec §3): the issue time is the last two bytes, after both variable blocks, so
+    // a decoder that does not know the flag stops above and never sees them. It is relative to
+    // `expires` rather than absolute, which costs two bytes instead of four on the one message
+    // that reaches the packet limit, and cannot drift: both ends of the subtraction ride here.
+    if header.flags & MeshWXWire.flagWarningIssued != 0 {
+      try need(bytes, offset + MeshWXWire.warningIssuedSize, "warning issue time")
+      let issuedBefore = u16(bytes, offset)
+      warning.issuedBeforeMinutes = issuedBefore
+      offset += MeshWXWire.warningIssuedSize
+      // Revision 12 (spec §3): the start, found by length — the flags nibble is full, and every
+      // decoder before revision 12 stops at the issue time above, so GRP_DATA's exact length is
+      // what announces it. Only a start strictly between the issuance and the expiry is one;
+      // anything else is dropped here as if absent, so nothing past the decoder has to ask. Bytes
+      // after it belong to a later revision and are left alone.
+      if bytes.count >= offset + MeshWXWire.warningBeginsSize {
+        let beginsBefore = u16(bytes, offset)
+        if beginsBefore > 0, beginsBefore < issuedBefore {
+          warning.beginsBeforeMinutes = beginsBefore
+        }
+      }
+    }
+    return warning
+  }
+
+  /// The anchor vertex is absolute at 0.0001°; every other vertex is a delta at 0.001°
+  /// against the *reconstructed* previous one.
+  ///
+  /// Accumulation happens in whole 0.0001° units rather than in Double, which is what
+  /// makes a re-encode reproduce the original deltas: walking the chain in floating
+  /// point leaves each vertex a few ULPs off the grid, and a later `round(...×1000)`
+  /// can then land on the wrong side of a half.
+  private static func decodePolygon(
+    _ bytes: [UInt8], at offset: inout Int
+  ) throws -> [MeshWXCoordinate] {
+    try need(bytes, offset + 1, "polygon count")
+    let count = Int(bytes[offset])
+    offset += 1
+    let deltaCount = max(0, count - 1)
+    try need(bytes, offset + 6 + 4 * deltaCount, "polygon")
+
+    var latUnits = i24(bytes, offset)
+    var lonUnits = i24(bytes, offset + 3)
+    offset += 6
+
+    var points = [MeshWXCoordinate(latitude: Double(latUnits) / 10000, longitude: Double(lonUnits) / 10000)]
+    points.reserveCapacity(deltaCount + 1)
+    for _ in 0..<deltaCount {
+      // A 0.001° delta is ten 0.0001° units.
+      latUnits += Int(i16(bytes, offset)) * 10
+      lonUnits += Int(i16(bytes, offset + 2)) * 10
+      offset += 4
+      points.append(
+        MeshWXCoordinate(latitude: Double(latUnits) / 10000, longitude: Double(lonUnits) / 10000))
+    }
+    return points
+  }
+
+  private static func decodeAreas(_ bytes: [UInt8], at offset: inout Int) throws -> [MeshWXAreaRun] {
+    try need(bytes, offset + 1, "area count")
+    let count = Int(bytes[offset])
+    offset += 1
+    try need(bytes, offset + 4 * count, "area runs")
+
+    var runs: [MeshWXAreaRun] = []
+    runs.reserveCapacity(count)
+    for _ in 0..<count {
+      let stateByte = bytes[offset]
+      runs.append(
+        MeshWXAreaRun(
+          stateIndex: stateByte & 0x7F,
+          isCounty: stateByte & MeshWXWire.areaCountyBit != 0,
+          start: u16(bytes, offset + 1),
+          run: bytes[offset + 3]
+        ))
+      offset += 4
+    }
+    return runs
+  }
+
+  // MARK: - Cancel (type 2, spec §4)
+
+  static func decodeCancel(_ bytes: [UInt8], header: MeshWXHeader) throws -> MeshWXCancel {
+    try need(bytes, MeshWXWire.cancelSize, "cancel")
+    return MeshWXCancel(
+      identity: MeshWXWarningIdentity(event: bytes[4], office: bytes[5], etn: u16(bytes, 6)),
+      reason: MeshWXCancelReason(rawValue: header.flags)
+    )
+  }
+
+  // MARK: - Digest (type 3, spec §5)
+
+  static func decodeDigest(_ bytes: [UInt8]) throws -> MeshWXDigest {
+    try need(bytes, MeshWXWire.digestFixedSize, "digest")
+    let now = u32(bytes, 4)
+    let feedHealth = bytes[8]
+    let count = Int(bytes[9])
+    try need(bytes, MeshWXWire.digestFixedSize + MeshWXWire.digestEntrySize * count, "digest entries")
+
+    var entries: [MeshWXDigest.Entry] = []
+    entries.reserveCapacity(count)
+    var offset = MeshWXWire.digestFixedSize
+    for _ in 0..<count {
+      let relative = u16(bytes, offset + 4)
+      entries.append(
+        MeshWXDigest.Entry(
+          identity: MeshWXWarningIdentity(
+            event: bytes[offset], office: bytes[offset + 1], etn: u16(bytes, offset + 2)),
+          expiresRelativeMinutes: relative,
+          // `now` is a u32 of minutes since 1970 — around 29.8 million today — so the
+          // sum cannot approach the u32 ceiling for another 8000 years. `&+` documents
+          // that the arithmetic is the spec's, not a guess.
+          expiresMinutes: now &+ UInt32(relative)
+        ))
+      offset += MeshWXWire.digestEntrySize
+    }
+    return MeshWXDigest(nowMinutes: now, feedHealth: feedHealth, entries: entries)
+  }
+
+  // MARK: - Observations (type 4, spec §6)
+
+  static func decodeObservations(
+    _ bytes: [UInt8], header: MeshWXHeader
+  ) throws -> MeshWXObservations {
+    try need(bytes, MeshWXWire.observationsFixedSize, "observations")
+    let timestamp = u32(bytes, 4)
+    let count = Int(bytes[8])
+    let stationsEnd = MeshWXWire.observationsFixedSize + MeshWXWire.observationStationSize * count
+    try need(bytes, stationsEnd, "observation stations")
+
+    // Revision 5 (spec §6.1): the age nibbles sit after the station records — station `i` in the
+    // low nibble of byte `i / 2` when `i` is even, the high nibble when odd — so a decoder that
+    // does not know the flag reads the batch exactly as it always did. Read ahead of the station
+    // loop because each station carries its own age.
+    var ages = [UInt16?](repeating: nil, count: count)
+    if header.flags & MeshWXWire.flagObservationAges != 0 {
+      try need(bytes, stationsEnd + (count + 1) / 2, "observation ages")
+      for index in 0..<count {
+        let byte = bytes[stationsEnd + index / 2]
+        let nibble = index % 2 == 0 ? byte & 0x0F : byte >> 4
+        ages[index] = UInt16(nibble) * MeshWXWire.observationAgeStepMinutes
+      }
+    }
+
+    var stations: [MeshWXStationObservation] = []
+    stations.reserveCapacity(count)
+    var offset = MeshWXWire.observationsFixedSize
+    for index in 0..<count {
+      let directionAndSky = bytes[offset + 4]
+      let pressure = bytes[offset + 8]
+      stations.append(
+        MeshWXStationObservation(
+          stationIndex: u16(bytes, offset),
+          tempF: signedOrNil(bytes[offset + 2], sentinel: MeshWXWire.temperatureUnknown),
+          dewpointF: signedOrNil(bytes[offset + 3], sentinel: MeshWXWire.temperatureUnknown),
+          windDirection: MeshWXCompass(nibble: directionAndSky >> 4),
+          sky: MeshWXSky(nibble: directionAndSky),
+          windMph: unsignedOrNil(bytes[offset + 5]),
+          gustMph: bytes[offset + 6],
+          visibilityMiles: unsignedOrNil(bytes[offset + 7]),
+          // Exact two-decimal reconstruction: 29.00 + raw/100 built from integers is the
+          // nearest Double to the decimal value, with none of the drift a float add has.
+          pressureInHg: pressure == MeshWXWire.unsignedUnknown
+            ? nil : Double(2900 + Int(pressure)) / 100,
+          humidityPercent: unsignedOrNil(bytes[offset + 9]),
+          feelsDeltaF: Int8(bitPattern: bytes[offset + 10]),
+          ageMinutes: ages[index]
+        ))
+      offset += MeshWXWire.observationStationSize
+    }
+    return MeshWXObservations(timestampMinutes: timestamp, stations: stations)
+  }
+
+  // MARK: - Forecast (type 5, spec §7)
+
+  static func decodeForecast(_ bytes: [UInt8]) throws -> MeshWXForecast {
+    try need(bytes, MeshWXWire.forecastFixedSize, "forecast")
+    let point = u16(bytes, 4)
+    let issued = u32(bytes, 6)
+    let first = bytes[10]
+    let count = Int(bytes[11])
+    try need(
+      bytes, MeshWXWire.forecastFixedSize + MeshWXWire.forecastPeriodSize * count,
+      "forecast periods")
+
+    var periods: [MeshWXForecastPeriod] = []
+    periods.reserveCapacity(count)
+    var offset = MeshWXWire.forecastFixedSize
+    for _ in 0..<count {
+      let condition = bytes[offset + 3]
+      let wind = bytes[offset + 4]
+      periods.append(
+        MeshWXForecastPeriod(
+          highF: signedOrNil(bytes[offset], sentinel: MeshWXWire.forecastTemperatureNotGiven),
+          lowF: signedOrNil(bytes[offset + 1], sentinel: MeshWXWire.forecastTemperatureNotGiven),
+          popPercent: unsignedOrNil(bytes[offset + 2]),
+          sky: MeshWXSky(nibble: condition),
+          thunder: condition & 0x10 != 0,
+          wintry: condition & 0x20 != 0,
+          windy: condition & 0x40 != 0,
+          fog: condition & 0x80 != 0,
+          windDirection: MeshWXCompass(nibble: wind >> 4),
+          windMph: (wind & 0x0F) * 5
+        ))
+      offset += MeshWXWire.forecastPeriodSize
+    }
+    return MeshWXForecast(
+      pointIndex: point, issuedMinutes: issued, firstPeriod: first, periods: periods)
+  }
+
+  // MARK: - Text (type 6, spec §8)
+
+  static func decodeText(_ bytes: [UInt8], header: MeshWXHeader) throws -> MeshWXText {
+    try need(bytes, MeshWXWire.textFixedSize, "text")
+    let body = bytes[MeshWXWire.textFixedSize...]
+    guard let text = String(bytes: body, encoding: .utf8) else {
+      throw MeshWXDecodeError.badUTF8
+    }
+    return MeshWXText(
+      subject: MeshWXTextSubject(rawValue: bytes[4]),
+      group: bytes[5],
+      index: bytes[6],
+      total: bytes[7],
+      text: text,
+      // Revision 7 (spec §8): the bot ran out of packets and dropped the tail. A decoder
+      // written before the flag reads the same chunk it always did, one bit poorer.
+      wasCut: header.flags & MeshWXWire.flagTextCut != 0
+    )
+  }
+
+  // MARK: - Not available (type 7, spec §9)
+
+  static func decodeNotAvailable(_ bytes: [UInt8]) throws -> MeshWXNotAvailable {
+    try need(bytes, MeshWXWire.notAvailableSize, "not_available")
+    return MeshWXNotAvailable(
+      requestCode: bytes[4],
+      reason: MeshWXNotAvailableReason(rawValue: bytes[5])
+    )
+  }
+
+  // MARK: - Coverage (type 8, spec §10)
+
+  static func decodeCoverage(_ bytes: [UInt8], header: MeshWXHeader) throws -> MeshWXCoverage {
+    try need(bytes, MeshWXWire.coverageFixedSize, "coverage")
+    let officeCount = Int(bytes[13])
+    let officesEnd = MeshWXWire.coverageFixedSize + officeCount
+    try need(bytes, officesEnd, "coverage offices")
+    // The runs are a Warning's area list byte for byte (spec §3), count byte included — except
+    // that a coverage message may legitimately carry none, which `decodeAreas` already allows.
+    var offset = officesEnd
+    let areas = try decodeAreas(bytes, at: &offset)
+    return MeshWXCoverage(
+      latitude: Double(i24(bytes, 4)) / 10000,
+      longitude: Double(i24(bytes, 7)) / 10000,
+      radiusKilometres: u16(bytes, 10),
+      stationCap: bytes[12],
+      officeIndices: Array(bytes[MeshWXWire.coverageFixedSize..<officesEnd]),
+      areas: areas,
+      areasCut: header.flags & MeshWXWire.flagCoverageZonesCut != 0,
+      officesCut: header.flags & MeshWXWire.flagCoverageOfficesCut != 0
+    )
+  }
+
+  // MARK: - Request (type 9, spec §11)
+
+  /// Another phone's `>` request, heard because requests are flooded on the channel now.
+  ///
+  /// Decoded rather than dropped as an unknown type so the app can *recognise* one and leave it
+  /// alone: it is somebody else's question, it says nothing about the bot's state, and the
+  /// answer that follows is a message of its own. No length cap on the text here — the encoder
+  /// is where the 40 bytes are enforced, and a neighbour's longer request should still read.
+  static func decodeRequest(_ bytes: [UInt8], header: MeshWXHeader) throws -> MeshWXRequest {
+    try need(bytes, MeshWXWire.requestFixedSize, "request")
+    let senderEnd = MeshWXWire.headerSize + MeshWXWire.requestSenderPrefixSize
+    guard let text = String(bytes: bytes[MeshWXWire.requestFixedSize...], encoding: .utf8) else {
+      throw MeshWXDecodeError.badUTF8
+    }
+    return MeshWXRequest(
+      seq: header.seq,
+      botID: header.bot,
+      senderPrefix: Data(bytes[MeshWXWire.headerSize..<senderEnd]),
+      timestamp: u32(bytes, senderEnd),
+      text: text
+    )
+  }
+
+  // MARK: - Area sweep (type 10, spec §12)
+
+  /// The entries run to the end of the packet: there is no count byte, because a count would
+  /// cost the byte that the 38th entry is made of.
+  ///
+  /// Whatever does not make a whole four-byte entry is left alone, the way every other type here
+  /// tolerates trailing bytes. A sweep is a picture of the country and a bot a version ahead
+  /// appending a field to the end must not cost this phone the thirty-seven entries it can read.
+  ///
+  /// Two things are unpacked here that the bytes carry in place rather than in fields of their
+  /// own (spec revision 10, §12):
+  ///
+  /// - The `total` byte's **bit 7** is the scope flag and its low nibble the packet count. A
+  ///   revision 9 decoder reading a scoped sweep would see `total = 0x83` and believe the sweep
+  ///   runs to 131 packets, which is why the app it ships in never went to anyone.
+  /// - An entry whose **event is 0** is a scope entry, not an area under an alert. It is lifted
+  ///   into ``MeshWXAreaSweep/scope`` wherever it appears, not only at the head of packet 0: no
+  ///   real event has code 0, so event 0 can only ever mean this, and reading it as an alert
+  ///   would shade a whole state with an event the tables cannot name.
+  static func decodeAreaSweep(_ bytes: [UInt8], header: MeshWXHeader) throws -> MeshWXAreaSweep {
+    try need(bytes, MeshWXWire.areaSweepFixedSize, "area sweep")
+    let count = (bytes.count - MeshWXWire.areaSweepFixedSize) / MeshWXWire.areaSweepEntrySize
+
+    var entries: [MeshWXAreaSweep.Entry] = []
+    var scope: [UInt8] = []
+    entries.reserveCapacity(count)
+    var offset = MeshWXWire.areaSweepFixedSize
+    for _ in 0..<count {
+      let stateByte = bytes[offset + 1]
+      let packed = u16(bytes, offset + 2)
+      let entry = MeshWXAreaSweep.Entry(
+        event: bytes[offset],
+        stateIndex: stateByte >> MeshWXWire.sweepStateShift,
+        isCounty: stateByte & MeshWXWire.sweepCountyBit != 0,
+        start: packed & MeshWXWire.sweepStartMask,
+        // Six bits carried less one, so the field spans 1…64 and never 0: an entry that
+        // covered nothing would have no reason to be on the air.
+        run: UInt8(packed >> MeshWXWire.sweepRunShift) + 1
+      )
+      offset += MeshWXWire.areaSweepEntrySize
+      if entry.event == MeshWXWire.sweepScopeEvent {
+        scope.append(entry.stateIndex)
+      } else {
+        entries.append(entry)
+      }
+    }
+    let total = bytes[10]
+    return MeshWXAreaSweep(
+      builtMinutes: u32(bytes, 4),
+      group: bytes[8],
+      index: bytes[9],
+      total: total & MeshWXWire.sweepTotalMask,
+      wasCut: header.flags & MeshWXWire.flagSweepCut != 0,
+      includesAdvisories: header.flags & MeshWXWire.flagSweepAdvisories != 0,
+      isScoped: total & MeshWXWire.sweepScopedBit != 0,
+      scope: scope,
+      entries: entries
+    )
+  }
+
+  // MARK: - Radar (type 11, spec revision 11, §13)
+
+  /// One tile of a radar picture: twelve fixed bytes, four more when the picture is partial, then
+  /// a quadtree of two-bit levels most significant bit first.
+  ///
+  /// The shortest legal packet is **13** bytes, not 12: an all-dry tile is still three bits of
+  /// tree (`0` split, `00` level), so a packet with no cell bytes at all is a truncation and not
+  /// an empty picture. A partial one needs 17 for the same reason.
+  ///
+  /// Bits left over after the tree are padding and are ignored — the writer zero-fills to the byte
+  /// — but a tree that runs out of bits is refused. Half a grid decoded as dry is not a picture
+  /// with a hole in it, it is a picture that says the rain stopped.
+  static func decodeRadar(_ bytes: [UInt8], header: MeshWXHeader) throws -> MeshWXRadar {
+    try need(bytes, MeshWXWire.radarFixedSize + 1, "radar")
+    let isCoarse = header.flags & MeshWXWire.radarCoarseBit != 0
+    let isPartial = header.flags & MeshWXWire.radarPartialBit != 0
+    let size = isCoarse ? MeshWXWire.radarCoarseGrid : MeshWXWire.radarGrid
+    let shape = bytes[11]
+
+    var offset = MeshWXWire.radarFixedSize
+    var bounds: MeshWXRadarBounds?
+    if isPartial {
+      try need(bytes, offset + MeshWXWire.radarBoundsSize + 1, "radar bounds")
+      let box = MeshWXRadarBounds(
+        row0: bytes[offset], row1: bytes[offset + 1], col0: bytes[offset + 2],
+        col1: bytes[offset + 3])
+      guard box.isInside(size: size) else {
+        throw MeshWXDecodeError.radarBoundsOutsideGrid(
+          row0: box.row0, row1: box.row1, col0: box.col0, col1: box.col1, size: size)
+      }
+      bounds = box
+      offset += MeshWXWire.radarBoundsSize
+    }
+
+    return MeshWXRadar(
+      takenMinutes: u32(bytes, 4),
+      south: Double(Int8(bitPattern: bytes[8])),
+      west: Double(i16(bytes, 9)),
+      zoom: Int(shape & MeshWXWire.radarZoomMask),
+      product: shape >> MeshWXWire.radarProductShift,
+      isCoarse: isCoarse,
+      bounds: bounds,
+      cells: try unpackRadarCells(bytes, from: offset, size: size)
+    )
+  }
+
+  /// Reads bits most significant bit first from `bytes[start...]`, which is the order the
+  /// quadtree is written in and the only thing about it that has to be said twice.
+  private struct BitReader {
+    let bytes: [UInt8]
+    let start: Int
+    var position = 0
+
+    mutating func take(_ width: Int) throws -> UInt8 {
+      var value: UInt8 = 0
+      for _ in 0..<width {
+        let index = start + (position >> 3)
+        guard index < bytes.count else {
+          throw MeshWXDecodeError.radarTreeTruncated(bits: position)
+        }
+        value = (value << 1) | ((bytes[index] >> (7 - UInt8(position & 7))) & 1)
+        position += 1
+      }
+      return value
+    }
+  }
+
+  /// `node(size)`: at one cell, two bits of level; otherwise one bit — `0` and the whole square is
+  /// one level (two bits follow), `1` and four children follow north-west, north-east, south-west,
+  /// south-east.
+  ///
+  /// Recursion is bounded by the grid: `node(32)` is six levels deep, so there is no stack to
+  /// exhaust even on a packet built to be hostile.
+  private static func unpackRadarCells(
+    _ bytes: [UInt8], from start: Int, size: Int
+  ) throws -> [UInt8] {
+    var cells = [UInt8](repeating: 0, count: size * size)
+    var reader = BitReader(bytes: bytes, start: start)
+
+    func node(row: Int, col: Int, span: Int) throws {
+      if span == 1 {
+        cells[row * size + col] = try reader.take(2)
+        return
+      }
+      if try reader.take(1) == 0 {
+        let level = try reader.take(2)
+        for y in row..<(row + span) {
+          for x in col..<(col + span) {
+            cells[y * size + x] = level
+          }
+        }
+        return
+      }
+      let half = span / 2
+      try node(row: row, col: col, span: half)
+      try node(row: row, col: col + half, span: half)
+      try node(row: row + half, col: col, span: half)
+      try node(row: row + half, col: col + half, span: half)
+    }
+
+    try node(row: 0, col: 0, span: size)
+    return cells
+  }
+
+  // MARK: - Primitives
+  //
+  // Little-endian everywhere (spec §1.3), two's complement for signed. Hand-rolled
+  // rather than `withUnsafeBytes(loadUnaligned:)` because these run on arbitrary
+  // offsets into a received buffer and the byte order must be the wire's, not the CPU's.
+
+  private static func need(_ bytes: [UInt8], _ end: Int, _ what: String) throws {
+    guard bytes.count >= end else {
+      throw MeshWXDecodeError.truncated(what: what, need: end, have: bytes.count)
+    }
+  }
+
+  private static func u16(_ bytes: [UInt8], _ offset: Int) -> UInt16 {
+    UInt16(bytes[offset]) | (UInt16(bytes[offset + 1]) << 8)
+  }
+
+  private static func i16(_ bytes: [UInt8], _ offset: Int) -> Int16 {
+    Int16(bitPattern: u16(bytes, offset))
+  }
+
+  private static func u32(_ bytes: [UInt8], _ offset: Int) -> UInt32 {
+    UInt32(bytes[offset]) | (UInt32(bytes[offset + 1]) << 8) | (UInt32(bytes[offset + 2]) << 16)
+      | (UInt32(bytes[offset + 3]) << 24)
+  }
+
+  private static func i24(_ bytes: [UInt8], _ offset: Int) -> Int {
+    let raw = Int(bytes[offset]) | (Int(bytes[offset + 1]) << 8) | (Int(bytes[offset + 2]) << 16)
+    return raw & 0x80_0000 != 0 ? raw - (1 << 24) : raw
+  }
+
+  private static func signedOrNil(_ byte: UInt8, sentinel: Int8) -> Int8? {
+    let value = Int8(bitPattern: byte)
+    return value == sentinel ? nil : value
+  }
+
+  private static func unsignedOrNil(_ byte: UInt8) -> UInt8? {
+    byte == MeshWXWire.unsignedUnknown ? nil : byte
+  }
+}

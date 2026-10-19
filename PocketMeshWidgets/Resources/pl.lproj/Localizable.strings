@@ -1,6 +1,0 @@
-/* Widget localization — Polish */
-
-"Disconnected" = "Rozłączono";
-"Disconnected %@ ago" = "Rozłączono %@ temu";
-"%lld packets per minute" = "%lld pakietów na minutę";
-"Battery %lld percent" = "Bateria %lld procent";

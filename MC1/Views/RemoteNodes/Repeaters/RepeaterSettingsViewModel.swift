@@ -1,0 +1,324 @@
+import MC1Services
+import OSLog
+import SwiftUI
+
+@Observable
+@MainActor
+final class RepeaterSettingsViewModel {
+  // MARK: - Shared Helper
+
+  var helper = NodeSettingsViewModel()
+
+  // MARK: - Repeater-Only: Behavior Settings
+
+  var advertIntervalMinutes: Int?
+  var floodAdvertIntervalHours: Int?
+  var floodMaxHops: Int?
+  var repeaterEnabled: Bool?
+  private var originalAdvertIntervalMinutes: Int?
+  private var originalFloodAdvertIntervalHours: Int?
+  private var originalFloodMaxHops: Int?
+  private var originalRepeaterEnabled: Bool?
+  var isLoadingBehavior = false
+  var behaviorError = false
+  var behaviorLoaded: Bool {
+    repeaterEnabled != nil || advertIntervalMinutes != nil
+  }
+
+  var advertIntervalError: String?
+  var floodAdvertIntervalError: String?
+  var floodMaxHopsError: String?
+
+  var behaviorApplySuccess = false
+
+  var behaviorSettingsModified: Bool {
+    (repeaterEnabled != nil && repeaterEnabled != originalRepeaterEnabled) ||
+      (advertIntervalMinutes != nil && advertIntervalMinutes != originalAdvertIntervalMinutes) ||
+      (floodAdvertIntervalHours != nil && floodAdvertIntervalHours != originalFloodAdvertIntervalHours) ||
+      (floodMaxHops != nil && floodMaxHops != originalFloodMaxHops)
+  }
+
+  // MARK: - Repeater-Only: Region Settings
+
+  var regions: [RepeaterRegionEntry] = []
+  var originalRegions: [RepeaterRegionEntry]?
+  var isLoadingRegions = false
+  var regionsError = false
+  var regionsLoaded: Bool {
+    originalRegions != nil
+  }
+
+  var hasUnsavedRegionChanges = false
+  var regionsSaveSuccess = false
+  /// Unset when nil. Scopes flood traffic this node originates, not which regions it repeats.
+  var defaultScopeName: String?
+  /// False until a `region default` reply parses. Distinct from `defaultScopeName == nil`.
+  var defaultScopeLoaded = false
+  var isLoadingDefaultScope = false
+  /// `region default` exists on MeshCore repeater v1.15.0+. Unknown version is unsupported.
+  var supportsRegionDefaultScope: Bool {
+    helper.firmwareVersion?.isAtLeast(
+      major: Firmware.regionDefaultScopeMinMajor,
+      minor: Firmware.regionDefaultScopeMinMinor
+    ) == true
+  }
+
+  private enum Firmware {
+    static let regionDefaultScopeMinMajor = 1
+    static let regionDefaultScopeMinMinor = 15
+  }
+
+  // MARK: - Expansion State (repeater-only sections)
+
+  var isBehaviorExpanded = false
+  var isRegionsExpanded = false
+
+  // MARK: - Dependencies
+
+  private var repeaterAdminServiceProvider: @MainActor () -> RepeaterAdminService? = { nil }
+  var repeaterAdminService: RepeaterAdminService? {
+    repeaterAdminServiceProvider()
+  }
+
+  let logger = Logger(subsystem: "com.mc1", category: "RepeaterSettings")
+
+  // MARK: - Cleanup
+
+  func cleanup() async {
+    await repeaterAdminService?.setCLIHandler { _, _ in }
+    helper.cleanup()
+  }
+
+  // MARK: - Configuration
+
+  /// Nil service mirrors a disconnected state; commands then no-op.
+  func configure(repeaterAdminService: @escaping @MainActor () -> RepeaterAdminService?, session: RemoteNodeSessionDTO) async {
+    repeaterAdminServiceProvider = repeaterAdminService
+
+    guard let repeaterAdminService = repeaterAdminService() else { return }
+
+    helper.configure(
+      session: session,
+      sendCommand: { [repeaterAdminService] id, cmd, timeout in
+        try await repeaterAdminService.sendCommand(sessionID: id, command: cmd, timeout: timeout)
+      },
+      sendRawCommand: { [repeaterAdminService] id, cmd, timeout in
+        try await repeaterAdminService.sendRawCommand(sessionID: id, command: cmd, timeout: timeout)
+      }
+    )
+
+    helper.name = session.name
+
+    helper.onPreFetchNodeInfo = { [weak self] in
+      await self?.fetchNodeInfo()
+    }
+
+    registerBehaviorLateRecovery()
+
+    // Register CLI handler for late responses
+    await repeaterAdminService.setCLIHandler { [weak self] message, _ in
+      await MainActor.run {
+        self?.helper.handleCommonLateResponse(message.text)
+      }
+    }
+
+    // Detached so configure returns immediately and the node CLI send
+    // closure wires without waiting on the owner-info round-trip (matches
+    // RoomSettingsViewModel's detached device-info fetch).
+    Task { await fetchNodeInfo() }
+  }
+
+  /// Builds the node-CLI send closure, pre-binding this session's id and
+  /// capturing the private admin service (a thin pass-through to
+  /// `RemoteNodeService.sendRawCLICommand`). Returns nil if not configured.
+  func makeNodeCLISendClosure(
+    session: RemoteNodeSessionDTO
+  ) -> (@MainActor (_ command: String, _ timeout: Duration) async throws -> String)? {
+    guard let repeaterAdminService else { return nil }
+    return { [repeaterAdminService, sessionID = session.id] command, timeout in
+      try await repeaterAdminService.sendRawCommand(
+        sessionID: sessionID, command: command, timeout: timeout
+      )
+    }
+  }
+
+  private var isLoadingNodeInfo = false
+
+  private func fetchNodeInfo() async {
+    guard !isLoadingNodeInfo, let session = helper.session, let repeaterAdminService else { return }
+    isLoadingNodeInfo = true
+    defer { isLoadingNodeInfo = false }
+    do {
+      let response = try await repeaterAdminService.requestOwnerInfo(sessionID: session.id)
+      helper.setNodeInfo(
+        firmwareVersion: response.firmwareVersion,
+        name: response.nodeName,
+        ownerInfo: response.ownerInfo
+      )
+    } catch {
+      logger.warning("Failed to fetch node info via binary: \(error)")
+    }
+  }
+
+  // MARK: - Late Reply Recovery
+
+  private var behaviorSectionComplete: Bool {
+    originalRepeaterEnabled != nil && originalAdvertIntervalMinutes != nil
+      && originalFloodAdvertIntervalHours != nil && originalFloodMaxHops != nil
+  }
+
+  private func registerBehaviorLateRecovery() {
+    helper.registerLateRecovery(query: "get repeat") { [weak self] value in
+      guard let self, case let .repeatMode(enabled) = value else { return }
+      repeaterEnabled = enabled
+      originalRepeaterEnabled = enabled
+      behaviorError = !behaviorSectionComplete
+    }
+    helper.registerLateRecovery(query: "get advert.interval") { [weak self] value in
+      guard let self, case let .advertInterval(minutes) = value else { return }
+      advertIntervalMinutes = minutes
+      originalAdvertIntervalMinutes = minutes
+      behaviorError = !behaviorSectionComplete
+    }
+    helper.registerLateRecovery(query: "get flood.advert.interval") { [weak self] value in
+      guard let self, case let .floodAdvertInterval(hours) = value else { return }
+      floodAdvertIntervalHours = hours
+      originalFloodAdvertIntervalHours = hours
+      behaviorError = !behaviorSectionComplete
+    }
+    helper.registerLateRecovery(query: "get flood.max") { [weak self] value in
+      guard let self, case let .floodMax(hops) = value else { return }
+      floodMaxHops = hops
+      originalFloodMaxHops = hops
+      behaviorError = !behaviorSectionComplete
+    }
+  }
+
+  // MARK: - Behavior Fetch/Apply
+
+  func fetchBehaviorSettings() async {
+    isLoadingBehavior = true
+    behaviorError = false
+    var hadTimeout = false
+
+    do {
+      let response = try await helper.sendAndWait("get repeat")
+      if case let .repeatMode(enabled) = CLIResponse.parse(response, forQuery: "get repeat") {
+        repeaterEnabled = enabled
+        originalRepeaterEnabled = enabled
+      }
+    } catch {
+      if case RemoteNodeError.timeout = error { hadTimeout = true }
+      logger.warning("Failed to get repeat mode: \(error)")
+    }
+
+    do {
+      let response = try await helper.sendAndWait("get advert.interval")
+      if case let .advertInterval(minutes) = CLIResponse.parse(response, forQuery: "get advert.interval") {
+        advertIntervalMinutes = minutes
+        originalAdvertIntervalMinutes = minutes
+      }
+    } catch {
+      if case RemoteNodeError.timeout = error { hadTimeout = true }
+      logger.warning("Failed to get advert interval: \(error)")
+    }
+
+    do {
+      let response = try await helper.sendAndWait("get flood.advert.interval")
+      if case let .floodAdvertInterval(hours) = CLIResponse.parse(response, forQuery: "get flood.advert.interval") {
+        floodAdvertIntervalHours = hours
+        originalFloodAdvertIntervalHours = hours
+      }
+    } catch {
+      if case RemoteNodeError.timeout = error { hadTimeout = true }
+      logger.warning("Failed to get flood advert interval: \(error)")
+    }
+
+    do {
+      let response = try await helper.sendAndWait("get flood.max")
+      if case let .floodMax(hops) = CLIResponse.parse(response, forQuery: "get flood.max") {
+        floodMaxHops = hops
+        originalFloodMaxHops = hops
+      }
+    } catch {
+      if case RemoteNodeError.timeout = error { hadTimeout = true }
+      logger.warning("Failed to get flood max: \(error)")
+    }
+
+    if hadTimeout {
+      behaviorError = true
+    }
+
+    isLoadingBehavior = false
+  }
+
+  func applyBehaviorSettings() async {
+    let validation = NodeSettingsViewModel.validateBehaviorFields(
+      advertInterval: advertIntervalMinutes,
+      floodInterval: floodAdvertIntervalHours,
+      floodMaxHops: floodMaxHops
+    )
+    advertIntervalError = validation.advertInterval
+    floodAdvertIntervalError = validation.floodInterval
+    floodMaxHopsError = validation.floodMaxHops
+
+    if validation.hasErrors { return }
+
+    helper.isApplying = true
+    helper.errorMessage = nil
+
+    do {
+      var allSucceeded = true
+
+      if let repeaterEnabled, repeaterEnabled != originalRepeaterEnabled {
+        let response = try await helper.sendAndWait("set repeat \(repeaterEnabled ? "on" : "off")")
+        if case .ok = CLIResponse.parse(response) {
+          originalRepeaterEnabled = repeaterEnabled
+        } else {
+          allSucceeded = false
+        }
+      }
+
+      if let advertIntervalMinutes, advertIntervalMinutes != originalAdvertIntervalMinutes {
+        let response = try await helper.sendAndWait("set advert.interval \(advertIntervalMinutes)")
+        if case .ok = CLIResponse.parse(response) {
+          originalAdvertIntervalMinutes = advertIntervalMinutes
+        } else {
+          allSucceeded = false
+        }
+      }
+
+      if let floodAdvertIntervalHours, floodAdvertIntervalHours != originalFloodAdvertIntervalHours {
+        let response = try await helper.sendAndWait("set flood.advert.interval \(floodAdvertIntervalHours)")
+        if case .ok = CLIResponse.parse(response) {
+          originalFloodAdvertIntervalHours = floodAdvertIntervalHours
+        } else {
+          allSucceeded = false
+        }
+      }
+
+      if let floodMaxHops, floodMaxHops != originalFloodMaxHops {
+        let response = try await helper.sendAndWait("set flood.max \(floodMaxHops)")
+        if case .ok = CLIResponse.parse(response) {
+          originalFloodMaxHops = floodMaxHops
+        } else {
+          allSucceeded = false
+        }
+      }
+
+      if allSucceeded {
+        await helper.flashSuccess(
+          setApplying: { helper.isApplying = $0 },
+          setSuccess: { behaviorApplySuccess = $0 }
+        )
+        return
+      } else {
+        helper.errorMessage = L10n.RemoteNodes.RemoteNodes.Settings.someSettingsFailedToApply
+      }
+    } catch {
+      helper.errorMessage = error.userFacingMessage
+    }
+
+    helper.isApplying = false
+  }
+}

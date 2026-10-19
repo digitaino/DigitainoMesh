@@ -1,0 +1,1087 @@
+Beta Changes -- v1.5.2 (second build)
+
+Weather Alerts You Can Trust a Little More
+
+What is different from the first 1.5.2 build of 17 October.
+
+Times from the future are refused. Anyone on #meshwx can send a packet that claims to come from a weather radio. One such packet dated far ahead used to wipe every alert the phone held and make it ignore the real radio's updates afterwards. A time more than 15 minutes ahead of your phone's clock is now refused, and a phone already affected recovers when this build starts.
+
+Alerts outside a radio's area stay. If you looked up alerts for a saved place outside WX-AUS's area, the radio's next routine summary used to delete them and take their notification away. A summary now ends only alerts inside the area that radio covers; the others end at their own expiry or when you ask again. A notification is taken down only when no radio still holds that alert.
+
+On WX-AUS itself. Tornado and severe thunderstorm watches now reach the phone; they were being dropped at the radio. A flash flood warning that NWS cancels or narrows now ends or shrinks on time. Hurricane, tropical storm, storm surge, tsunami and air quality alerts are read, and a river flood warning "until further notice" says so instead of showing an end time it does not have. Several forecast offices' point forecasts were misread (a low of 3 instead of 39 in Montana; one Texas airport's low off by 9 degrees); those read correctly now.
+
+What to try. Next time a watch is issued for your area, check it appears with its counties. Save a place outside Austin, ask for its alerts, and see that they stay after the next summary from WX-AUS.
+
+Unchanged: everything in the first 1.5.2 build below.
+
+---
+
+Beta Changes -- v1.5.2
+
+Weather When the Feed Runs Late, One Node on Several Radios, and MeshCore One 1.5
+
+What is different from 1.3.0 build 3 of 3 October.
+
+Conditions when the feed runs late. A reading more than two hours old used to be replaced by "No current conditions", even when the phone held one from a few hours before. On 16 October NOAA's weather text ran 5 to 10 hours behind, and that sentence was all the page said all day. Now a reading up to 12 hours old stays on the page with its age in orange: "Austin-Camp Mabry · 6 km · as of 6:18 PM · 5 h old". Past 12 hours the page asks, as before. A nearer station that has been silent for a day no longer hides one a little further off that reported this morning, and Places rows follow the same rule. WX-AUS now answers a conditions request with its newest report up to 12 hours old instead of "Not available".
+
+Radar loops. Under each radar width, Local, Regional and Wide, a loop row asks for the last hour, and Play steps through the frames held for the square on screen, each with its own time. It needs a bot on revision 13, as WX-AUS is.
+
+One node on several radios. Your node can live on more than one radio, and you can switch between them while the history stays the node's. Copy to This Radio puts this phone's contacts and channels on a radio, each channel in its own slot. A contact or channel you delete is deleted from the node's other radios when they next sync. A radio that was erased and reflashed can be set up as your node again: the phone keeps each node's key in the Keychain (this device only, never synced or backed up; Settings > Advanced > Identity), and after the first sync a blank radio asks Set Up as your node or Use as a New Node. Switching radios no longer deletes a channel's history, and a radio running out of room no longer deletes favourites or contacts you have messages with.
+
+From MeshCore One 1.5. This build carries upstream's releases 1.4.1 to 1.5.2. Every way a message arrived is on the one path screen, as tabs over the map. Korean is new. Chats get iOS 27 swipe actions, switch channels faster and scroll more smoothly. TX power and the other radio settings are on Settings > Radio, with Adaptive Power beside TX power. A contact's QR code is shown for review before it is added, and there are new radio presets. What's New shows the 1.5 notes.
+
+Reactions. Reactions go out emoji first, so every MeshCore One release shows them as a tapback instead of a chat line that also pinged the person.
+
+Pairing. Scan and Set Up work from the radio pill again.
+
+Support. Settings > Support the Developer now says this is an unofficial fork of Avi0n's MeshCore One and links to Avi0n's GitHub Sponsors. The tip jar and theme store are gone. Feedback goes to mesh@digitaino.com.
+
+What to try. Next time the weather feed runs late, look at a place's conditions: the line under the temperature turns orange and gives the age. Switch between two radios that carry your node and check contacts, channels and their history. Delete a contact with one radio connected, then connect the other. If you have a spare radio, erase it and set it up as your node. Send a reaction to someone on stock MeshCore One. Play a radar loop.
+
+Unchanged: MeshCore companion firmware 1.15 or newer, #meshwx on the radio, one request per tap, nothing about you leaves the phone. New text is in all 12 languages.
+
+---
+
+Beta Changes -- v1.3.0 (Build 3)
+
+Weather: Ask From the Bottom Bar, and Watches That Say When They Start
+
+What is different from the radar build of 20 September.
+
+Asking. Every weather screen now asks from the bottom bar, the same button as Update on a place page. The radar, the alert map and the alerts list used to put their ask at the foot of the screen while the answer arrived at the top. What a request is doing is shown beside the answer, and when you have scrolled away from it a small capsule above the bar says so, with Show to scroll back. Controls sit by what they change: the radar's Local, Regional and Wide under its map, the alert map's areas under its map.
+
+A radio you can hear can be asked. A weather radio your radio has heard can be asked at once. Before, every button said "Can't ask until it announces itself" until the bot's advert reached your phone, which never happens when your own radio is the bot.
+
+When an alert applies. A watch issued ahead of time says when it starts, "from Wed 19:00 until Fri 19:00", instead of looking as if it were already in force with "in 81 h 28 min". An alert in effect reads "until 23:41 · 40 min left" when it ends within 12 hours and "until Fri 19:00" when it ends later. The strip, the alerts list, the alert map, the detail and notifications all use this line, in your phone's 12 or 24 hour clock. It needs a bot that sends the start, as WX-AUS does; with an older bot it reads as before.
+
+"+1 more". When more than one alert covers a place, tapping the strip opens the alerts list, starting with exactly those alerts. With one alert it opens that alert, as before.
+
+Finding things. Alerts, Alert map, Weather stations and Alert notifications are in the title menu, and Alert notifications is also in Places under your saved places. The radio page starts with Alerts, Weather stations and Alert notifications; How it works is last. The map in the alerts list opens the full map, and tapping an alert on it opens that alert. The full alert map has a legend. The state list in Reports and the alert map's area list can be searched.
+
+Large text and iPad. At the accessibility text sizes a row puts its value under its label instead of squeezing both into narrow columns: the alert strip, forecast rows, Places, stations and card labels. On iPad the lists keep a readable width, and the radar card no longer fills the screen in landscape.
+
+Wording. How it works no longer says a request goes out as a private message: it goes out on #meshwx, addressed to the weather radio. The alert map no longer says a tap asks the radio. Sentences that appeared twice on one screen appear once.
+
+The alert map's cost. "About N packets" counts the smaller packets WX-AUS sends now. The whole country with nothing held reads about 5 packets, 8 with advisories.
+
+On WX-AUS itself. Its packets are a little smaller, so it can hear a repeater pass each one on, and it no longer sends again packets that already got through. An answer to a request that came through repeaters waits about a second, so it is not lost under the repeaters' own copies of the request. When its hourly budget is spent it says it is busy instead of staying silent, and the budget is four times what it was.
+
+What to try. Ask from the bottom bar on the radar, the alert map and the alerts list, and scroll away while it waits. Look at a watch issued ahead of time. Tap "+1 more" when two alerts cover a place. Open things from the title menu. If you use large text, look at the forecast, Places and the stations.
+
+Unchanged: MeshCore companion firmware 1.15 or newer, #meshwx on the radio, one request per tap, nothing about you leaves the phone. New text is in all 11 languages.
+
+---
+
+Beta Changes -- v1.3.0 (radar build, 20 September)
+
+Weather: Radar, an Alert Map You Choose, and Channel Traffic
+
+Radar. A place page has a new Radar section under the forecast. One tap asks the weather radio for the radar picture around the place, and the answer is a single packet. The pictures are the Weather Service's radar mosaics, which arrive on the bot's own satellite dish every 15 minutes, so no internet is involved. The bot cuts out a square around the place, 32 by 32 cells in three levels, light, moderate and heavy. A cell shows the strongest echo inside it, so a small storm core is never averaged away. Under the map a sentence says what is over the place and how far and which way the nearest precipitation and the nearest heavy core are. The word is precipitation because radar sees snow too. Dallas under a squall line came to 131 bytes, a clear sky to 13.
+
+The radar screen. Tap the card for a map you can move, with the alerts you hold drawn as outlines over the cells. Local, Regional and Wide are squares of 2, 4 and 8 degrees, each its own request and each one packet. A picture too busy for one packet is sent at half detail and the screen says so. Where part of the square lies outside the radar picture it is greyed, never shown as dry.
+
+How old it is. The picture's own time is always on screen, "Picture from 6:38 PM · 12 min old". Pictures are usually 10 to 40 minutes old when they reach a phone. From 30 minutes the line turns to caution and adds "Precipitation has moved since", and past two hours the picture is not drawn. Asking again for the same square of the same picture within five minutes is answered with "sent this picture a few minutes ago and has nothing newer yet". A tile another phone asked for serves your place too. Guam is not covered yet. Without the app, send the bot "radar austin tx" for the same answer in words.
+
+Alert map. The national alert map is now the Alert map, and you choose the states: one, a few, or the whole country. It starts on the state of the place you are looking at and shows the cost before you ask, "About 2 packets". Two states are usually one packet where the country is five. A state you asked for with nothing active says so. A state you did not ask for is unknown, never clear. The five minute rule is now per state.
+
+Missing parts. When some packets of a map or a long text report do not arrive, "4 of 7 parts arrived" now comes with a button that asks for the missing ones only. It appears 15 seconds after the last part and stays for ten minutes, which is how long the bot keeps the bytes.
+
+Tapping a shaded area opens one card: the alerts your phone holds for that area, and, when the map shows something the phone does not hold, a row that says so with a button to ask for the detail.
+
+Forecasts everywhere. "No forecast point near Santa Fe" is gone. When the app knows of no forecast point near a place it asks for the forecast at the coordinate, and the bot answers from the nearest point it holds, labelled "Forecast point chosen by WX-AUS". The app also gained 85 forecast points, most of them for offices that had none: Albuquerque, Boulder, Pocatello, Honolulu and Guam.
+
+The radio page. Your requests shows the newest three, with All requests behind it. The #meshwx card gains Channel traffic: every weather packet on the channel as a timeline, the bot on the left and your requests on the right, each with its size, sequence number, signal and hops. Tap one for its decoded fields and its bytes.
+
+What to try. Ask for radar at Local, then Wide, and check the picture against a radar you trust. Ask for the Alert map for your state and a neighbour. If parts go missing, use the missing parts button. Open Channel traffic while someone else asks for something.
+
+Unchanged: MeshCore companion firmware 1.15 or newer, #meshwx on the radio, one request per tap, nothing about you leaves the phone. New text is in all 11 languages.
+
+Weather
+
+Tools gains Weather: severe weather alerts, current conditions and the forecast for where you are, from the mesh rather than the internet. A weather bot is a chat node named WX-<city> (WX-AUS is on the air in Austin) that puts National Weather Service products on the #meshwx channel as compact binary messages. Nothing is fetched from the internet and nothing about you leaves the phone.
+
+Everything on screen answers for one place, your location or a town you search for, and the title says which. Swipe between saved places or tap the title for the list. Alerts come first: a warning covering the place, or within 50 km of it, is a row in the Weather Service colour with a countdown, worst first. One line under the rows says what the app can and cannot vouch for. The green check appears only when a fresh list arrived while the radio was connected, nothing was missed, the place is inside the bot's area and nothing is active in it. Otherwise it names what is not true and offers the request that would help. Tap an alert for its map and its full text. Below that: current conditions, the forecast, then the station list, forecast discussion, hazardous outlook, storm reports, rainfall and coded airport reports.
+
+Current conditions. A station reading within 25 km is shown as the weather at the place. From 25 to 40 km it is shown under the station's name, "Nearest report: San Marcos, 26 km away". Past 40 km the page says no station is close enough and stops asking. Some of the stations in the app's list never report on the satellite feed at all. Ask for one of those and the bot answers with the nearest station that does.
+
+National alert map. In the menu behind the place name. One request brings every active warning and watch in the country. The size depends on how much is active: one to eight packets, more if you include advisories. Above that it sends the most severe and marks the map as cut. The phone shades the areas onto outlines it already carries, so nothing describing geography goes on the air. Tap a shaded area for what the map holds for it and a button to ask the radio for the detail. A list names each kind of alert and its areas.
+
+What the phone already knows. The app ships with the zone, county and station tables, 1,873 forecast points, 34,937 place names and the outline of every zone and county, about 17 MB. That is what keeps the messages small: nothing on the air carries a name, a boundary or a coordinate the phone can look up. The heat advisory that covered all of Puerto Rico arrived in 26 bytes. A seven day forecast is 47 bytes, readings for thirteen stations are 159, and the alert map spends four bytes per run of neighbouring areas.
+
+Requests and airtime. The app never asks on its own. One request per tap, and the screen states what it will spend first. Answers are public: the request goes out on the channel and the reply reaches every phone listening, so an answer somebody else asked for is labelled as theirs and nothing is asked for twice within five minutes. The map is limited to one sweep every five minutes across all users. Inside that window the answer is "another radio asked recently" and the map already on the phone stays on screen.
+
+Data source. Each answer says whether the bot took the data off its own satellite dish or from the internet, shown as "Via GOES satellite". A text answer carries at most 1,200 characters, which most forecast discussions exceed, so a long one ends at a sentence and says "Shortened for radio".
+
+With the radio disconnected. Everything the bot broadcasts on schedule is kept whether or not the tool is open, and the last picture stays, marked with its age. Ages come from the bot's clock. Places: search and save, tap the bell for alerts there, Edit to remove or reorder.
+
+Requirements. MeshCore companion firmware 1.15 or newer. Older firmware drops these packets and the tool says so. #meshwx must be on the radio: the tool offers to add it and adds nothing until you tap.
+
+Signal Mapper: Active Survey & Ride Mode
+
+The Signal Mapper could only ever map what your radio *heard*. It can now also measure the other direction -- how well repeaters hear **you** -- by sending them small, directed, non-flood probes and reading back the signal level they report for your transmission. That is the half of coverage no amount of listening can measure, and it is the half that decides whether your messages actually get out.
+
+Two maps. A new layer switch on the map (the arrow button in the right-hand column) toggles between **Heard** -- what you hear, the map as it was -- and **Reach** -- how well repeaters hear you from each hexagon, with grey cells marking the places you transmitted from and nobody ever answered. Tap any hexagon for a new Uplink section: probes sent, replies, and the signal they reported.
+
+Lock on. Start a survey, then pick up to three repeaters to track live. Each gets a large colour block: green when you are heard both ways, amber when you can hear them but they are not answering, red once the link is gone. A tone plays when a target drops out or comes back, so you can keep your eyes on the road -- it comes through earbuds over music, even with the mute switch on. Everything else keeps logging in the background while you watch your three.
+
+Built for moving. A survey now keeps the screen awake, follows you on the map, draws your track, and survives the radio dropping out and reconnecting -- the session no longer dies with the Bluetooth link, and it records the gap so a dead radio cannot be mistaken for a dead zone later. Probes speed up right at the edge of coverage, where the interesting answer is, and back off once a repeater is well and truly out of range.
+
+The full log. Every probe, reply, loss and position is kept on your phone at full detail so the data can be re-examined later, in its own database that is excluded from backups. From the survey summary you can export a ride -- and the shared file is deliberately scrubbed: positions coarsened, the first and last 500 m trimmed off, repeater keys shortened. Your front door is not in the file you share.
+
+One thing to check before a long ride: Settings -> Privacy -> Location Services -> DigitainoMesh must be set to **Precise**. Without it, every sample fails the accuracy check and the ride records nothing -- the app now warns you when you press Start, rather than letting you find out afterwards.
+
+Nothing is uploaded anywhere. All of this is on your device.
+
+The Signal Mapper now keeps every observation, not only the ones made during a ride. What the radio hears, echoes of your own packets, probe replies, and the messages and adverts you send are written as individual rows for 90 days, with the packet bytes and the path for anything received, so the data can be exported and studied later; the full ride export carries the new columns. A correction under the hood changes what the cell card lists from now on: a packet routed direct along a path no longer credits its last hop as a repeater you heard, because on a direct route that entry is the far end of the path, not the node that transmitted to you. Floods still credit the last hop, and an advert heard with no path credits the node that sent it.
+
+The Signal Mapper's map and cell card are rebuilt on those rows. The two layers are named for what they answer, **I hear them** and **They hear me**; on the second, a hexagon where repeaters echoed you but never reported a number is a flat grey with a bright outline, and one where you probed and nobody heard is dark grey. Tap a hexagon and the card lists only the repeaters your radio heard directly, newest first, two lines each: the name and how long ago, then what you hear it at now, best and average, and on the right whether it hears you and at what signal, from its replies to your probes, or "heard you" when it only echoed one of your packets. Rows go quiet after ten minutes of silence. Tap a row for a chart of both legs over time and the raw observations behind it. During a ride the history dims and the hexagons you have added to are ringed, heavier where the hexagon had never been mapped, and the card offers This ride beside All time. Best Repeater, the chip rows, the Last Heard row and the Cell Detail sheet are gone. The legend is back on the map with the totals.
+
+Settings gains **Signal Mapper › Data**: how many observations the phone holds and how much space they take, how long they are kept (90 days by default, 30 to 365), an export to CSV or JSONL filtered by date, ride, repeater and kind with a live row count, and a delete-older-than control that says how many rows it will remove. The publish switch for the observer network is there but disabled until the Austin instance can accept it.
+
+A ride that is hearing things now says so. Two problems made a survey look dead from the cell card while the strip counted probes and replies. The first was the GPS: for the first minutes of a ride, before the fix settles, the app was sending probes on a position it then refused to attach to anything, so every reply came back and was filed with no location at all -- unreadable afterwards, permanently. Positions are now kept whenever the phone really had one, marked with how good it was, so the ride can be read back and a poor fix can be filtered out later instead of being thrown away at the moment it mattered. The map's colours, the dead-zone shading and the home-area exclusion still use only the good ones. And when the fix is too vague to place what the radio is hearing, the ride strip now says **Fixes rejected** instead of leaving you to guess.
+
+The second was that nothing told the card when new observations landed: it re-read on a 20-second timer that slept before it looked. The card now repaints as the rows arrive, and a hexagon you have only just ridden into gets its card immediately rather than waiting for the map to catch up. When a hexagon really is empty, the card says which kind of empty -- nothing captured yet this ride, nothing in this hexagon, or GPS too poor to place anything.
+
+The card also stopped hiding half the answer. A repeater that replied to a probe, or that relayed one of your packets, used to vanish from the list unless your radio had separately heard it -- which deleted exactly the interesting cases: a repeater you can hear that cannot hear you, and one that hears you that you cannot hear. Both are listed now, with an em dash where a measurement was never made rather than a made-up zero.
+
+You can see the signal levels now, not just read them. Every repeater in the card wears a coloured stripe down its left edge and a set of signal bars on each of its two figures -- one for what you hear it at, one for what it hears you at -- in the same six colours the hexagons on the map are painted with, so a row and the hexagon under it can never tell you different things. The stripe makes a list of repeaters scannable at a glance: strongest and weakest stand out without reading a single number. The bars carry the up and down arrows the text used to spell out, so the rows are no wider than before. A repeater that has never reported hearing you shows an up arrow with a question mark rather than borrowing the other direction's bars.
+
+The ride screen made room for the map. Discover, Trace and Flood used to take a full row of truncated words on a phone -- "Dis...", "Tra..." -- and now show their words only where they fit and their icons where they do not; either way all three stay one tap away, and the "Sent" note after a tap floats over the row instead of growing the panel and nudging the map. The radio pill at the top disappears for the length of a survey: everything it was telling you about the best link is on the card for the hexagon you are actually in, which is the point of the ride. Your transmit power, the one thing the pill said that the card cannot, moves onto the ride strip while adaptive power is switched on. The pill comes back the moment the ride ends.
+
+One repeater, one row. A repeater could appear twice in the same hexagon -- once as "Digitaino Central ABBA" and once as "Digitaino Central AB" -- because the mesh sends one- or two-byte hop hashes depending on the packet, and the card was counting the two widths as two repeaters. A short hash is now folded into a longer one when exactly one longer hash seen in that hexagon starts with it, and left alone when two could, because a single byte cannot say which. The merged row carries every reading and every reply from both widths, and tapping it lists all of them.
+
+The card opens up, and the pill comes back into it. A chevron beside the close button grows the repeater list from three rows to as many as the map can spare -- always leaving a strip of map on screen, with the camera keeping you clear of the taller card -- and it remembers the choice. And the readout the radio pill used to give you is now in the card's header for the hexagon you are in: signal bars and the number for what you hear the best repeater here at, and the same pair for what it hears you at. Tap it to open that repeater's observations. It steps aside at the largest text sizes, where the rows underneath say the same thing with room to say it.
+
+Packet Scope: Network View
+
+Opt in under Settings -> Chats -> Packet Scope. Once it is on, a message's actions gain a **Network View**: the app asks a CoreScope observer server which mesh observers heard that packet and at what signal level, then draws the answer -- one line per located observer, coloured by how strongly it heard you, over a map of every link the packet crossed. Observers sort by strongest, fewest hops, first heard, or farthest. The headline says who heard the message, which path was best and shortest, how far it reached, how many heard it directly, and whether reports are still arriving. The view keeps polling for three minutes after you open it, and each new report animates in wearing a **New** chip, so you can watch a message spread through the mesh.
+
+Tap a route, see the route. In the Network View, tapping a route in an observer's ladder now draws **only that route** on the map -- its repeaters numbered in path order, its measured leg straight with the signal readout -- frames it, and recesses every other pin to an unlabelled shadow. Tap an observer and its routes draw in full with the rest of the mesh fading to a faint context layer. A breadcrumb (All > observer > via ...) jumps between levels, tapping the map steps back one level, and the < > controls walk through routes in order. Where a route cannot be placed on the map (an observer that publishes no location and repeaters the phone does not know), the row says so before you tap, the map stays as it was, and the panel explains why. The panel keeps its shape and its order while you are focused, so a poll arriving mid-tap never moves a row under your finger; new observers append at the bottom. Route rows are bigger, with wrapping hop pills instead of a strip that scrolled sideways under your thumb. A copy button puts the coverage on the clipboard as plain text.
+
+The lookup sends only the packet's identifier, never its content, over your phone's internet connection -- and only if you turn it on. Coverage depends on the observer network the server watches.
+
+Three honesty fixes in the message actions sheet, ahead of a larger redesign of that sheet (the review and spec are in docs/MESSAGE_JOURNEY_REDESIGN.md). **Repeat Details** and the Network View's repeater names now load from the phone's own store, so they work with the radio disconnected -- before, a disconnected radio left Repeat Details spinning forever and a DM's Network View naming every hop as raw hex. The Network View no longer says **"No observer heard this packet"** while it is still asking: for the first three minutes after a send an empty answer reads "Checking observers..." until the polling stops. And after the polling gives up on server failures the headline no longer claims the coverage has "settled". An unreadable server response now says so instead of borrowing the elevation API's error text.
+
+The Network View reads by path now, and only claims a signal when it is yours. The observer list used to be one row per observer, each expanding to re-list repeater chains its neighbours had already shown; it is now **one row per chain**, with the observers it reached inside it -- on a real message, eight observers collapse to five rows. Every signal figure the observer network reports is measured at the observer on its last leg, so where a repeater stood in between it grades that repeater's link and not your transmitter. Those figures, and the bars and colour beside them, are **gone from every hopped row**; a signal now appears only where an observer heard your radio directly, the headline says "best direct", and a footer explains the omission. "Strongest signal" has left the sort menu (replaced by "most observers"), and routes rank by hops rather than by a signal that was never yours to rank by. The panel header also stopped spending rows on nothing: no breadcrumb until there is a trail to show, the tap hint retires once you have used it, and a focused chain no longer prints its own name twice above a row that held only four buttons -- the breadcrumb is the numbered hops themselves, and the controls sit on the count's row.
+
+Group by observer is back, beside group by path. The Network View's list now has a **Group by** switch, in the same menu as the sort: **By path** keeps the chain-major list above, and **By observer** brings back one row per observer with its routes inside it -- the view that shows, at a glance, the different paths a packet took to reach each observer. By path is still the default, and the app remembers whichever you last used. Everything works the same in both: the breadcrumb reads in its own list's order (All > observer > via ... instead of All > via ... > observer), the < > controls walk the same routes, tapping a row still draws it on the map, and the order still freezes while you are focused. Switching the grouping clears the current selection, since the row you had chosen belonged to the list that just changed. What has *not* come back is the misleading signal display: a decibel figure and its colour still appear only where an observer heard your radio directly, so a route through a repeater shows its hops and its distance and no signal at all. The sort menu gains **Most routes** for the observer list, in place of "Most observers", which only the chain list can answer.
+
+Every message you send now carries an **eye** next to its repeats counter: how many observers on the observer network heard that packet. It climbs as the reports come in -- every four seconds for the first minute and a half after a send, every twelve to five minutes, then once a minute for half an hour, so a packet spreading through the mesh reads as a number counting up rather than one late jump. Opening a chat re-checks every message on screen, so one you sent while you were elsewhere shows a current figure rather than the one from before you left. Afterwards it settles and stays put; "..." means the packet has not been heard back yet or has not been looked up. Tap it to open the message's actions and its Network View. This is a second switch under Settings -> Chats -> Packet Scope, off by default and only offered once Packet Scope itself is on, because it asks the server about your sent messages automatically rather than when you tap Look Up. As before, only the packet's identifier leaves the phone, never its text, and received messages are never looked up this way.
+
+The eye starts sooner and stops going backwards. A message you have just sent is now checked within a couple of seconds of the first repeat coming back, instead of waiting out a twenty-second pause first, and a chat you have just opened always gets its one catch-up sweep -- before, opening a chat could spend that sweep before any messages had loaded, and then show yesterday's number. The count also no longer flickers back down: a repeat arriving at the same moment as a lookup used to overwrite the fresh number with the older one, so the badge dropped and then jumped again a few seconds later. **And resending a message now starts the eye over.** Send Again puts a genuinely new packet on the air, but the eye and the Network View kept describing the packet you resent -- the same observer count, the same routes, for ever. They now reset to "..." and fill in again from the resend's own repeats. If a count still looks stuck, the message's actions sheet says exactly what the app knows under Network View: "Observers: 8 - checked 12 s ago", or "not checked yet", or "no packet hash yet" -- worth a screenshot.
+
+Radio Swap, Config Import and Backups
+
+Moving your identity to a new radio no longer loses your chats. A radio that connects with a public key the app already knows -- from a device you forgot but kept the data for -- adopts that history the moment it connects, and the contact sync that follows keeps favourites and anyone you have messaged instead of pruning them. Only silent, unmessaged contacts are cleaned up.
+
+Config import is more forgiving. A contact with a blank or malformed coordinate falls back to no position (the preview names it) instead of refusing the whole file. An import that needs more contact slots than the radio has left now imports what fits and tells you which nodes it dropped -- never a favourite or a contact with messages; the least recently heard nodes go first. Channels land in the slot they had in the file when it is free. Backup import no longer crashes on a duplicate device row.
+
+Turning the phone sideways no longer closes the tool you had open. On the larger iPhones, landscape gets the iPad layout, so rotating rebuilt the whole shell: the Signal Mapper closed itself the moment you turned the phone, and turning back to portrait left you looking at the tool list. A tool opened in portrait is now still open in landscape, and still open when you turn back -- mid-ride included. A Signal Mapper ride holds on tighter still: while a run is recording, neither the radio dropping out nor a look at another tab closes the map that is logging it, so you come back to the ride you left.
+
+---
+
+Beta Changes -- v0.11.0 (Build 5)
+
+Repeater Popover Crash Fix
+
+Fixed the Build 4 crash loop around the top-left radio control — thanks NBDY for the crash report, it made this one findable. On iOS 26, dismissing a popover while the radio link was being torn down could trap inside the system's dismissal animation and then keep crashing on every relaunch. The repeater table now closes itself when the connection is truly lost, the first-run device-menu tip no longer auto-presents on iOS 26, and the Motion & Fitness permission prompt waits until the popover has fully closed instead of landing mid-animation. If you still see a crash right after launch or when the radio drops, please send the report.
+
+---
+
+v2 rebuild (upstream 1.3.0)
+
+DigitainoMesh has been rebuilt from scratch on top of upstream PocketMesh v1.3.0. The old fork line diverged far enough that keeping up with upstream had become the main cost of the project, so this release starts again from the current upstream code and re-applies the fork's work on top of it.
+
+What this means for you: everything upstream ships in 1.3.0 is here, including its redesigned onboarding, settings, and messaging work. The fork's branding, bundle identity, and TestFlight channel are unchanged, so this installs as an update over your existing build.
+
+Temporarily removed: Signal Survey, weather, and route sharing are not in this build. They were the most entangled with the old architecture and will return redesigned against upstream's current one rather than being carried over as-is.
+
+Everything else -- signal bars, adaptive TX power, the traffic heatmap, repeater benchmark and watch, Wio notification sync, message search, reactions, and the chat gestures -- is being re-ported incrementally and will land over the next few beta builds. The notes below describe the last release of the previous fork line and are kept for reference.
+
+---
+
+Previous Fork Line
+
+Beta Changes -- v0.10.1 (Build 40)
+
+Firmware Notification Sync (Wio L1 Pro)
+
+Your per-channel mute and notification choices now sync down to the radio on Digitaino custom firmware, so the device itself respects them even when your phone isn't connected. Whenever you change a channel's notification level (Silent / Mentions / All) — via the swipe action, the channel-info picker, or a weather channel auto-mute — the new preference is pushed to the firmware as a compact rule set (overrides only). A full reconcile is also pushed on every reconnect, reflash, or fresh boot, so the device and app never drift apart. DMs stay a simple muted/unmuted toggle because the firmware contact-rule model has no mentions slot.
+
+This is opt-in by firmware: stock firmware is unaffected, and the device keeps its default "notify on all" behavior until the app syncs the first time.
+
+Wio L1 Device Rules Diagnostic
+
+Settings → Notifications has a new "Wio L1 Pro device rules" row showing exactly what notification rules the radio currently holds: connection state, schema version, default mode, and each per-channel and per-contact rule with a colored mode badge (Silent / Mentions / All / Urgent). Channel and contact names are resolved for readability. "Refresh from device" re-reads the live blob, and "Force resync to device" pushes the full rule set again — a manual recovery path if a sync ever fails silently.
+
+Signal Bars Viewer Mode & Engine Parity
+
+On Digitaino firmware that computes signal bars on-device, the app now mirrors the device's own repeater table with zero extra RF — no pinging needed. A "Synced with radio" / "Measuring locally" badge in the repeater popover tells you which mode is active. On stock firmware the local measurement engine is kept, and it was reworked to match the firmware's math exactly: 75/25 RX EMA, shared weak-leg scorer (0.6/0.4), an 8-repeater cap with oldest-eviction, and removal of the old RX-as-TX fallback. Each repeater row also gets a "Ping Now" action.
+
+Motion Hint
+
+A new opt-in CoreMotion-based motion hint routes your movement level either to the device (on firmware that accepts it) or to the local signal-bars engine, helping it adapt timing while you're walking or driving. Adds the motion usage permission prompt.
+
+Peer Telemetry Request
+
+A "Request Telemetry" button on the contact detail screen fetches LPP sensor data (temperature, voltage, etc.) from a chat contact on demand. Signal-bars ping timing was also simplified to flat 45s / 120s intervals with TX-weighted (70/30) sorting and best-repeater change detection.
+
+Reaction Snippet Sizing Fix
+
+Channel reaction (tapback) messages are now sized against your actual node name length instead of a hardcoded budget, so the firmware-prepended "{NodeName}: " plus the reaction text always fits within the 147-byte channel limit — preventing truncated or rejected reactions for users with longer node names.
+
+Contact Sync Crash-Loop Fix
+
+Fixed a launch-loop crash seen on TestFlight Build 34: when a contact batch arrived containing duplicate public keys, the contact-save path trapped and every subsequent sync crashed. Contact lookup is now built defensively — it keeps the most recently modified row, removes the duplicates, and tracks newly-inserted contacts so a repeated public key no longer spawns a sibling row.
+
+---
+
+Previous Builds
+
+v0.10.1 (Build 34)
+
+Heard Repeats Map Fixes
+
+Fixed several issues with the Repeat Coverage map for sent messages:
+
+- **Last-hop SNR lines now render** — The map was missing the SNR-colored line from the last repeater back to your location because it required a stored message location. Now falls back to current GPS when the message has no saved coordinates, with a banner showing "Using current location" and a Save button to persist it to the message for future reference.
+
+- **Wrong repeater on SNR line fixed** — When the actual last repeater (e.g. "Independent Bridge") had no GPS, the SNR-colored line was incorrectly drawn from a different repeater that happened to have location data. Now tracks whether the real last repeater was resolved and only draws the SNR line when it was.
+
+- **Hop count corrected** — The cycling summary showed only the number of located hops instead of the actual path length from the repeat data.
+
+- **SNR colors match signal bars** — The last-hop line colors now use the same SNR→color mapping as the signal bars in the repeat details list (excellent=green, good=yellow, fair/poor/veryPoor=red) via a shared `SNRQuality.uiColor` property, instead of a separate hardcoded mapping.
+
+Restored Chat Features
+
+Restored three message bubble features that were lost in a prior refactor — all infrastructure (parsing, state tracking, callbacks, sheets) was still intact, only the rendering in UnifiedMessageBubble was missing:
+
+- **Shared Route cards** — Incoming messages containing "RX via ..." route info now show an inline card below the bubble again. Tapping opens the route on a map.
+
+- **Hex Path cards** — Messages with hex path chains show a "Path Map" card for visualizing the path on a map.
+
+- **Duplicate message badges** — When duplicate messages are collapsed, a "×N" badge appears with tap to expand/collapse.
+
+Adaptive Power Improvements
+
+Added measured PA output curve support for more accurate EIRP targeting on boards with external amplifiers. Fixed the power display showing 1.1W for the 1W step — now caps at the target milliwatts. Improved status text: "Not yet verified" replaces "Waiting for radio", "At starting power" replaces "At base level", and escalation messages now say "Escalated from" instead of "Elevated from".
+
+Watch Repeater
+
+Long-press any repeater in the signal bars popover to start watching it. The watched repeater section shows live signal quality bars, a packet counter that flashes on each received packet, and a hex ID badge. Enable audible alerts with a sound picker (Note, Chime, Ping, Pop) so you hear each incoming packet — useful for aiming antennas or walking toward a repeater. A dedicated picker sheet lets you search by name or hex ID, or type a raw hex ID to watch a repeater not yet in your contacts.
+
+Weather Card Sizing Fix
+
+Fixed weather station cards (in Broadcasts, Favorites, and Your Requests sections) rendering clipped on initial load — the top and bottom of the card were cut off until a manual refresh. The card pager used a fixed-height container with a GeometryReader feedback loop that never converged. Replaced with intrinsic content sizing so cards always render at full height immediately.
+
+Spelling Fix
+
+Changed "Discover Neighbours" to "Discover Neighbors" (American English) in the repeater status UI.
+
+---
+
+Previous Builds
+
+v0.10.1 (Build 33)
+
+Upstream Cherry-Picks & Bug Fixes
+
+Cherry-picked safe upstream fixes and features from MeshCore One without adopting the MapLibre migration or deviceID→radioID rename.
+
+Discover Neighbors in Repeater Status
+
+Admin users can now trigger a "Discover Neighbors" command from the Neighbors section in repeater status. Sends the discover.neighbors CLI command, then polls the binary neighbors endpoint every 3 seconds for 60 seconds, updating the list in real time as nodes respond. The button toggles to show a live countdown and stops discovery on tap. Pull-to-refresh and toolbar refresh skip the neighbor fetch during active discovery to avoid conflicts.
+
+Restored Features After Cherry-Pick Breakage
+
+Fixed upstream cherry-pick regressions that stripped personal features: route maps, repeater maps, view contact, TX power display, and distance calculation in the message actions sheet are all restored. SendDM feature added — send a DM to a channel message sender even without a resolved contact, via a new picker sheet.
+
+Signal Bars & Repeater Tracking Fixes
+
+Fixed signal bars permanently showing "Scanning for repeaters..." by adding `.discoverResponse` back to the AdvertisementService EventFilter. Fixed passive repeater tracking only showing 1 repeater by removing an overly restrictive `.rxLogData` filter that blocked relayed packets.
+
+Keyboard & Input Fixes (upstream)
+
+Keep keyboard visible when sending the first message in a conversation. Ghost-text workaround (Apple FB13727682) via InlinePredictionFix that disables inline predictions on the backing UITextView. Force TextField re-creation on send with focus restoration to clear reliably.
+
+Additional Upstream Fixes
+
+- Survive background launch before first unlock (BFU data protection fallback)
+- R1 Neo and LTO battery curves updated from measured data
+- Decode pathLength before displaying hop count (uses new isDirect/hopCount properties)
+- Suppress low battery alerts for batteryless devices
+- Fix inconsistent x-axis date format in telemetry charts
+- Prioritize query hint over deviceTime heuristic in CLIResponse.parse
+- Restored weather channel detection patterns (meshwx-discover, -meshwx-v4)
+- Fixed DiagnosticsSection data race with @MainActor isolation
+
+---
+
+Previous Builds
+
+v0.10.1 (Build 32)
+
+Signal Bars TX SNR & Power Layout
+
+The signal bars toolbar now shows TX SNR below the TX bars, matching the RX SNR display. When adaptive power is enabled, the current power level (e.g. "100mW") is shown below the repeater hex ID instead of below the TX bars, keeping the signal columns symmetrical.
+
+Network-Friendly Survey Probes
+
+Redesigned how signal survey probing works to dramatically reduce mesh network flooding.
+
+Every probe now automatically sends a discover request (zero-hop, never floods) and a trace (hop-by-hop, naturally limited). These are lightweight and provide TX SNR and mesh depth data without any network-wide broadcast. Previously, discover and trace were gated behind Deep Scan mode — now they're always-on.
+
+Channel flood messages — the only probe type that broadcasts across the entire mesh — are now gated by a per-cell limit ("Flood Messages per Cell" in survey settings). Set it to 1-3 to control how many flood messages are sent per ~100m hex cell, or Off to rely entirely on discover + trace. When multiple floods are allowed per cell, they're spaced evenly across the estimated cell transit time using GPS speed, so they test the link at different positions within the cell rather than all firing at once. The manual Probe button always sends a flood message regardless of the limit.
+
+Aggressive probe frequency presets (Driving ~15m, Dense ~25m) are now restricted to debug builds only and hidden in TestFlight/App Store releases. Normal (~50m) and Sparse (~100m) remain available to all users.
+
+TX SNR from Trace Responses
+
+Fixed trace response processing so the first hop's SNR — which represents how well the nearest repeater heard your transmission — is always saved as TX SNR. Previously this was only captured for multi-hop traces, missing the most common single-hop case.
+
+Adaptive TX Power Improvements
+
+Refined the adaptive power state machine with improved escalation logic and toolbar indicator updates.
+
+Signal Bars & Repeater List
+
+Updated repeater signal list and toolbar indicator with improved layout and display logic.
+
+No Repeats Retry Card
+
+When a sent message gets no heard repeats after 5 seconds, a retry card appears on the bubble offering to resend at the next power step (when adaptive power is enabled). Repeats arriving clear the card automatically. Retry uses resendChannelMessage for a fresh timestamp so repeaters treat it as a new broadcast. TX power verification now retries up to 3 times before falling back.
+
+MeshWX Desktop App
+
+Electron wrapper for the MeshWX weather web app with native macOS packaging, code signing, and auto-update support.
+
+---
+
+Previous Builds
+
+v0.10.1 (Build 29)
+
+MeshWX Weather System
+
+The Weather tab delivers live NWS weather data over the mesh from a MeshWX bot node. No internet connection needed on your phone — the bot ingests weather data and broadcasts it over LoRa. Currently the bot pulls from the NWS web API for testing, but the production design replaces this with a direct GOES East EMWIN satellite downlink — no internet required anywhere in the chain, fully off-grid from satellite to radio to your phone.
+
+The app auto-discovers the weather channel when a MeshWX bot is active on your mesh. Broadcasts arrive automatically: current conditions, 7-day forecasts, TAF aviation forecasts, NEXRAD radar, and active NWS warnings. You can also search by city name, state, or airport code to request specific data on demand — city searches cover ~32,000 US Census places, not just airports.
+
+Weather cards use a horizontal swipe pager organized into three collapsible sections: Favorites, Your Requests, and Broadcasts. Each card combines the observation, forecast, and aviation data for a location into a single view. Add any station or city to favorites from the ··· menu. Cards without a forecast show a "Get Forecast" button to request one. After searching, the view scrolls to the new card automatically. Active warnings appear at the top with severity indicators — tap one to see details or view the polygon on the map overlaying the radar layer.
+
+Wire Efficiency
+
+LoRa bandwidth is extremely limited, so the protocol is designed to send as little data as possible over the air. All weather data is binary-encoded — a full observation fits in ~20 bytes, a 7-day forecast in ~55 bytes, and warning polygons use delta-encoded vertex compression. No JSON, no text, no headers — every byte counts.
+
+The app ships with bundled reference data: ~32,000 US places, 1,873 NWS forecast points, METAR station metadata, state/zone indices, and radar region definitions. When the bot sends a 3-byte place index or a zone code, the client resolves it locally to a full city name, coordinates, and WFO office — none of that needs to travel over the mesh. Radar frames use sparse encoding (only non-zero cells) with RLE compression, and multi-chunk reassembly with FEC parity so a single lost chunk can be recovered without retransmission.
+
+On-demand requests are a single short message (typically 6-8 bytes) sent on the shared channel. The bot responds with just the requested product — no handshake, no session, no overhead.
+
+Adaptive TX Power (Opt-In)
+
+Adaptive power is OFF by default — enable it manually in Settings > Adaptive Power. Once on, it automatically manages your radio's transmit power based on link quality. It starts at a lower base power to conserve battery and reduce RF congestion. When messages aren't being repeated, power escalates step by step. Once messages get through, it ramps back down.
+
+Designed primarily for higher-power boards with external amplifiers (like the WisMesh Pocket with its 1W PA), but you can also enable it on standard boards if you want automatic power management. In Settings, select your amplifier so the system accounts for the external gain. For boards without an amplifier, select "None" and it adjusts the radio's built-in power directly. A TX power indicator appears in the toolbar when enabled.
+
+
+---
+
+Previous Builds
+
+v0.10.1 (Build 28)
+
+Seed location on init, suppress v4 radar log noise.
+
+v0.10.1 (Build 27)
+
+What's New Since Build 26
+
+MeshWX v4 Protocol & Radar Fixes
+
+Fixed v4 multi-chunk radar frame detection — the byte offset for reading totalChunks was wrong after the timestamp field expanded from 2 to 4 bytes, causing multi-chunk radar fragments to appear as "Decode failed" in the Weather Log. These fragments now buffer silently until the full frame is assembled.
+
+Radar frames are deduplicated by (regionID, timestamp). If a higher-resolution 64×64 FEC composite arrives for the same scan time as an existing 32×32 base layer, it replaces the lower-resolution frame automatically. Timestamps are UInt32 big-endian Unix minutes representing the actual NEXRAD scan time, not when the bot sent it.
+
+Unified Station Cards
+
+Station cards now use a consistent layout across Favorites, Requests, and Broadcasts — bold ICAO header, station name, and ··· menu button are always inside the card. Previously, the "Your Requests" section used a different layout with the title outside as a section header.
+
+Timeout & Request UX
+
+Timed-out requests now show "request timed out" status instead of silently disappearing. The station card and its ··· menu persist after timeout so you can re-request without searching again. Pending forecast requests are now tracked in station groups so cards don't vanish while waiting for data.
+
+Disabled Products
+
+Hazard Outlook, Storm Reports, Precipitation Reports, and Warnings Near Location are temporarily disabled in request menus while being implemented. Current Conditions, Forecast, and TAF remain active.
+
+Discovery Channel
+
+The #meshwx-discover channel is now pinned to the bottom of the chat list so beacon traffic doesn't float above your conversations.
+
+Channel Requests
+
+Weather data requests now work on both the text command channel and the binary data channel, matching an update to the MeshWX bot that accepts WXQ commands on either channel.
+
+---
+
+Previous Builds
+
+v0.10.1 (Build 26)
+
+MeshWX Weather System
+
+A new Weather tab delivers live NWS weather data over the mesh from a MeshWX bot node. The app automatically subscribes to the weather channel — no manual channel setup or bot configuration required. Data appears whenever a MeshWX bot is active on your mesh and broadcasts.
+
+Supported data types: Current Conditions (METAR), 7-Day Forecasts, TAF, Radar, Active Warnings. Search by city name, state abbreviation, or ICAO airport code to request specific data from the bot.
+
+Station cards combine observations, forecast, and TAF into a single unified row. Stations are organized into three collapsible sections: Favorites, Requests, and Broadcasts. After requesting a station, the view scrolls to the new card and expands its section automatically. A global °F/°C toggle applies across all temperature displays. Swipe a station card to clear its data.
+
+Active Warnings
+
+Active warnings appear at the top of the Weather list, above all station sections, with a vertical color stripe indicating severity. Warnings are collapsible — the header always shows the count so active alerts are visible at a glance. Tapping a warning navigates to the Map tab and zooms to the warning polygon, enabling the weather overlay automatically. Warnings drop off automatically when their NWS expiry time passes.
+
+Radar Overlay
+
+Radar frames are rendered with bilinear interpolation (8× upscale) producing smooth gradients between grid cells. Opacity scales with precipitation intensity — light echoes are semi-transparent, heavy precipitation renders at higher opacity. Warning polygons draw above the radar layer. Radar data now persists across app restarts.
+
+Requests & Bot Setup
+
+Weather requests are sent on the shared channel by default — no bot contact name needed. Direct Message mode (with automatic retry and ACK) is available via the ⓘ button. The bot is auto-discovered from the first broadcast.
+
+Weather Reliability & Crash Fixes
+
+Fixed several crashes in the binary weather decoder. Multi-chunk radar frames now reassemble correctly using a (region, timestamp) buffer key — intermediate chunks are buffered silently and only the completed frame appears in the Weather Log. MSG_NOT_AVAILABLE responses stop pending spinners immediately.
+
+Weather List UX
+
+Section headers (Favorites, Requests, Broadcasts) are always shown when their section has content. Headers use larger subheadline fonts and meet Apple's 44pt minimum touch target for reliable tapping.
+
+Signal Bars Aggressive Recovery
+
+The repeater TX signal bars service retries faster when a repeater fails: first retry at 20 s, second at 45 s, third at 90 s. The service also reactively re-pings any failed repeater when a packet is received from it (30 s cooldown).
+
+---
+
+Previous Builds
+
+v0.10.1 (Build 20)
+
+Path Map Crash Fix
+
+Fixed a crash when opening a shared route map or path map where no hops could be geo-located. The app would crash with "Range requires lowerBound <= upperBound" because the line overlay loop underflowed when the located points array was empty. Applied the same defensive fix to the heard repeats map.
+
+---
+
+Previous Builds
+
+v0.10.1 (Build 19)
+
+Human-Readable Reaction Wire Format
+
+Reactions (tapbacks) are now sent as human-readable messages over the mesh instead of compact binary-style payloads. Channel reactions look like `👍 reacted to [SenderName]: "message snippet" (hash)` and DM reactions look like `👍 reacted to: "snippet" (hash)`. This makes reactions visible on non-iOS clients that display raw message text. Backwards compatible — the parser accepts both old and new formats.
+
+Reaction Heard Repeats & Send Again
+
+When you long-press a reaction badge to open the reaction details sheet, your own outgoing reactions now show how many times the reaction was repeated through the mesh (the same repeat count shown on regular messages). A "Send Again" button lets you re-broadcast a reaction that may not have reached enough repeaters. This works by linking each outgoing reaction to its carrier message in the database.
+
+Simplified Survey UI
+
+Removed the survey focus mode toggle and streamlined the signal survey toolbar. The survey view now always shows the full toolbar without a separate focused/unfocused state. Focus mode buttons (lock, chart, radar) have been removed in favor of the standard toolbar layout.
+
+Repeater Benchmark Improvements
+
+The benchmark tool now includes a repeater picker row component and improved comparison logic. Benchmark view and view model have been updated with additional signal analysis features.
+
+Contacts View Cleanup
+
+Contacts list views (compact, split, empty states, search empty) have been cleaned up with minor layout and consistency improvements.
+
+---
+
+Previous Builds
+
+v0.10.1 (Build 18)
+
+Deep Scan Gating
+
+Discover requests are now gated behind Deep Scan mode. Regular active probing sends channel messages only, reducing RF overhead. When Deep Scan is enabled, full discover + trace probing resumes for comprehensive coverage analysis.
+
+Mesh Gateway Scoring
+
+Trace data is analyzed to identify the best gateway repeater per cell based on mesh connectivity. The cell detail card adapts its layout based on available data — single RX column without deep scan data, two-column RX/TX with a mesh gateway section when deep scan data is present.
+
+Path Hash Size Quick-Picker
+
+New picker in the repeater signal popover lets you switch between 1-byte, 2-byte, and 3-byte path hash modes without navigating to settings.
+
+Client-Authority Route Sharing
+
+When sharing a route from the iOS app, a `clientResolved` flag tells the server to trust the client's bidirectional anchor-aware repeater resolution. Previously the server would re-resolve hex IDs against the community database, often producing different (incorrect) matches, especially for ambiguous 1-byte prefixes.
+
+Hop Distances on Shared Web Pages
+
+Shared route and path web pages now display per-hop distances computed via Haversine formula. Distances are shown between consecutive located hops in the hop connector, with a total chain distance in the summary. Formatting is locale-aware (miles for en-US, km otherwise).
+
+Collapsed Share Panel
+
+Shared route/path web pages now start with the detail panel collapsed so the path lines are visible on the map. A one-line summary (hop count + total distance) is shown in the collapsed header. Tap to expand for full details.
+
+Repeater Benchmark Tool
+
+New tool in the Tools tab for benchmarking repeater signal quality with comparison and history views.
+
+Ambiguous Repeater Selection Fix
+
+User selections in the "Choose Repeater" disambiguation sheet now persist across view rebuilds and are correctly applied when sharing routes to the server. Previously, selections were stored in ephemeral SwiftUI state and lost when the sheet was reopened.
+
+Resolver Staleness Bias
+
+The repeater resolver now checks recency before anchor proximity. If one candidate hasn't been heard in 7+ days and another has, the active one wins regardless of geographic distance. This prevents stale repeaters from incorrectly matching hash prefixes.
+
+Deleted Repeater Cleanup
+
+Deleting a contact now also removes the corresponding DiscoveredNode entry from the database. Previously, deleted repeaters continued appearing in disambiguation because the DiscoveredNode table was not cleaned up.
+
+Stale Node Filtering
+
+Discovered nodes not heard in 7+ days are excluded from the disambiguation sheet, preventing offline or deleted repeaters from cluttering candidate lists.
+
+Web Map: 7-Day Repeater Declutter
+
+Repeater map pins and the "Repeaters" stat on the community web map now only show repeaters heard in the last 7 days, hiding stale/offline repeaters from the map.
+
+Web Map: Prefix-Aware Repeater Filter
+
+The server-side repeater filter now uses bidirectional prefix matching. Filtering by "0C1377" (3-byte) matches cells with "0C" (1-byte) and vice versa, handling mixed hash-size modes correctly.
+
+Web Map: Hex ID Stability
+
+The server no longer upgrades shorter hex IDs to longer ones in the repeater database or cell references. When a shorter prefix already exists (e.g. "0C"), it is preserved. When a shorter prefix is uploaded and a longer one exists, the longer is downgraded to maintain compatibility with all existing cell references.
+
+Server Fix
+
+Fixed missing averageTxSNR parameter in SurveyController metrics query that was causing Docker build failures.
+
+---
+
+Previous Builds
+
+v0.10.1 (Build 16)
+
+Signal Bars Service
+
+Live repeater signal monitoring with round-robin ping engine measuring RX quality, TX quality, and RTT across all reachable repeaters. Compact firmware-style popover shows all repeaters ranked by signal strength with RX/TX bars, RTT, and age. Best repeater indicator in toolbar. Dual RX/TX bars on survey floating pill.
+
+iMessage-Style Swipe Timestamps
+
+Swipe horizontally on chat messages to reveal per-message timestamps. Works across channels and DMs.
+
+Two-Column RX/TX Cell Detail Card
+
+Cell detail card shows RX and TX data in side-by-side columns with signal bars, quality label, average SNR, and direction-specific details (RSSI under RX, SNR range under each). Shared stats appear below the columns.
+
+Streamlined Survey Completion
+
+Single completion sheet with stats, coverage breakdown, repeater info, personal records, community map impact, and inline upload button.
+
+Survey Completion Stats
+
+Sessions persist completion stats (duration, packets, cell breakdown, repeaters). View saved stats from session list via the chart icon.
+
+Personal Records
+
+Trophy badges for personal bests: longest duration, most packets/cells/connected cells/unique repeaters.
+
+Lifetime Stats Dashboard
+
+Session list header shows lifetime totals across all sessions.
+
+TX SNR Tracking
+
+Survey points capture TX SNR from discover and trace responses. Included in exports and community uploads.
+
+Survey Point Dedup Fix
+
+Heard-repeat confirmations from different repeaters sharing the same packet hash are now recorded separately using a composite dedup key.
+
+Improved Tap Targets
+
+Touch targets across the cell detail card meet Apple's 44pt HIG minimum via contentShape modifiers.
+
+Updated How It Works Guide
+
+Rewritten with 10 sections covering probe settings, cell detail card, RX/TX signal columns, community map, sessions & history, and more.
+
+Survey UX Improvements
+
+Full-row tap targets for empty state actions. Custom back button returns to survey dashboard. Cached session counts for fast loading.
+
+Contact Sync Crash Fix
+
+Fixed EXC_BAD_ACCESS from concurrent SQLite writes during contact sync. Contacts now saved in a single batch transaction.
+
+TipKit Prompt
+
+Contextual prompt encouraging repeater location sharing.
+
+Heard Repeats Share Fix
+
+Fixed blank sheet when sharing heard repeats by using fullScreenCover instead of nested sheet.
+
+---
+
+Previous Builds
+
+v0.10.1 (Build 15)
+
+Path Map
+
+New "Path Map" tool in the Tools tab. Enter hex IDs (comma or space-separated) to visualize the path through repeaters on an interactive map. Hex IDs are resolved against your local contacts and discovered nodes. Supports 2–6 character hex hashes and full 64-character public keys. Includes map controls for layers, label modes, and centering on the path.
+
+Once the map is generated, tap "Share" to upload the path and create a shareable web link (e.g. mesh.digitaino.com/p/abc123). The web page shows the same hop-by-hop map with a collapsible details panel.
+
+Chat Path Detection
+
+Messages containing hex path chains (3+ hex tokens) are now automatically detected. An inline "Path Map" card appears below the message bubble — tap it to open the path on a map.
+
+Web Path Creator
+
+New public web page at mesh.digitaino.com/path for creating shareable path maps in a browser without the app. Enter hex IDs in the form, and the server resolves repeater locations from the community database and generates a short link. Rate-limited, no API key required.
+
+Background Repeater Location Sharing
+
+New opt-in feature that periodically shares your device's known repeater locations with the community server. When enabled, repeater GPS coordinates from your contacts and discovered nodes are uploaded to enrich the community map for everyone. Requires contributor verification via your device's cryptographic key. Uploads are throttled to a 15-minute minimum interval and only sent when repeater data changes. Includes a "Share Now" button for immediate manual uploads.
+
+My Survey Routes
+
+New view in Signal Survey showing your uploaded survey routes from the community server. Displays route status (Created, In Progress, Completed, Abandoned), waypoint progress, skipped waypoints, and origin (web or local).
+
+Repeater Resolver Improvements
+
+The repeater resolver now supports anchor-aware resolution for path visualization. When a previous or next hop location is known, the resolver prioritizes repeaters geographically close to that anchor point, significantly improving accuracy over recency-only matching. Also handles full 32-byte public key inputs by truncating to the matching prefix length.
+
+Server-Side Path Resolution
+
+When creating shared paths (from the app or the web form), the server auto-resolves missing repeater locations using the community repeater database. Uses cascading match logic: exact hex ID, then prefix matching (handles 2-char IDs matching 4-char stored IDs), then public key prefix matching.
+
+Admin Dashboard
+
+New tabs in the admin dashboard: Shared Links (view/delete shared routes, maps, and paths), Survey Routes (lifecycle status, notes, deletion), Plan Sessions (view/manage planning sessions). All tables have sortable column headers. Repeaters and cells can now be hidden from public maps with admin notes.
+
+Bug Fixes
+
+Fixed server-side repeater resolution excluding all repeaters because the hidden field is nullable — NULL != true evaluates to NULL in SQLite, so no repeaters were returned. Fixed admin dashboard linking path shares to /m/ instead of /p/. Fixed shared path web pages not auto-expanding the details panel. Added "No Located Hops" overlay on web path pages when no repeaters could be resolved. Corrected repeater timestamp semantics for lastHeard field. Full public key is now sent with repeater location uploads for better resolution.
+
+---
+
+Previous Builds
+
+v0.10.1 (Build 14)
+
+Plan Survey Route (Experimental)
+
+New route planner in Signal Survey. Tap the route icon in the toolbar to define a survey area by drawing a polygon directly on the map, then generate a walking or driving route through all hex cells in that area. You can also use "Draw on Web" to draw the polygon on a larger screen -- it creates a 6-character pairing code and shareable link, and the polygon is sent back to your phone. Once generated, the route appears as an overlay with turn-by-turn guidance.
+
+CLI Console from Repeater Settings
+
+After logging in as admin on a repeater, a new "CLI" button in the settings view opens the CLI console pre-authenticated to that repeater. No need to re-login from the Tools tab -- the existing session is reused.
+
+Bug Fixes
+
+Improved error messages for "Draw on Web" session creation failures -- now shows actual HTTP status instead of a generic error code.
+
+---
+
+Previous Builds
+
+v0.10.1 (Build 13)
+
+Message Search
+
+The search bar in the Chats list now searches message content across all conversations, not just conversation names. Results appear in a "Messages" section grouped by conversation with highlighted text snippets. Tap a result to jump directly to that message -- it flashes briefly so you can spot it. When a conversation has more than 3 matches, tap "X more" to expand all results inline.
+
+Inside any conversation, pull down to reveal a search bar. A bottom toolbar shows "X of Y" with previous/next arrows to navigate between matches. The current match gets an accent-colored border on the bubble.
+
+Both search modes use database-level queries (case and diacritic insensitive) so they stay fast even with thousands of messages.
+
+Upstream Merge
+
+Channel messages now appear instantly before server confirmation (optimistic sending). New toggle in chat settings for quoting the original message in replies. BLE stability fixes for session reconnect races, RX log pruning, and message auto-fetch coalescing.
+
+Community Map Filters and Performance
+
+The community overlay on both the survey map and standalone map now has a filter toolbar with coverage type (All/Active/Passive), repeater selection, and time range. Filters re-fetch from the server for accurate results. When filtering by a specific repeater, cell detail cards show that repeater's individual SNR/RSSI/packet count. Selecting a repeater filter draws dashed lines from each cell to the repeater's location with arrows for off-screen repeaters. Community hex cells now render via UIKit MKOverlayRenderer, handling 5000+ cells without lag. A "My Cell" button during active surveys zooms to your current cell.
+
+Bug Fix
+
+Fixed scrolling bug in repeater telemetry status history. Thanks ASTpoetry.
+
+---
+
+Previous Builds
+
+v0.10.1 (Build 10)
+
+## Web Share Identity
+
+- **Sharer's name on web links** — Shared route and repeater map web pages now show your MeshCore contact name instead of "You" at the receiver position. When you share a route (`/r/...`) or repeater map (`/m/...`), your device name is included in the upload and displayed on the web page — both in the hop list and on the map marker. Older shares without a name gracefully fall back to "User".
+
+- **Contact name pre-filled for surveys** — The "Include Contact Name" toggle in the survey setup sheet now defaults to on for new installs, so your MeshCore name is automatically associated with community map contributions. You can still toggle it off if you prefer anonymous uploads.
+
+## Community Map Filters & Performance
+
+- **Coverage, repeater, and time filters** — The community overlay on both the survey map and the standalone map now has a filter toolbar with coverage type (All/Active/Passive), repeater selection, and time range. Changing any filter re-fetches from the server so results are accurate, not just client-filtered.
+
+- **Per-repeater signal metrics** — When filtering by a specific repeater, cell detail cards show that repeater's individual SNR/RSSI/packet count instead of the cell's aggregate stats. Active/passive counts are hidden when irrelevant to the selected coverage filter.
+
+- **Cell-to-repeater polylines** — Selecting a repeater filter draws dashed lines from each cell to the repeater's location. Lines for off-screen repeaters extend to the map edge with an arrow indicator.
+
+- **MKOverlayRenderer for community cells** — Community hex cells now render via UIKit `MKOverlayRenderer` instead of SwiftUI `MapPolygon` views, handling 5000+ cells without UI lag.
+
+- **"My Cell" button** — During an active survey, a "My Cell" button in the stats bar zooms to your current cell and selects it. Camera zoom now correctly drives the UIKit MKMapView.
+
+## Server & Performance
+
+- **Server-side filtering** — `/api/v1/cells` now supports `coverage`, `maxAge`, and `repeater` query params, reducing payload size. Spatial index on lat/lon for faster bounding-box queries.
+
+- **Gzip compression** — Server responses are gzip-compressed (~80% reduction). Cache-Control headers added per route type.
+
+- **Raw SQL for cell queries** — Cell fetching uses raw SQL with GROUP_CONCAT for repeater data, replacing N+1 Fluent eager loads.
+
+## Upstream Merge
+
+- **Optimistic sending** — Channel messages appear instantly in the chat before server confirmation.
+- **Reply with quote** — New toggle in chat settings for quoting the original message in replies.
+- **BLE stability** — Fixes for session reconnect races, RX log pruning, and message auto-fetch coalescing.
+
+---
+
+# v0.10.1 (Build 9)
+
+## Signal Survey Enhancements
+
+- **Time filters on community map** — Both the iOS community map overlay and the standalone Community Map view now have time filters (1 Hour, 12 Hours, 1 Day, 3 Days, 5 Days, All Time) to show only recent survey data. Matches the time filter already available on the web frontend.
+
+- **Community map is now an overlay** — The "Community Map" menu item has been replaced with a toggle that shows/hides community survey data directly on the main survey map, instead of opening a separate full-screen view. Filters for coverage type, repeater, and time are shown in a filter bar when the overlay is active.
+
+- **Survey indicator moved to top-right** — The floating survey status indicator (visible when navigating away from the survey) now appears at the top-right of the screen instead of the bottom-right, avoiding overlap with the tab bar and chat input.
+
+- **Session deselect clears map** — Tapping the X button on a selected session now clears the map entirely instead of loading all sessions. Use the "All Sessions" menu item to explicitly load all session data.
+
+- **Clear Map option** — New "Clear Map" button in the toolbar menu and an X button on the "all sessions" view to quickly clear all survey data from the map without selecting a specific session.
+
+- **Probe count persists on navigate away** — Probe data (`probesSentPerCell`) is now saved to the database when you navigate away from the survey, so returning via the floating indicator correctly restores the probe count instead of resetting to zero.
+
+- **Resume flow no longer flashes empty state** — When tapping the floating indicator to return to an active survey, a "Resuming survey…" spinner is shown instead of briefly flashing the empty "Start Survey" screen.
+
+- **Crash fix for force unwrap** — Fixed two force-unwrap crashes: one when navigating away while community data was loading (`communityUploadService!`), and one in grid bucket lookup (`gridBuckets[hex]!`). Community refresh is now cancelled on disappear.
+
+- **Updated How It Works guide** — The "How It Works" info sheet has been rewritten with sections on radio asymmetry, passive vs. active surveys, hop count interpretation, map legend (including dead zones as gray dashed cells), community map overlay usage, and updated tips for Deep Scan mode, driving mode, and live upload.
+
+---
+
+# Previous Builds
+
+## Build 8 (v0.10.1)
+
+## Shared Repeater Maps — Full Web Experience
+
+- **Repeat-by-repeat navigation on web** — Shared repeater map pages (`mesh.digitaino.com/m/...`) now have left/right navigation arrows matching the iOS "Repeat Coverage" screen. Cycle through individual repeats to see each path's hop chain, SNR, and route lines on the map. The "All" view shows aggregated repeaters with overall hop numbers.
+
+- **Path lines on web maps** — Shared repeater maps now draw dashed outbound lines between hops and solid SNR-colored last-hop lines matching the iOS map rendering. Hop numbers are shown on pins and in the panel list.
+
+- **"You" marker on web maps** — Both shared route and repeater map pages show your approximate location as a "You (approx.)" marker when location was included in the share, with connecting lines to the first/last hops.
+
+- **Community signal overlay on web shares** — Both shared route and repeater map pages now have a toggleable community signal cell overlay (📶 button), showing crowd-sourced coverage data alongside your shared data.
+
+- **Standalone share messages** — Shared repeater maps now compose a standalone message like "📡 4 repeats via 0C, C0, 80, 78" with the URL, instead of replying to yourself.
+
+## Location Privacy for Sharing
+
+- **Location picker for route sharing** — Route sharing now prompts you with an interactive location picker (same as repeater map sharing) where you can adjust your shared position within a 500m circle of your true location, or toggle location off entirely.
+
+- **Simplified location options** — The location picker now offers two clear choices: include an approximate location (snapped to ~500m) or omit location entirely.
+
+## Per-Repeater Signal Metrics
+
+- **Per-repeater SNR/RSSI in cell detail** — When filtering the community map by a specific repeater, the cell detail popup now shows that repeater's individual signal metrics (SNR, RSSI, packet count) instead of the cell's aggregate. This lets you compare signal quality between repeaters in the same cell.
+
+- **Per-repeater data in uploads** — Survey uploads now include per-repeater weighted-average SNR/RSSI/packet counts (format v1.2), enabling finer-grained analysis on the server.
+
+## Repeater Resolver Improvements
+
+- **Recency-first resolver** — With 1-byte path hashes (256 values), collisions are common. The resolver now prioritizes recently-heard repeaters over geographically closer ones, fixing cases where a months-old stale contact would incorrectly match a hash.
+
+- **Multi-byte hash support** — Hex ID consolidation now keeps the longest form (e.g. "8850" instead of "88") for better repeater specificity as multi-byte path hashes roll out.
+
+## Community Web Map
+
+- **Viewport-scoped repeater filter** — The repeater filter dropdown on the web community map now only lists repeaters whose physical locations are within the current map viewport. Zooming in narrows the list; zooming out expands it.
+
+- **SSE real-time updates** — The web community map now receives push updates via server-sent events when new survey data is uploaded, instead of polling every 15 seconds. Cell updates are diff-based, preserving your selected cell popup across refreshes.
+
+## Server Security & Operations
+
+- **API key rotation** — Server now reads the API key from environment variables instead of hardcode. Supports dual-key acceptance (`SURVEY_API_KEY` + `SURVEY_API_KEY_OLD`) for zero-downtime key rotation.
+
+- **Rate limiting** — Per-IP rate limiting added: 60 requests/minute for public endpoints, 10/minute for write endpoints (uploads, share creation).
+
+- **Access logging** — Apache Combined Log Format access and error logging for all requests.
+
+- **XSS protection** — HTML escaping and script-tag sanitization on shared route/map pages.
+
+- **Database backups** — New deploy script automatically backs up the SQLite database before every rebuild, keeping the 10 most recent backups.
+
+- **iOS API key in xcconfig** — API key moved from hardcoded Swift string to a gitignored `Secrets.xcconfig` file, read at runtime via Info.plist.
+
+## Bug Fixes
+
+- **Mesh Reach redesign** — Now shows max hop depth (1=direct, 2=one relay, etc.) instead of raw trace packet count.
+
+- **Active filter fix** — Active probing filter now only counts `.control` packets (bidirectional discover responses) instead of including one-way `.trace` floods.
+
+- **Follow-cell camera offset** — When tracking your location during a survey, the map center shifts slightly north so the current cell appears above the detail card instead of being hidden behind it.
+
+---
+
+## Build 7 (v0.10.1)
+
+## Share Heard Repeaters
+
+- **Share repeater map from messages** — On sent channel messages with heard repeats, a new "Share" button uploads the aggregated repeater data to the server and generates a shareable web link (e.g. `mesh.digitaino.com/m/abc123`). The web page shows all heard repeaters on an interactive map with signal quality color coding, heard counts, SNR/RSSI stats, and a collapsible detail panel.
+
+## Route Distance Fix
+
+- **Correct route distance calculation** — Fixed a bug where shared route distances were significantly underestimated (e.g. 1.4 mi instead of ~4 mi). The issue was caused by 1-byte hop hashes falsely matching non-repeater contacts whose public key prefix collided, producing wrong or missing locations. Hop resolution now prioritizes repeater-typed contacts before falling back to discovered nodes and then all contacts.
+
+- **Direct distance computation for shared routes** — Route sharing now computes distance directly from resolved hop coordinates instead of parsing it from the route info string, ensuring the web link always shows the correct distance.
+
+## Active vs Passive Survey Probing
+
+- **Active/passive packet distinction** — Survey data now tracks whether each packet was collected during active probing (bidirectional confirmation via trace/control packets) or passively (RX only). The cell detail card shows separate active and passive packet counts.
+
+- **Active/Passive filter on community map** — Both the iOS Community Map and the web frontend at mesh.digitaino.com have Active/Passive/All filter buttons. Filter the coverage map to see only actively probed cells, passively heard cells, or both.
+
+- **Faster active probing** — The probe scheduler now triggers more frequently on cell-exit events, improving coverage density during wardriving.
+
+- **Session close button** — Active survey sessions now have a close button in the toolbar for quick access.
+
+---
+
+## Signal Quality Bars & Repeater Filtering
+
+- **Signal quality bars in cell detail** — Both the iOS community map and the web frontend cell popups now show a 5-segment visual signal quality bar (like cellular bars) color-coded by SNR quality level. Makes it easy to gauge signal strength at a glance.
+
+- **Repeater filter** — Filter the community map by specific repeater. A dropdown menu lets you select a repeater (shown by name when known, hex ID otherwise) and see only cells where that repeater was heard. Available on both the iOS community map and the web frontend.
+
+- **Selected cell highlight** — On the web frontend, clicking a cell now highlights it with a white border on the map so you can see which cell's popup you're viewing.
+
+---
+
+## Batch Upload & Session Deduplication
+
+- **Upload Sessions picker** — The "Upload All Sessions" button has been renamed to "Upload Sessions..." and opens a multi-select picker where you can choose which sessions to upload, not just all of them.
+
+- **Idempotent uploads** — Each upload now includes session UUIDs. The server tracks which sessions have been uploaded and automatically replaces previous data for those sessions instead of accumulating duplicates. Re-uploading the same session is safe and produces the same result.
+
+- **Live upload dedup** — Live per-packet uploads are tagged with the active session ID. When you later do a batch upload of the same session, the server removes the live-uploaded data and replaces it with the consolidated batch, preventing double-counting.
+
+- **Delete My Server Data** — New option in the Upload Sessions toolbar menu lets you delete all your contributed data from the community map server. Useful for starting fresh.
+
+---
+
+## Hex ID Normalization
+
+- **Consistent repeater hex IDs** — Repeater hex IDs are now normalized across sessions and upload paths. Different-length hashes for the same repeater (e.g. "0C" vs "0C13") are consolidated to the shortest unique prefix, ensuring consistent cell-to-repeater associations in the community map.
+
+---
+
+## Build 4 (v0.10.1)
+
+### Community Signal Map
+
+- **Live upload to community map** — New "Live Upload" toggle in the survey setup sheet. When enabled, each received packet's hex cell is immediately uploaded to mesh.digitaino.com as you survey, so the community coverage map updates in real time. Data is anonymized — only hex grid cells (~100m), signal stats, and repeater IDs are sent. No exact GPS, device identity, or message content is included. When disabled, you can still export and upload a full session manually from the toolbar menu after the survey.
+
+- **Community map auto-refresh** — The community signal map overlay (both the dedicated Community Map view and the main map's hex overlay) now auto-refreshes every 15 seconds, so cells uploaded by you or other users appear live without needing to pan or zoom. The web frontend at mesh.digitaino.com also auto-refreshes.
+
+- **Community overlay on main map** — Toggle the hex overlay from the main map to see crowd-sourced signal quality from all contributors, not just your own surveys. Cells are color-coded by SNR quality and scale opacity by contribution count.
+
+- **Repeater names and locations in uploads** — Community uploads now include resolved repeater names and GPS locations (from your known contacts), so the community map can show named repeater pins, not just hex IDs.
+
+### Shareable Route & Repeater Maps
+
+- **Shareable route links** — When you "Reply with Route", the route data is uploaded to the server and a short URL is generated (e.g. `mesh.digitaino.com/r/abc123`). The link opens a web page with an interactive Apple MapKit JS map showing the route plotted through repeaters with hop-by-hop annotations, a polyline connecting located hops, and a collapsible details panel with hop count, distance, and a list of each hop.
+
+- **Shareable repeater map links** — Similarly, repeater maps can be shared as web links showing all your known repeaters with signal quality color coding, heard counts, SNR, and RSSI stats.
+
+- **Collapsible share panels** — The web pages for shared routes and repeater maps have a collapsible bottom panel that you can tap to expand/collapse, keeping the map unobstructed.
+
+### Traffic Map Overhaul
+
+- **MKMapView with clustering** — The traffic map has been rebuilt from SwiftUI Map with Annotation views to a native MKMapView (UIViewRepresentable) with proper annotation clustering, native callouts, and correct hit testing. Overlapping repeater bubbles are now tappable even when dense.
+
+- **Public key hex on pins** — Repeater pins now show the first byte of the node's public key as a hex label (e.g. "A3") instead of a generic antenna icon. This makes it easy to identify individual repeaters at a glance. The full public key is shown in the detail sheet.
+
+- **Tappable callouts** — Tapping a repeater pin shows a native MKAnnotation callout with packet count, SNR, last-seen time, and a 3-byte key prefix. A "Details" button opens the full detail sheet with signal stats and the complete public key.
+
+- **Info guide button** — New info button in the traffic map toolbar opens a guide sheet explaining pin colors, SNR thresholds, route lines, callouts, and time period filtering.
+
+- **SNR last-hop-only fix** — Signal quality (SNR) is now correctly attributed only to the last hop in the packet path. Previously, the same SNR was misleadingly applied to all hops and route segments. Route lines now use uniform cyan with opacity scaling by traffic volume instead of SNR-based coloring.
+
+- **Time period filtering** — The traffic map's time period menu dynamically adapts its options based on how old the data is (e.g. Last 15m/30m/All for recent data; Last 1d/3d/7d/All for older data). The selected period filters which packets are shown on the map.
+
+- **Location button fix** — The location button in the traffic map toolbar now correctly centers the map on the user's location, even after manually panning.
+
+### Map — Last Heard Filter
+
+- **Time filter bar on main map** — A scrollable filter bar at the top of the main map lets you filter displayed nodes by when they were last heard: 1 Hour, 12 Hours, 1 Day, 3 Days, 5 Days, or All Time. This makes it easy to see which repeaters and nodes are currently active versus stale.
+
+### Branding
+
+- **PocketMesh → DigitainoMesh** — Updated user-facing references from "PocketMesh" to "DigitainoMesh" in the survey export filename, setup sheet text, and code documentation. Internal identifiers and upstream attribution remain unchanged.
+
+## Build 3 (v0.10.1)
+
+### Signal Survey (Wardriving)
+
+- **Coverage heatmap tool** — New tool under Tools > Signal Survey. Start a GPS-tagged survey session that pairs every received RF packet with your phone's location. As you move around, the app builds a live coverage map of your mesh network's signal quality.
+
+- **Hex grid heatmap** — Received packets are aggregated into a hex grid overlay on the map. Each cell is color-coded by average SNR (green = excellent, red = poor). Tap any hex cell to see a detail card with signal quality, packet count, and which repeaters were heard in that cell. The heatmap is the default visualization; you can switch to a raw point cloud view if preferred.
+
+- **Active trace probing** — Toggle active probing to automatically send flood traces on a smart schedule (triggered by cell-exit or a max timer). Probed repeaters appear in the cell detail card alongside passively heard packets. Filter the heatmap by All / Passive / Active to see probe-only vs. passive-only coverage. A manual probe button with heavy haptic feedback and a visual pulse animation lets you trigger a trace on demand.
+
+- **Repeater annotations** — Resolved repeater contacts with GPS locations appear as cyan antenna pins on the survey map. Tap a repeater pin to see a detail sheet with name, public key, coordinates, and a "View Contact Card" button. When you select a repeater filter chip in the cell detail card, a dashed line is drawn from the cell center to the repeater's location on the map.
+
+- **Session management** — Create, rename, and delete survey sessions. Switch between sessions to review past data. The active session resumes automatically when navigating back to the survey. A "Recording" indicator is visible from the Tools list. Screen lock is prevented during recording.
+
+- **JSON export** — Export anonymized grid data as JSON for external analysis.
+
+  **How to test:** Go to Tools > Signal Survey. Tap "Start Survey" and walk/drive around with your MeshCore device connected. Verify hex cells appear and update as packets arrive. Tap a cell to see the detail card — check signal bars, quality label, packet count, and repeater chips. Switch between All/Passive/Active filters and verify the cell colors and card stats update. Toggle active probing and verify traces are sent (the manual probe button should show an expanding orange ring). Tap a cyan repeater pin and verify the detail sheet shows correct info. Navigate away from the survey and come back — it should resume recording. Try renaming and deleting a session.
+
+---
+
+### Nodes List Improvements
+
+- **Search by public key** — The search bar in the Nodes list now matches against public key hex prefixes. Type a hex string like "0C" or "D1A9" and nodes whose public key starts with that prefix appear at the top of results, followed by substring matches, then name-only matches.
+
+- **Public key prefix display** — Each node row now shows the first 3 bytes of the node's public key in monospaced text below the name and distance (e.g. "0C 13 77"). This makes it easy to identify nodes by their key prefix at a glance.
+
+- **Public key in map contact detail** — Tapping a node pin on the map and opening its detail card now shows the full public key in a selectable monospaced field.
+
+  **How to test:** Open the Nodes tab and verify each row shows a 3-byte hex prefix below the name. Use the search bar — type a 2-character hex prefix and verify the matching node appears at the top. Open the map, tap a node pin, and verify the detail card shows the public key.
+
+---
+
+### Maps Modernization
+
+- **SwiftUI Map migration** — All route maps have been modernized from UIKit MapKit wrappers to native SwiftUI Map views. This improves rendering consistency and simplifies the codebase.
+
+- **DM path display fix** — Direct message route maps now correctly show the message path.
+
+- **Contact route map fix** — The contact route map now correctly renders the aggregated route history.
+
+---
+
+### Upstream Merge & Unified Chat
+
+- **Unified chat view** — DM and channel chat views have been merged into a single `ChatConversationView`, reducing code duplication and ensuring feature parity between DM and channel conversations.
+
+- **Performance improvements** — SwiftData indexes added to Contact, Channel, and RemoteNodeSession models. Conversation reload tasks are debounced. Existence checks use `fetchCount` instead of full fetches.
+
+- **Persistent message deduplication** — Replaced the in-memory dedup cache with persistent packet hash deduplication, preventing duplicate messages across app restarts.
+
+- **Crash fix** — Handle transient ModelContainer creation failure during app launch with automatic retry.
+
+---
+
+## Build 13
+
+### Shared Route Map
+
+- **Inline route card** — When an incoming message contains route info (from "Reply with Route"), a tappable "Shared Route" card appears below the message bubble. The card shows a summary of the route — hop count, repeater hex IDs, and distance.
+
+- **Shared route map** — Tap the card to open an interactive map plotting the shared route. Repeater hex IDs are resolved against your known contacts and discovered nodes to place pins on the map. Lines connect consecutive hops, with dashed orange lines for hops that couldn't be located. An info banner shows how many of the hops were located and the original distance text.
+
+  **How to test:** Have someone send a message through multiple hops. Long-press the message, expand path details, and tap "Reply with Route". On the receiving end, verify the reply shows an inline "Shared Route" card below the bubble. Tap the card — the map should open showing pins for any repeaters that have GPS locations in your contacts or discovered nodes. If no hops resolve, an empty state message should appear. Verify that normal messages without "RX via" text do not show the card, and that outgoing messages never show it.
+
+---
+
+## Build 11
+
+### Reply with Route
+
+- **Reply with route info** — In the message long-press menu, expand the path details and tap the new "Reply with Route" button. This pre-fills the input bar with a quoted reply that includes the route summary — hop count, distance, and repeater hex IDs. Example: `Via 3 hops · 12.4 mi (A1,B2,C3)`.
+
+- **Route distance in message details** — The "Hops" row in the expanded path details now shows the total route distance alongside the hop count (e.g. "Hops: 3 · 12.4 mi"). When intermediate repeaters lack location data, a "≥" prefix indicates the distance is a minimum estimate.
+
+  **How to test:** Long-press an incoming message that was relayed through hops. Expand the path details section — verify the Hops row shows a distance. Tap "Reply with Route" and verify the input bar is pre-filled with a reply containing the route info. Send it and confirm the route info appears in the message. Test with both channel messages (should include @[name] mention) and DMs (no mention).
+
+### Route Distance on Maps
+
+- **Message route map distance** — The message route map now displays the total chain distance along the path at the top of the screen. Uses "≥" prefix only when intermediate repeaters in the route are missing location data.
+
+- **Heard repeats map distance** — The heard repeats map shows the total path distance when viewing a single repeat.
+
+  **How to test:** Open a message route map for a multi-hop message — verify the distance badge appears. If all repeaters have GPS, the distance should be exact (no ≥). If some intermediate repeaters lack location, it should show ≥. Check the heard repeats map similarly.
+
+### Swipe to Reply Fix
+
+- **Fixed scroll blocking** — The swipe-to-reply gesture has been rebuilt using UIKit's `UIPanGestureRecognizer` instead of SwiftUI's `DragGesture`. This fixes the issue where the swipe gesture would block normal vertical scrolling in conversations. Swiping right to reply and scrolling up/down now work independently without interfering with each other.
+
+  **How to test:** Open a channel or DM with many messages. Scroll up and down — scrolling should be smooth with no hesitation or blocking. Then swipe right on an incoming message to trigger a reply — the gesture should still work as before with the arrow icon and haptic feedback. Verify that a diagonal swipe (mostly vertical) scrolls instead of triggering the reply.
+
+---
+
+## Build 9
+
+### Swipe to Reply & Haptic Improvements
+
+- **Swipe right to reply** — In both channel and direct message conversations, swipe an incoming message to the right to quickly reply. A reply arrow appears as you swipe; release past the threshold to trigger the reply (pre-fills the input bar with a mention and quoted preview). Works the same as the existing Reply action in the long-press menu, just faster.
+
+- **Improved long-press haptic** — The haptic feedback when you tap and hold a message to open the actions sheet now uses a heavier impact, closer to the old force touch feel.
+
+### Message Draft Persistence
+
+- **Drafts survive navigation** — If you start typing a message in a channel or DM and press the back button, the text you typed is preserved. When you return to that conversation, the draft is restored in the input bar. Each conversation has its own independent draft. Drafts are kept in memory for the current session (cleared on app restart).
+
+### Upstream Sync: PocketMesh → MeshCore One (MC1)
+
+- **Merged upstream rename** — The upstream project has been renamed from PocketMesh to MeshCore One (MC1). All fork files have been moved and updated to match the new project structure. Import statements updated from `PocketMeshServices` to `MC1Services`.
+
+- **File reorganization** — Views for route maps, traffic heatmap, and contact route maps moved from `PocketMesh/Views/` to `MC1/Views/` to align with the new upstream layout.
+
+- **Build version sync** — Fixed a CFBundleVersion mismatch between the main app and the widget extension that was preventing the app from launching on device.
+
+## Build 4
+
+### Map Pin Overhaul
+
+- **Native Apple Map Markers** — All route and trace path map pins have been replaced with Apple's native `MKMarkerAnnotationView` balloon markers, following Apple Human Interface Guidelines. This gives us automatic label collision avoidance, consistent visual language with Apple Maps, and cleaner rendering.
+
+- **Hop Numbers Inside Markers** — On trace path maps, the hop number is now displayed inside the marker balloon glyph instead of a custom badge overlay. Repeaters in the path show a blue marker with the hop number; idle repeaters show a cyan marker with an antenna icon.
+
+- **Endpoint Markers** — Sender and receiver endpoints on message route maps now use distinct colored balloons: teal with a person icon (sender) and blue with a phone icon (receiver).
+
+- **Label Mode Toggle** — A new toolbar button cycles through three label modes on all route/trace maps:
+  - **Hidden** — Labels off, tap a pin to see its callout
+  - **Hex Short** — Shows the 2-byte public key prefix (e.g. "A1B2") for quick identification without cluttering the map
+  - **Full Name** — Shows the repeater's display name with MapKit's adaptive collision avoidance
+
+### Heard Repeats Map — Repeat Cycling
+
+- **Individual Repeat Navigation** — The heard repeats map now has left/right chevron arrows in the summary banner. Tap them to cycle through each repeat individually, seeing only that repeat's path on the map. The default view shows all repeats aggregated. The cycle order is: All → Repeat 1 → Repeat 2 → ... → All.
+
+- **Single Repeat Detail** — When viewing a single repeat, the banner shows "Repeat X of N", the SNR value, and hop count instead of the aggregate summary. Arrows are hidden when there's only one repeat.
+
+  **How to test:** Open a sent message that has multiple heard repeats, then tap "Show on Map". You should see the aggregate view by default. Use the chevron arrows to cycle through — each individual repeat should show only its own path and pins. Verify the SNR and hop count match what the list view shows.
+
+### GPS Location Accuracy
+
+- **Non-blocking GPS** — Sending a message no longer waits for a GPS fix. The message is sent immediately with whatever cached location is available. A fresh GPS request is kicked off in the background, and the message's coordinates are silently patched once the fix arrives. This means route maps should always show your actual position at send/receive time, even if the phone's GPS was cold or stale.
+
+  **How to test:** Send a message from a known location, then open the message route map. Verify the sender pin (teal) matches where you actually were, not some old cached position. Try sending right after opening the app (cold GPS) — the pin should still land correctly after a few seconds.
+
+### Welcome Screen
+
+- Added fork attribution and feedback links to the onboarding welcome screen
+- TestFlight builds show a beta indicator

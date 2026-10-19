@@ -1,0 +1,164 @@
+import Foundation
+
+/// Typed wrapper for `@AppStorage` / `UserDefaults` key strings: user
+/// preferences and lightweight UI state in `UserDefaults.standard`.
+/// Connection-infrastructure keys (reverse-DNS `com.pocketmesh.*`) and the
+/// theme keys live in `PersistenceKeys`; the two namespaces never share a key.
+///
+/// Raw values are pinned to the exact on-disk key each callsite previously
+/// used as a literal, so a case rename can't silently mint a new key and
+/// orphan existing user data. Keep them pinned when adding cases.
+///
+/// A key added here does not survive backup/restore automatically: register
+/// it in `BackupUserDefaults` (a mapping row or a special-cased branch)
+/// unless the value is intentionally device-local.
+public enum AppStorageKey: String {
+  case hasCompletedOnboarding
+  case liveActivityEnabled
+  case showIncomingPath
+  case showIncomingHopCount
+  case showIncomingRegion
+  case showIncomingHeardCount
+  case showIncomingSendTime
+  case linkPreviewsEnabled
+  case linkPreviewsAutoResolveDM
+  case linkPreviewsAutoResolveChannels
+  /// Retained for the backup wire format only; the `linkPreviewsEnabled` master
+  /// now gates inline images, so this value is round-tripped but never read.
+  case showInlineImages
+  /// Master opt-in for the Packet Scope lookup (per-message observer coverage from a
+  /// CoreScope instance). Off by default: enabling it sends packet hashes of the
+  /// user's own messages to the configured server on demand.
+  case packetScopeEnabled
+  /// Second switch under Packet Scope: shows an observer count on every message the
+  /// user sends, looked up automatically while a conversation is on screen. Off by
+  /// default, and only honoured while `packetScopeEnabled` is also on — the readers
+  /// AND the two, so a stale `true` here can never leak hashes on its own.
+  case packetScopeObserverCountsEnabled
+  /// Base URL of the CoreScope instance queried when `packetScopeEnabled` is on.
+  ///
+  /// Intentionally device-local: not registered in `BackupUserDefaults`. Every
+  /// other backed-up key is a preference about *this* device's behaviour; this one
+  /// chooses **where user-derived data is sent**, and a restored backup writes
+  /// keys the device does not already have without prompting. Backing it up would
+  /// let a crafted backup file silently aim packet hashes at a host of its
+  /// choosing. The toggle round-trips (it is a preference); the destination does
+  /// not, so a restore always lands on the default instance.
+  case packetScopeBaseURL
+  case autoPlayGIFs
+  case replyWithQuote
+  case showMapPreviewThumbnails
+  case nodesSortOrder
+  case discoverySortOrder
+  case tracePathViewMode
+  case mapStyleSelection
+  case mapShowLabels
+  case mapClusteringEnabled
+  case mapNorthLocked
+  case showDiscoveredNodesOnMap
+  /// Per-host map filter JSON (`MapFilterState.storageString`).
+  /// Raw values match `BackupUserDefaults` property names so coverage tests stay aligned.
+  case mapFilterMainMap
+  case mapFilterTracePath
+  case mapFilterNeighborSNR
+  case mapColorSchemePreference
+  /// Channel index the signal mapper's manual flood probe transmits on. Never 0: a flood
+  /// on the public channel would put survey noise in front of every stranger on the mesh.
+  case mapperFloodChannelIndex
+  /// Whether the signal mapper's cell card lists as many repeaters as the map can spare
+  /// room for, rather than its three. A standing preference rather than per-hexagon state:
+  /// a rider who wants the long list wants it in the next hexagon too (Rafael, 2026-09-05).
+  case signalMapperCardExpanded
+  /// Retired 2026-10-04 for upstream's `translationOffersEnabled`; read once by
+  /// `TranslationSwitchMigration`.
+  case messageTranslationEnabled
+  case hasSeenRepeaterDragHint
+  /// Whether this iPhone keeps each node's private key in the Keychain, so a new radio can be
+  /// set up as that node (`IdentityKeyVault`, docs/RADIO_SWAP.md R5).
+  case keepNodeKeysOnPhone
+  /// Whether the Network View's "tap an observer, then a route" hint has been
+  /// obeyed once. The hint teaches the panel's focus model; once the model has
+  /// been used, the line is only costing the observer list a row.
+  case hasSeenPacketScopeFocusHint
+  /// Whether the Network View's list is grouped by repeater chain or by
+  /// observer. Raw value of `PacketScopeGrouping`; the chain-major list is the
+  /// default, and the observer-major one answers "which paths reached each
+  /// observer".
+  case packetScopeGrouping
+  /// In-bubble Translate target. `"app"` follows the app locale; `"overlay"` is
+  /// the system Translate sheet; any other value is a language subtag (`da`, `zh`).
+  case translationTargetLanguage
+  /// When true, tap-Translate opens the system Translate sheet. Separate from
+  /// `translationTargetLanguage` so the language subtag is not overwritten.
+  case useDefaultTranslationApp
+  /// When false, incoming messages skip language detection and show no
+  /// in-bubble Translate button.
+  case translationOffersEnabled
+  case autoDeleteStaleNodesDays
+  case lastStaleCleanupDate
+  case frequentEmojis
+  case recentReactionEmojis
+  case isDemoModeUnlocked
+  case isDemoModeEnabled
+  /// Intentionally device-local: not registered in BackupUserDefaults so restored
+  /// hardware still shows the current release's notes once. Registering it would
+  /// suppress the sheet on a genuinely new device.
+  case lastShownWhatsNewVersion
+
+  // Notification toggles read by NotificationPreferences and
+  // NotificationPreferencesStore; all share defaultNotificationEnabled.
+  case notifyContactMessages
+  case notifyChannelMessages
+  case notifyRoomMessages
+  case notifyNewContacts
+  case notifyNewContactsContact
+  case notifyNewContactsRepeater
+  case notifyNewContactsRoom
+  case notifyReactions
+  case notificationSoundEnabled
+  case notificationBadgeEnabled
+  case notifyLowBattery
+
+  public static let defaultShowIncomingPath: Bool = false
+  public static let defaultShowIncomingHopCount: Bool = false
+  public static let defaultShowIncomingRegion: Bool = false
+  public static let defaultShowIncomingHeardCount: Bool = false
+  public static let defaultShowIncomingSendTime: Bool = false
+  public static let defaultLinkPreviewsEnabled: Bool = false
+  public static let defaultPacketScopeEnabled: Bool = false
+  public static let defaultPacketScopeObserverCountsEnabled: Bool = false
+  public static let defaultPacketScopeBaseURL: String = "https://scope.digitaino.com"
+  public static let defaultLinkPreviewsAutoResolveDM: Bool = true
+  public static let defaultLinkPreviewsAutoResolveChannels: Bool = true
+  public static let defaultAutoPlayGIFs: Bool = true
+  public static let defaultReplyWithQuote: Bool = false
+  public static let defaultShowMapPreviewThumbnails: Bool = true
+  public static let defaultMapShowLabels: Bool = true
+  public static let defaultMapClusteringEnabled: Bool = true
+  public static let defaultMapNorthLocked: Bool = false
+  public static let defaultShowDiscoveredNodesOnMap: Bool = false
+  /// Raw value of `AppColorSchemePreference.system` — basemap only, not app chrome.
+  public static let defaultMapColorSchemePreference: String = "system"
+  public static let defaultHasSeenRepeaterDragHint: Bool = false
+  public static let defaultHasSeenPacketScopeFocusHint: Bool = false
+  /// Raw value of `PacketScopeGrouping.path`.
+  public static let defaultPacketScopeGrouping: String = "path"
+  /// Sentinel: in-bubble Translate follows the app locale.
+  public static let defaultTranslationTargetLanguage: String = "app"
+  public static let defaultUseDefaultTranslationApp: Bool = false
+  public static let defaultTranslationOffersEnabled: Bool = true
+  public static let defaultLiveActivityEnabled: Bool = true
+  /// Days before a non-favorite node is auto-deleted; 0 disables cleanup.
+  public static let defaultAutoDeleteStaleNodesDays: Int = 0
+  /// `timeIntervalSinceReferenceDate` of the last cleanup; 0 means never ran.
+  public static let defaultLastStaleCleanupDate: Double = 0
+  /// Shared default for every notification toggle case.
+  public static let defaultNotificationEnabled: Bool = true
+  /// 0 means "none chosen"; the transmit sheet offers to create a private survey channel.
+  public static let defaultMapperFloodChannelIndex: Int = 0
+  /// Collapsed: the card sits on the map that is also being read, so the taller list is
+  /// something the rider asks for rather than something they arrive at.
+  public static let defaultSignalMapperCardExpanded: Bool = false
+  /// On: owner decision 1 of docs/RADIO_SWAP.md §5.
+  public static let defaultKeepNodeKeysOnPhone: Bool = true
+}

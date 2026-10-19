@@ -1,13 +1,13 @@
 # Messaging Guide
 
-This guide covers the message lifecycle, delivery states, retry logic, and ACK handling in PocketMesh.
+This guide covers the message lifecycle, delivery states, retry logic, and ACK handling in MeshCore One.
 
 ## Message Lifecycle
 
 ```
 ┌──────────────────────────────────────────────────────┐
 │                        COMPOSE                       │
-│  User types message in ChatView                      │
+│  User types message in ChatConversationView            │
 └──────────────────────────────────────────────────────┘
                             │
                             ▼
@@ -21,10 +21,11 @@ This guide covers the message lifecycle, delivery states, retry logic, and ACK h
                             ▼
 ┌──────────────────────────────────────────────────────┐
 │                         SEND                         │
-│  MeshCoreSession.sendMessageWithRetry() called       │
-│  • Attempts 1-2: Direct routing                      │
-│  • Attempts 3-4: Flood routing (if direct fails)     │
-│  • Message status: .sending                          │
+│  MessageService.sendMessageWithRetry() runs the      │
+│  app-layer retry loop (sendDirectMessageWithRetryLoop)│
+│  • Attempts 1-3: Direct routing                      │
+│  • Attempt 4: Flood routing (after floodAfter)       │
+│  • Message status: .sent, then .retrying per retry   │
 └──────────────────────────────────────────────────────┘
                             │
               ┌─────────────┴─────────────┐
@@ -44,10 +45,11 @@ This guide covers the message lifecycle, delivery states, retry logic, and ACK h
 |-------|-------------|------------|
 | `.pending` | Saved locally, waiting to send | "Sending..." text |
 | `.sending` | Transmission in progress | "Sending..." text |
-| `.sent` | Radio transmitted, awaiting ACK | "Sent" text |
+| `.sent` (DM) | Radio queued the packet, awaiting end-to-end ACK | "Sending..." text (rendered as in-progress so the user never sees a settled "Sent" that later becomes "Failed") |
+| `.sent` (channel) | Radio queued the broadcast; no ACK, terminal success | "Sent" text |
 | `.delivered` | ACK received from recipient | "Delivered" text |
 | `.failed` | All attempts exhausted | "Failed" text + red exclamation icon + red bubble background |
-| `.retrying` | Manual retry in progress | "Retrying..." text + spinner |
+| `.retrying` | Retry in progress | Spinner + send in flight / total sends ("2/4", "3/4", "4/4" by default; VoiceOver "Retrying %d/%d") when `maxRetryAttempts > 0`, falling back to "Retrying..." when `maxRetryAttempts == 0` |
 
 **Note:** The retry button only appears for messages with `.failed` status. During `.retrying`, the button is replaced with a spinner to indicate the retry is in progress.
 
@@ -55,27 +57,22 @@ This guide covers the message lifecycle, delivery states, retry logic, and ACK h
 
 ### Automatic Retry (sendMessageWithRetry)
 
-**File:** `PocketMeshServices/Sources/PocketMeshServices/Services/MessageService.swift`
+**File:** `MC1Services/Sources/MC1Services/Services/MessageService+SendDM.swift` (config in `MessageServiceConfig.swift`)
 
-Default configuration:
-- `floodFallbackOnRetry: true` - Use flood on manual retry
-- `maxAttempts: 4` - Total send attempts
-- `maxFloodAttempts: 2` - Maximum flood attempts
-- `floodAfter: 2` - Switch to flood after 2 direct attempts
+Default configuration (`MessageServiceConfig`):
+- `floodFallbackOnRetry: true` - Currently unused; no send/retry code reads it. Both automatic and manual retries switch to flood after `floodAfter` direct attempts
+- `maxAttempts: 4` - Total send attempts (capped at 4 = attempt indices 0-3: firmware hashes `attempt & 0x03`, so attempt 4 would repeat attempt 0's ACK code, which a repeater that already relayed it drops). All sends reuse the message's timestamp; a contact with no stored path gets the same count, all by flood
+- `maxFloodAttempts: 1` - Maximum flood attempts
+- `floodAfter: 3` - Reset the path and switch to flood after 3 attempts on the stored path
 - `minTimeout: 0` - Minimum timeout seconds
 - `triggerPathDiscoveryAfterFlood: true` - Trigger path discovery after flood
+- `ackGiveUpWindow: 30` - Floor and post-loop grace for the give-up deadline
 
 ```
-Attempt 1: Direct routing (use contact's outPath)
+Attempts 1-3: Direct routing (use contact's outPath)
     │
     ▼ Timeout, no ACK
-Attempt 2: Direct routing (retry same path)
-    │
-    ▼ Timeout, no ACK
-Attempt 3: Flood routing (broadcast to all)
-    │
-    ▼ Timeout, no ACK
-Attempt 4: Flood routing (final attempt)
+Attempt 4: Flood routing (resetPath, broadcast to all)
     │
     ▼ Timeout, no ACK
 FAILED
@@ -109,38 +106,37 @@ This clears the contact's cached routing path, forcing the mesh to rediscover th
 
 **Automatic Retry:**
 - Initiated by `sendMessageWithRetry()` when first sending a message
-- Message status remains in `.pending` or `.sending` during all attempts
-- Status does NOT change to `.retrying` during automatic retry
-- Retry logic managed internally by `MeshCoreSession`
+- The retry loop runs at the app layer in `sendDirectMessageWithRetryLoop`, not inside `MeshCoreSession`, so each attempt can emit UI feedback
+- After the first attempt fails, status moves to `.retrying` and a `.retrying` event is broadcast per subsequent attempt
 - No user interaction required
 - If all attempts fail, status changes to `.failed`
 
 **Manual Retry:**
 - Triggered when user taps "Retry" button on a failed message
-- Message status immediately set to `.retrying` (visible in UI with spinner)
-- Uses flood routing by default (`config.floodFallbackOnRetry`)
-- User can see retry is in progress
+- The UI's `retryMessage` replaces the `PendingSend` row (`replacePendingSendForRetry`), sets status to `.pending`, and signals the persistent send queue; it does not set `.retrying` immediately
+- The queue drain later runs the same retry loop as an automatic send, which switches to flood after `floodAfter` (3) direct attempts; `.retrying` is only set by the loop after the first attempt fails
 - Retry button disappears while `.retrying` status is active
 
 ### Manual Retry Details
 
-When a user taps "Retry" on a failed message:
+When a user taps "Retry" on a failed message, `ChatViewModel.retryMessage` replaces the persisted `PendingSend` row, sets the status to `.pending`, and signals the send queue:
 
 ```swift
-// MessageService.retryDirectMessage()
-try await dataStore.updateMessageRetryStatus(
-    id: messageID,
-    status: .retrying,
-    retryAttempt: 0,
-    maxRetryAttempts: config.maxAttempts
+_ = try await dataStore.replacePendingSendForRetry(messageID: message.id, dto: dto)
+
+coordinator?.applyStatusUpdate(
+    messageID: message.id,
+    status: .pending,
+    userInitiated: true
 )
 
-// Uses flood mode for manual retry (config.floodFallbackOnRetry)
+try await signalDMEnqueued(envelope)
 ```
 
+The queue drain then calls `sendPendingDirectMessage` (or `resendDirectMessage` when the envelope is `isResend`), which runs `sendDirectMessageWithRetryLoop`. That loop marks `.retrying` via `updateMessageRetryStatus` only after the first attempt fails, and switches to flood after `floodAfter` (3) direct attempts; the same code path serves automatic and manual retries.
+
 The UI shows:
-- "Retrying..." text with a spinner icon
-- No attempt count is displayed (e.g., "1/4", "2/4")
+- A spinner with the send in flight out of the total ("2/4", "3/4", then "4/4" for the flood send) when `maxRetryAttempts > 0`, falling back to the spinner alone ("Retrying..." to VoiceOver) only when `maxRetryAttempts == 0`. The loop stores the retry index and `maxAttempts - 1`; `BubbleFooterRow` adds the first send back, so the total follows `MessageServiceConfig`
 - The retry button is hidden while in `.retrying` status
 
 ## ACK Tracking
@@ -148,110 +144,117 @@ The UI shows:
 ### PendingAck Structure
 
 ```swift
-public struct PendingAck: Sendable {
+struct PendingAck: Sendable {
     let messageID: UUID
-    let ackCode: Data        // 4-byte ACK code
-    let sentAt: Date
-    let timeout: TimeInterval
-    var heardRepeats: Int    // Count of duplicate ACKs
-    var isDelivered: Bool
-    var isRetryManaged: Bool // Skip expiry check if retry manages it
+    let contactID: UUID
+    var ackCodes: Set<Data>     // One per retry attempt
+    var sentAt: Date
+    var timeout: TimeInterval
+    var isDelivered: Bool = false
 }
 ```
+
+Keyed on `messageID`, not `ackCode`, so a late ACK from any retry attempt can still resolve the message. The `MessageService` persistent listener (`startEventMonitoring`) subscribes via `session.events(filter: .anyAcknowledgement)` so the dispatcher's ring buffer only holds matching events.
 
 ### ACK Flow
 
 ```
 Message sent
     │
-    ▼ ACK code generated (4 bytes)
-PendingAck created
+    ▼ ACK code predicted + PendingAck tracked
     │
-    ├───── ACK received ─────► Mark delivered, update UI
+    ├───── ACK received ─────────► handleAcknowledgement: mark .delivered
     │
-    └───── Timeout (5s check) ─► Mark failed (if not retry-managed)
+    └───── Timeout (5s check) ───► checkExpiredAcks: mark .failed
+                                    (give-up deadline = max(ackGiveUpWindow, PendingAck.timeout))
 ```
+
+An end-to-end ACK that arrives after its `PendingAck` entry is gone (failed and removed, or duplicate) has no live entry to match; `handleAcknowledgement` logs it as an unmatched ACK and returns without changing status.
 
 **ACK Timeout:**
-The actual ACK timeout used is 1.2x the device-suggested timeout to provide a safety margin:
+The per-attempt ACK wait used by the retry loop is `retryAckTimeoutMultiplier` (1.2x) of the device-suggested timeout to provide a safety margin:
 
 ```swift
-// From MeshCoreSession.swift
-let ackTimeout = timeout ?? (Double(sentInfo.suggestedTimeoutMs) / 1000.0 * 1.2)
+// From MeshCoreSession+Messaging.swift
+let ackTimeout = timeout ?? (
+    Double(sentInfo.suggestedTimeoutMs) / SessionConfiguration.millisecondsPerSecond
+        * SessionConfiguration.retryAckTimeoutMultiplier
+)
 ```
-
-This multiplier accounts for potential timing variations in the mesh network.
 
 ### ACK Expiry Checking
 
-Background task runs every 5 seconds:
+Started on connect via `startAckExpiryChecking(interval:)` (defaults to every 5 seconds) and torn down on disconnect via `stopAndFailAllPending`, which cancels the periodic task and writes `.failed` for any remaining in-flight rows. A routine disconnect instead uses `stopAckExpiryChecking()`, leaving in-flight DMs `.sent` so a reconnect within the same session can still receive their ACKs.
 
 ```swift
-// MessageService.startAckExpiryChecking()
-ackCheckTask = Task {
+ackCheckTask = Task { [weak self] in
+    guard let self else { return }
+
     while !Task.isCancelled {
-        try await Task.sleep(for: .seconds(5))
-        try? await checkExpiredAcks()
-        await cleanupDeliveredAcks()
+        do {
+            try await Task.sleep(for: .seconds(self.checkInterval))
+        } catch {
+            break
+        }
+
+        guard !Task.isCancelled else { break }
+
+        do {
+            try await self.checkExpiredAcks()
+        } catch {
+            self.logger.error("ACK expiry check failed: \(error.localizedDescription)")
+        }
     }
 }
 ```
 
 **checkExpiredAcks:**
-- Finds ACKs where `now - sentAt > timeout`
-- Excludes retry-managed ACKs (those handled by retry loop)
-- Marks corresponding messages as `.failed`
-
-**cleanupDeliveredAcks:**
-- Removes delivered ACKs after grace period (60 seconds)
-- Grace period allows counting repeat ACKs for mesh analysis
+- Finds undelivered ACKs where `now - sentAt > max(ackGiveUpWindow, PendingAck.timeout)`
+- Marks corresponding messages as `.failed` (via `updateMessageStatusUnlessDelivered`, which leaves an already-`.delivered` row untouched)
+- Removes the matching `PendingAck` entry and broadcasts `.failed`
 
 ### Repeat ACKs
 
-When the same ACK is received multiple times:
-
-```swift
-pendingAcks[code]?.heardRepeats += 1
-
-try? await dataStore.updateMessageHeardRepeats(
-    id: tracking.messageID,
-    heardRepeats: repeatCount
-)
-```
-
-Repeat ACKs indicate the message was heard by multiple nodes - useful for mesh debugging.
+Heard-repeat tracking lives on `HeardRepeatsService` + the `MessageRepeat` model, not on `PendingAck` — duplicate ACKs are recorded there and surfaced via the `heardRepeats` count on `MessageDTO`.
 
 ## Message Deduplication
 
-**File:** `PocketMeshServices/Sources/PocketMeshServices/Models/Message.swift`
+**File:** `MC1Services/Sources/MC1Services/Utilities/DeduplicationKey.swift`
 
-Messages include a `deduplicationKey` field to prevent duplicate incoming messages from being stored. The key is generated using a combination of timestamp, sender's public key prefix, and a hash of the message content:
+Messages carry an optional `deduplicationKey: String?` field (stored on `Message`) to prevent duplicate incoming messages from being stored. The key is generated by `DeduplicationKey.contentBased`, the single source of truth used by live sync (`SyncCoordinator`), on-device backfill migration, and backup export/import. The format differs for channel vs direct messages, combining the conversation scope, timestamp, and a hash of the message content:
 
 ```swift
-// Message.generateDeduplicationKey() - lines 194-203
-static func generateDeduplicationKey(
+// DeduplicationKey.contentBased(...)
+static func contentBased(
+    contactID: UUID?,
+    channelIndex: UInt8?,
+    senderNodeName: String?,
     timestamp: UInt32,
-    senderKeyPrefix: Data?,
-    text: String
+    content: String
 ) -> String {
-    let senderHex = (senderKeyPrefix ?? unknownSenderSentinel).hex
-    let contentHash = SHA256.hash(data: Data(text.utf8))
-    let hashPrefix = contentHash.prefix(4).map { String(format: "%02x", $0) }.joined()
-    return "\(timestamp)-\(senderHex)-\(hashPrefix)"
+    let contentHash = SHA256.hash(data: Data(content.utf8))
+    let hashPrefix = contentHash.prefix(4).map { String(format: "%02X", $0) }.joined()
+    if let channelIndex {
+        return "\(channelPrefix)\(channelIndex)-\(timestamp)-\(senderNodeName ?? "")-\(hashPrefix)"
+    }
+    let contactSegment = contactID?.uuidString ?? unknownContactPlaceholder
+    return "\(directMessagePrefix)\(contactSegment)-\(timestamp)-\(hashPrefix)"
 }
 
-// Example format: "1703123456-a1b2c3d4e5f6-8f3a9b2c"
+// Channel example: "ch-3-1703123456-Alice-8F3A9B2C"
+// Direct example:  "dm-<contactUUID>-1703123456-8F3A9B2C"
 ```
 
 **Components:**
+- **Scope prefix**: `ch-<channelIndex>` for channel messages, `dm-<contactID>` for direct messages (`unknown` when the contact is unresolved)
+- **Sender node name**: included for channel messages (parsed from the `"Name: text"` channel payload), empty when absent
 - **Timestamp**: Message timestamp (UInt32)
-- **Sender Key Prefix**: 6-byte public key prefix in hex (or `unknownSenderSentinel` if unavailable)
-- **Content Hash**: First 4 bytes of SHA256 hash of message text
+- **Content Hash**: First 4 bytes of SHA256 hash of message content, uppercase hex
 
-When a message is received, the system checks if a message with the same deduplication key already exists. If found, the duplicate is ignored. This prevents the same message from appearing multiple times if it's received via multiple mesh paths.
+When a message is received, the system checks if a message with the same deduplication key already exists (`fetchMessage(deduplicationKey:radioID:)`). If found, the duplicate **message** is not stored again. A later flood copy whose `pathNodes` differ from the canonical path is recorded as a `MessageRepeat` extra arrival (`recordDistinctPathIfNeeded`). Extra `PUSH_CODE_LOG_RX_DATA` (0x88) rows that arrived before the first `saveMessage` are harvested afterward (`harvestIncomingPaths`): the coordinator re-decrypts those rows (`decryptEntry`) and `ChannelRXCorrelation` joins them to the saved message by `DeduplicationKey`, not stamp alone. This keeps one timeline bubble while preserving every distinct path. The first incoming path stays on `Message.pathNodes`; extra incoming paths do not change outgoing every-echo repeats.
 
 The SHA256 hash ensures that:
-- Identical messages from the same sender at the same timestamp are deduplicated
+- Identical messages in the same conversation at the same timestamp are deduplicated
 - Different messages at the same timestamp are stored separately
 - The key is stable across app restarts
 
@@ -278,37 +281,48 @@ let text = "\(deviceName): \(userText)"
 try await session.sendChannelMessage(channel: channelIndex, text: text)
 ```
 
-## MessageEventBroadcaster Integration
+## MessageEventDispatcher Integration
 
-**File:** `PocketMesh/Services/MessageEventBroadcaster.swift`
+**File:** `MC1/State/MessageEventDispatcher.swift`
 
-The broadcaster bridges service callbacks to SwiftUI:
+The dispatcher bridges per-service event streams to SwiftUI via `MessageEventStream`. `MessageService` exposes its outbound-message lifecycle as an `AsyncStream<MessageStatusEvent>` (`statusEvents()`); the dispatcher consumes it and forwards `MessageEvent` cases into the stream:
 
 ```swift
-// Service layer callback
-messageService.ackConfirmationHandler = { [weak self] ackCode, rtt in
-    Task { @MainActor in
-        self?.broadcaster.handleAcknowledgement(ackCode: ackCode)
+private func wireMessageService(_ messageService: MessageService) {
+    let events = messageService.statusEvents()
+    let task = Task { [stream] in
+        for await event in events {
+            switch event {
+            case .statusResolved(let messageID, let status, let roundTripTime):
+                stream.send(.messageStatusResolved(messageID: messageID, status: status, roundTripTime: roundTripTime))
+            case .resent(let messageID):
+                stream.send(.messageResent(messageID: messageID))
+            case .retrying(let messageID, let attempt, let maxAttempts):
+                stream.send(.messageRetrying(messageID: messageID, attempt: attempt, maxAttempts: maxAttempts))
+            case .routingChanged(let contactID, let isFlood):
+                stream.send(.routingChanged(contactID: contactID, isFlood: isFlood))
+            case .failed(let messageID):
+                stream.send(.messageFailed(messageID: messageID))
+            }
+        }
     }
-}
-
-// Broadcaster updates observable state
-func handleAcknowledgement(ackCode: UInt32) {
-    self.latestEvent = .messageStatusUpdated(ackCode: ackCode)
-    self.newMessageCount += 1  // Triggers SwiftUI update
+    tasks.append(task)
 }
 ```
 
 ### Event Types
+
+`MessageEvent` (`MC1/State/MessageEvent.swift`):
 
 | Event | Trigger |
 |-------|---------|
 | `.directMessageReceived` | New incoming direct message |
 | `.channelMessageReceived` | New incoming channel message |
 | `.roomMessageReceived` | New incoming room message |
-| `.messageStatusUpdated` | ACK received for outgoing message |
+| `.messageStatusResolved` | Outgoing message resolved (ACK delivered / failed) |
+| `.messageResent` | Outgoing message resent |
 | `.messageFailed` | Message delivery failed |
-| `.messageRetrying` | Manual retry in progress |
+| `.messageRetrying` | Retry in progress |
 | `.heardRepeatRecorded` | Heard repeat count updated |
 | `.reactionReceived` | Reaction summary updated for a message |
 | `.routingChanged` | Contact switched to/from flood routing |
@@ -317,18 +331,18 @@ func handleAcknowledgement(ackCode: UInt32) {
 
 ## Message Polling
 
-**File:** `PocketMeshServices/Sources/PocketMeshServices/Services/MessagePollingService.swift`
+**File:** `MC1Services/Sources/MC1Services/Services/MessagePollingService.swift`
 
 Messages are pulled from the device queue:
 
 ```swift
 // Triggered by MeshCore notification
-func pollAllMessages() async {
+func pollAllMessages() async throws -> Int {
     while true {
-        let result = try await session.getMessage()
+        let result = try await pollMessage()
 
-        if case .noMessages = result {
-            break  // Queue empty
+        if case .noMoreMessages = result {
+            return count  // Queue empty
         }
 
         // Process message...
@@ -353,6 +367,6 @@ Reactions are sent as special message payloads and rendered as badges below mess
 
 ## See Also
 
-- [MessageService API](../api/PocketMeshServices.md#messageservice-public-actor)
+- [MessageService API](../api/MC1Services.md#messageservice-public-actor)
 - [Architecture Overview](../Architecture.md)
 - [BLE Transport Guide](BLE_Transport.md)

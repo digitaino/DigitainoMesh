@@ -1,6 +1,6 @@
 # Development Documentation
 
-This guide provides information for developers who want to contribute to the PocketMesh project.
+This guide provides information for developers who want to contribute to the MeshCore One project.
 
 ## Getting Started
 
@@ -26,25 +26,27 @@ This guide provides information for developers who want to contribute to the Poc
 1. **Clone the repository**.
 2. **Generate the Xcode project** from `project.yml`:
    ```bash
-   xcodegen generate
+   make generate # creates a gitignored dev.yml; set your Apple team ID there for local signing
    ```
-   > **Note:** Do not edit `PocketMesh.xcodeproj` directly — it is generated from `project.yml` and will be overwritten. Make project configuration changes in `project.yml` and regenerate.
-3. **Open `PocketMesh.xcodeproj`**.
+   > **Note:** Do not edit `MC1.xcodeproj` directly — it is generated from `project.yml` and will be overwritten. Make project configuration changes in `project.yml` and regenerate.
+3. **Open `MC1.xcodeproj`**.
 
 ## Building the Project
 
-PocketMesh uses a modular structure with Swift Packages:
+MeshCore One uses a modular structure with Swift Packages:
 
 - `MeshCore`: The protocol framework.
-- `PocketMeshServices`: The business logic framework.
-- `PocketMesh`: The main iOS application.
+- `MC1Services`: The business logic framework.
+- `MeshCore One`: The main iOS application.
+
+> **Warning — Debug and Release share one bundle identifier** (`com.digitaino.PocketMesh` for both configs in `project.yml`). That is deliberate: a single bundle ID keeps a TestFlight install and its store purchases continuous across builds. The consequence is that running Debug on a device that already has the TestFlight build **replaces it and opens the same data container** — your local run migrates, writes to, and can corrupt real beta message history. Before a local device run, export a backup from Settings → Backup & Restore → Export App Data, or run on a device/simulator that carries no TestFlight install.
 
 ### Command Line Build
 
 ```bash
-xcodebuild -project PocketMesh.xcodeproj \
-  -scheme PocketMesh \
-  -destination "platform=iOS Simulator,name=iPhone 16e" \
+xcodebuild -project MC1.xcodeproj \
+  -scheme MC1 \
+  -destination "platform=iOS Simulator,name=iPhone 17e,OS=26.5" \
   build
 ```
 
@@ -71,21 +73,36 @@ xcodebuild test -enableCodeCoverage YES 2>&1 | xcsift --coverage
 
 ## Testing Strategy
 
-PocketMesh emphasizes comprehensive testing at all layers.
+MeshCore One emphasizes comprehensive testing at all layers.
 
 ### Unit Tests
 
 - **MeshCoreTests**: Tests packet building, parsing, LPP decoding, and session state.
-- **PocketMeshServicesTests**: Tests business logic services, actor isolation, and persistence.
-- **PocketMeshTests**: Tests app state and view models.
+- **MC1ServicesTests**: Tests business logic services, actor isolation, and persistence.
+- **MC1Tests**: Tests app state and view models.
 
 ### Running Tests
 
+Prefer the `make` targets: they regenerate the project, pin the correct simulator, and take a per-simulator lock so concurrent sessions serialize instead of hanging.
+
 ```bash
-# Run all tests
-xcodebuild test -project PocketMesh.xcodeproj \
-  -scheme PocketMesh \
-  -destination "platform=iOS Simulator,name=iPhone 16e"
+# Full app suite on iOS 26 (StoreKit suites auto-skip here)
+make test-app
+
+# StoreKit/IAP SKTestSession suites on iOS 18
+make test-store
+
+# Everything: app suite + StoreKit suites
+make test
+```
+
+The app suite runs on `iPhone 17e, OS=26.5`; the StoreKit suites run on `iPhone 16e, OS=18.6` (SKTestSession serves no products under iOS 26.x). To invoke `xcodebuild` directly (for a single suite, bypassing the make lock):
+
+```bash
+# Run the app suite on iOS 26
+xcodebuild test -project MC1.xcodeproj \
+  -scheme MC1 \
+  -destination "platform=iOS Simulator,name=iPhone 17e,OS=26.5"
 
 # With xcsift for concise output
 xcodebuild test 2>&1 | xcsift
@@ -126,7 +143,7 @@ For testing services without SwiftData:
 
 ```swift
 let mockStore = MockPersistenceStore()
-let service = MessageService(session: session, dataStore: mockStore)
+let service = MessageService(session: session, dataStore: mockStore, contactService: nil)
 
 // Verify persistence calls
 #expect(mockStore.savedMessages.count == 1)
@@ -175,8 +192,20 @@ struct MessageServiceTests {
 
 ### Persistence
 
-- **SwiftData**: All persistence should use SwiftData models defined in `PocketMeshServices`.
+- **SwiftData**: All persistence should use SwiftData models defined in `MC1Services`.
 - **No Direct Store Access**: Services should interact with data via the `PersistenceStore` actor.
+
+### Service Concurrency Shape
+
+Services are `actor`s by default. Use a `@MainActor class` only when wrapping a framework that requires the main thread, and add `@Observable` only when views observe the type directly.
+
+### Error Types
+
+A service's error enum is declared either inline at the top of the owning service file (`ChannelServiceError`, `ContactServiceError`) or in its own file under `Errors/` (`SettingsServiceError`, `RemoteNodeError`, `StoreServiceError`). The `Errors/` directory also holds retroactive conformances (e.g. `MeshCoreError+LocalizedError`) and error types shared across layers (`ConnectionError`, `BLEError`).
+
+### Dependency Injection
+
+Pass dependencies through the initializer. Use setter injection (a mutable property assigned after construction) only to break a reference cycle between two services.
 
 ## Linting and Formatting
 
@@ -233,7 +262,7 @@ packages:
 
 ### AccessorySetupKit
 
-For iOS 18+ device pairing, the project uses AccessorySetupKit. The `AccessorySetupKitService` in PocketMeshServices handles the pairing flow.
+For iOS 18+ device pairing, the project uses AccessorySetupKit. The `AccessorySetupKitService` in MC1Services handles the pairing flow.
 
 Required Info.plist keys:
 
@@ -246,15 +275,11 @@ Required Info.plist keys:
 <array>
     <string>6E400001-B5A3-F393-E0A9-E50E24DCCA9E</string>
 </array>
-<key>NSAccessorySetupBluetoothNames</key>
-<array>
-    <string>MeshCore-</string>
-</array>
 ```
 
 ### iOS 18+ Features
 
-PocketMesh leverages several modern iOS 18+ APIs and frameworks:
+MeshCore One leverages several modern iOS 18+ APIs and frameworks:
 
 **AccessorySetupKit**:
 - Native device discovery and pairing interface
@@ -283,11 +308,11 @@ The app requires Bluetooth and location permissions plus background BLE mode:
 
 ```xml
 <key>NSBluetoothAlwaysUsageDescription</key>
-<string>PocketMesh uses Bluetooth to maintain connections with MeshCore radios, even in the background, so you can send and receive messages without opening the app.</string>
+<string>MeshCore One uses Bluetooth to maintain connections with MeshCore radios, even in the background, so you can send and receive messages without opening the app.</string>
 <key>NSBluetoothPeripheralUsageDescription</key>
-<string>PocketMesh uses Bluetooth to connect to MeshCore radio devices for mesh messaging.</string>
+<string>MeshCore One uses Bluetooth to connect to MeshCore radio devices for mesh messaging.</string>
 <key>NSLocationWhenInUseUsageDescription</key>
-<string>PocketMesh can share your location with contacts on the mesh network.</string>
+<string>MeshCore One uses your location to suggest a recommended radio preset for your area, show your position on maps, and sort contacts by distance. When you enable location sharing, MeshCore One also advertises your location to your mesh contacts.</string>
 <key>UIBackgroundModes</key>
 <array>
     <string>bluetooth-central</string>
@@ -296,14 +321,14 @@ The app requires Bluetooth and location permissions plus background BLE mode:
 
 ## BLE Transport Architecture
 
-- **MeshCore/Sources/MeshCore/Transport/BLETransport.swift**: Base BLE transport protocol implementation
-- **PocketMeshServices/Transport/iOSBLETransport.swift**: iOS-specific BLE transport with CoreBluetooth integration
-- **PocketMeshServices/Transport/BLEStateMachine.swift**: Connection state management
-- **PocketMeshServices/Services/AccessorySetupKitService.swift**: iOS 18+ pairing flow
+- **MeshCore/Sources/MeshCore/Transport/MeshTransport.swift**: Transport protocol the BLE stack plugs into
+- **MC1Services/Sources/MC1Services/Transport/iOSBLETransport.swift**: iOS BLE transport with CoreBluetooth integration
+- **MC1Services/Sources/MC1Services/Transport/BLEStateMachine.swift**: Connection state management
+- **MC1Services/Sources/MC1Services/Services/AccessorySetupKitService.swift**: iOS 18+ pairing flow
 
 ### WiFi Transport
 
-PocketMesh also supports WiFi transport for MeshCore firmware devices:
+MeshCore One also supports WiFi transport for MeshCore firmware devices:
 
 - **MeshCore/Sources/MeshCore/Transport/WiFiTransport.swift**: TCP transport (Network.framework) that conforms to `MeshTransport`
 - **Connection Type**: Automatic detection based on device capability
@@ -350,8 +375,8 @@ The iPad interface uses split-view navigation:
 ```bash
 # Build for iPad Simulator
 xcodebuild test \
-  -project PocketMesh.xcodeproj \
-  -scheme PocketMesh \
+  -project MC1.xcodeproj \
+  -scheme MC1 \
   -destination "platform=iOS Simulator,name=iPad Pro (13-inch)"
 
 # Test on physical iPad (requires development team)
@@ -438,7 +463,7 @@ When working on diagnostic features (Line of Sight, Trace Path, RX Log), keep th
 
 - [Architecture Overview](Architecture.md)
 - [MeshCore API Reference](api/MeshCore.md)
-- [PocketMeshServices API Reference](api/PocketMeshServices.md)
+- [MC1Services API Reference](api/MC1Services.md)
 - [BLE Transport Guide](guides/BLE_Transport.md)
 - [WiFi Transport Guide](guides/WiFi_Transport.md)
 - [Diagnostics Guide](guides/Diagnostics.md)

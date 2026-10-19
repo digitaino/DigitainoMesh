@@ -1,0 +1,279 @@
+import Foundation
+import Testing
+
+@testable import MeshWX
+
+/// The preload bundle (spec §16) and the search rules (spec §21).
+///
+/// The expected values are read off the kit's own `client_data` files, not off this
+/// implementation: if a future bundle renumbers something, these fail loudly instead of
+/// agreeing with whatever the code now does.
+@Suite("MeshWX tables")
+struct MeshWXTablesTests {
+  let tables = MeshWXTables.shared
+
+  @Test func bundleLoads() {
+    #expect(tables.protocolVersion == 17, "protocol.json version is 17 for v5.0 revision 13")
+    #expect(tables.offices.count == 127, "125 WFOs, then NHC and WNS (spec §16)")
+    #expect(tables.stations.count == 2237)
+    #expect(tables.states.count == 78)
+    #expect(tables.points.count == 1958) // 1873 until revision 10 appended the offices the first build missed
+    #expect(tables.places.count == 34937)
+  }
+
+  @Test func nationalCentresAreAppendedAfterTheWFOs() {
+    // Appended, never sorted in: every WFO keeps its index.
+    #expect(tables.officeCode(0) == "ABQ")
+    #expect(tables.officeCode(124) == "VEF")
+    #expect(tables.officeCode(125) == "NHC")
+    #expect(tables.officeCode(126) == "WNS")
+    #expect(tables.isNationalCentre(126))
+    #expect(tables.isNationalCentre(125))
+    #expect(!tables.isNationalCentre(35))
+  }
+
+  @Test func wireIndicesResolveToTheDocumentedCodes() {
+    // These three are the indices in the kit's own vectors: a warning from EWX over
+    // Texas, and KAUS in the observation batch.
+    #expect(tables.officeCode(35) == "EWX")
+    #expect(tables.stateCode(42) == "TX")
+    #expect(tables.stationICAO(202) == "KAUS")
+    #expect(tables.stationICAO(860) == "KGTU")
+    #expect(tables.stationICAO(976) == "KHYI")
+    #expect(tables.stationIndex(forICAO: "KAUS") == 202)
+    #expect(tables.stationIndex(forICAO: "kaus") == 202)
+  }
+
+  /// Spec revision 11, §13: the two radar tables a client reads words and numbers from. The
+  /// thresholds are here rather than in the code because a legend that disagreed with the bot's
+  /// own classification would label the picture wrong rather than leave it unlabelled.
+  @Test func radarTablesComeFromTheBundle() {
+    #expect(tables.radarLevelsDBZ == [20, 35, 50], "light, moderate, heavy")
+    #expect(tables.radarLevelsDBZ.count == MeshWXRadarLevel.allCases.count - 1)
+    #expect(tables.radarProductNames.count == 15, "the national mosaic and fourteen regional ones")
+    #expect(tables.radarProductName(0) == "United States")
+    // Product 1 is the mosaic the `radar_tile` vector was cut from.
+    #expect(tables.radarProductName(1) == "Southern Plains")
+    #expect(tables.radarProductName(13) == "Puerto Rico")
+    // A bot newer than the bundle loses the mosaic's name, never the picture.
+    #expect(tables.radarProductName(63) == nil)
+  }
+
+  @Test func unknownIndicesReturnNilAndStillLabel() {
+    #expect(tables.officeCode(250) == nil)
+    #expect(tables.stationICAO(60000) == nil)
+    #expect(tables.stateCode(200) == nil)
+    #expect(tables.officeLabel(250) == "unknown (#250)")
+    #expect(tables.stationLabel(60000) == "unknown (#60000)")
+    #expect(tables.eventLabel(for: 250) == "unknown (#250)")
+  }
+
+  @Test func eventBytesResolveToVTECAndNames() {
+    #expect(tables.vtec(for: 3) == "SV.W")
+    #expect(tables.eventByCode["SV.W"] == 3)
+    let name = tables.eventName(for: 3)
+    #expect(name?.long == "Severe Thunderstorm Warning")
+    #expect(name?.short == "SVR TSTM WRN")
+    #expect(tables.vtec(for: 24) == "WS.W")
+    #expect(tables.eventName(for: 24)?.long == "Winter Storm Warning")
+  }
+
+  @Test func severityComesFromTheSignificanceLetter() throws {
+    #expect(tables.severity(for: 3) == .warning)  // SV.W
+    #expect(tables.severity(for: 4) == .watch)  // SV.A
+    #expect(tables.severity(for: 14) == .advisory)  // HT.Y
+    // SPS has no significance letter at all and is a statement (spec §3).
+    let sps = try #require(tables.eventByCode["SPS"])
+    #expect(tables.severity(for: sps) == .statement)
+  }
+
+  @Test func skyCodeNamesComeFromTheBundle() {
+    #expect(tables.skyNames[.broken] == "broken")
+    #expect(tables.skyNames[.thunderstorm] == "thunderstorm")
+    #expect(tables.skyNames.count == 16)
+  }
+
+  @Test func forecastPointsAreIndexedByWirePosition() throws {
+    let point = try #require(tables.point(at: 102))
+    #expect(point.name.contains("Austin"), "point 102 is \(point.name)")
+    #expect(point.index == 102)
+    #expect(point.office == "EWX")
+    #expect(point.zone == "TXZ192")
+  }
+
+  @Test func nearestPointToAustinIsInTravis() throws {
+    // Downtown Austin. The nearest bundled point is Camp Mabry (index 103), in Travis
+    // county, zone TXZ192 — which is what `>f <index>` should be sent for.
+    let point = try #require(tables.nearestPoint(toLat: 30.27, lon: -97.74))
+    #expect(point.name.contains("Travis"), "nearest point is \(point.name)")
+    #expect(point.zone == "TXZ192")
+    let distance = MeshWXGeo.distanceMiles(
+      fromLat: 30.27, lon: -97.74, toLat: point.lat, lon: point.lon)
+    #expect(distance < 10)
+  }
+
+  @Test func stationDetailsAndSearch() throws {
+    let kaus = try #require(tables.station(icao: "KAUS"))
+    #expect(kaus.name == "AUSTIN-BERGSTROM INTL AIRPORT")
+    #expect(kaus.state == "TX")
+    #expect(abs(kaus.lat - 30.183) < 0.0005)
+    // The wire index and the details table agree.
+    #expect(tables.station(at: 202) == kaus)
+
+    #expect(tables.searchStations(query: "KAU").contains { $0.icao == "KAUS" })
+    #expect(tables.searchStations(query: "bergstrom").contains { $0.icao == "KAUS" })
+    #expect(tables.searchStations(query: "").isEmpty)
+  }
+
+  @Test func zonesCountiesAndOfficesResolve() throws {
+    let zone = try #require(tables.zone("TXZ192"))
+    #expect(zone.name == "Travis")
+    #expect(zone.office == "EWX")
+
+    let county = try #require(tables.county("TXC453"))
+    #expect(county.name == "Travis")
+    #expect(county.state == "TX")
+
+    let office = try #require(tables.office("EWX"))
+    #expect(office.states == ["TX"])
+    #expect(tables.zone("XXZ999") == nil)
+    #expect(tables.county("XXC999") == nil)
+  }
+
+  @Test func placeSearchRanksByDistanceThenPopulation() {
+    // Spec §21's own example: Round Rock exists in TX and AZ. Asked from Austin, the
+    // one 20 miles up the road has to come first, even though ranking by population
+    // alone would also get it right — so the AZ one must be present to prove the
+    // search is not just filtering by state.
+    let fromAustin = tables.searchPlaces(query: "round rock", nearLat: 30.27, lon: -97.74)
+    let states = fromAustin.prefix(2).map(\.state)
+    #expect(states == ["TX", "AZ"])
+    #expect(fromAustin.first?.name == "ROUND ROCK")
+
+    // Same query with no anchor: biggest first, which is still TX.
+    let unanchored = tables.searchPlaces(query: "round rock")
+    #expect(Array(unanchored.map(\.state).prefix(2)) == ["TX", "AZ"])
+    #expect((unanchored.first?.population ?? 0) > 100_000)
+
+    // Prefix, not substring: "rock" must not pull in "ROUND ROCK".
+    #expect(!tables.searchPlaces(query: "ock").contains { $0.name == "ROUND ROCK" })
+    #expect(tables.searchPlaces(query: "ROUND ROCK").count == 2)
+    #expect(tables.searchPlaces(query: "round rock", limit: 1).count == 1)
+    #expect(tables.searchPlaces(query: "   ").isEmpty)
+  }
+
+  @Test func warningAreasResolveToNamedCounties() throws {
+    // The area list from the kit's severe thunderstorm vector: Hays and Travis.
+    let runs = [
+      MeshWXAreaRun(stateIndex: 42, isCounty: true, start: 209, run: 1),
+      MeshWXAreaRun(stateIndex: 42, isCounty: true, start: 453, run: 1),
+    ]
+    let areas = tables.namedAreas(for: runs)
+    #expect(areas.map(\.ugc) == ["TXC209", "TXC453"])
+    #expect(areas.map(\.name) == ["Hays", "Travis"])
+    #expect(areas.allSatisfy { $0.state == "TX" && $0.isCounty })
+    #expect(areas.allSatisfy { $0.lat != nil && $0.lon != nil })
+  }
+
+  @Test func zoneRunExpandsToEveryZoneItCovers() {
+    // The winter storm vector: zones 191-194 as one run.
+    let areas = tables.namedAreas(for: [
+      MeshWXAreaRun(stateIndex: 42, isCounty: false, start: 191, run: 4)
+    ])
+    #expect(areas.map(\.ugc) == ["TXZ191", "TXZ192", "TXZ193", "TXZ194"])
+    #expect(areas.map(\.name) == ["Hays", "Travis", "Bastrop", "Lee"])
+  }
+
+  @Test func areasSurviveAnUnknownUGC() {
+    // A county number this bundle has no row for still yields an area, unnamed.
+    let areas = tables.namedAreas(for: [
+      MeshWXAreaRun(stateIndex: 42, isCounty: true, start: 997, run: 1)
+    ])
+    #expect(areas.count == 1)
+    #expect(areas[0].ugc == "TXC997")
+    #expect(areas[0].name == nil)
+    #expect(areas[0].lat == nil)
+  }
+
+  @Test func missingResourcesLoadEmptyRatherThanCrashing() {
+    // A resource that did not copy must not take the app down on launch.
+    let empty = MeshWXTables(resourceDirectory: URL(fileURLWithPath: "/nonexistent/meshwx"))
+    #expect(empty.protocolVersion == 0)
+    #expect(empty.offices.isEmpty)
+    #expect(empty.officeCode(35) == nil)
+    #expect(empty.officeLabel(35) == "unknown (#35)")
+    #expect(empty.nearestPoint(toLat: 30.27, lon: -97.74) == nil)
+    #expect(empty.searchPlaces(query: "round rock").isEmpty)
+    #expect(empty.namedAreas(for: [MeshWXAreaRun(stateIndex: 42, isCounty: true, start: 453, run: 1)]).isEmpty)
+  }
+
+  /// The bundle appends the National Hurricane Center and the Storm Prediction Center to the
+  /// office list; neither is a forecast office.
+  @Test func nationalCentresAreKnownByCode() throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent("meshwx-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try Data(#"{"offices": ["ABQ", "EWX", "NHC", "WNS", "XYZ", "AAQ", "HEB"], "stations": [], "states": []}"#.utf8)
+      .write(to: directory.appendingPathComponent("index.json"))
+    // The bot's rows: a centre adds a name and lists no states; `zone_count` is not read.
+    try Data(#"""
+      {"EWX": {"states": ["TX"], "lat": 29.6789, "lon": -98.614, "zone_count": 33},
+       "NHC": {"states": [], "lat": 25.7543, "lon": -80.3838, "zone_count": 0, "name": "National Hurricane Center"},
+       "XYZ": {"states": [], "lat": 1, "lon": 2, "zone_count": 0, "name": "Some Future Centre"}}
+      """#.utf8)
+      .write(to: directory.appendingPathComponent("wfos.json"))
+    let tables = MeshWXTables(resourceDirectory: directory)
+    #expect(!tables.isNationalCentre(1))
+    #expect(tables.isNationalCentre(2))
+    #expect(tables.isNationalCentre(3), "by code, with no wfos row")
+    #expect(tables.isNationalCentre(4), "by its row listing no states")
+    #expect(!tables.isNationalCentre(200), "an index the bundle does not know")
+    #expect(tables.isNationalCentre(5) && tables.isNationalCentre(6), "the tsunami centres, by code")
+    #expect(tables.office("EWX")?.states == ["TX"])
+    #expect(tables.office("EWX")?.name == nil)
+    #expect(tables.office("NHC")?.name == "National Hurricane Center")
+  }
+
+  /// Not an assertion about speed — a number for the report, and a guard that the
+  /// bundle is being read at all.
+  @Test func reportsBundleLoadTime() throws {
+    let directory = try #require(MeshWXTables.bundledResourceDirectory)
+    let started = ContinuousClock.now
+    let fresh = MeshWXTables(resourceDirectory: directory)
+    let milliseconds = (ContinuousClock.now - started).components.attoseconds / 1_000_000_000_000_000
+    print("MeshWX: eight JSON tables loaded in \(milliseconds) ms")
+    #expect(fresh.places.count == 34937)
+  }
+}
+
+/// Naming a coordinate for a screen header.
+@Suite("MeshWX nearest place")
+struct MeshWXNearestPlaceTests {
+  let tables = MeshWXTables.shared
+
+  @Test func downtownAustinIsNamedAustin() throws {
+    let place = try #require(tables.nearestPlace(toLat: 30.2672, lon: -97.7431))
+    #expect(place.name.uppercased() == "AUSTIN")
+    #expect(place.state == "TX")
+  }
+
+  @Test func roundRockIsNamedRoundRock() throws {
+    let place = try #require(tables.nearestPlace(toLat: 30.5083, lon: -97.6789))
+    #expect(place.name.uppercased() == "ROUND ROCK")
+  }
+
+  @Test func nothingIsNamedFromBeyondTheRadius() {
+    // 250 km out in the Gulf of Mexico.
+    #expect(tables.nearestPlace(toLat: 26.5, lon: -93.5) == nil)
+  }
+
+  @Test func sanJuanAirportIsItsOwnNearestStation() throws {
+    let station = try #require(tables.nearestStation(toLat: 18.433, lon: -66.011))
+    #expect(station.icao == "TJSJ")
+  }
+
+  @Test func noStationIsOfferedFromBeyondTheRadius() {
+    // The middle of the North Atlantic.
+    #expect(tables.nearestStation(toLat: 30.0, lon: -50.0) == nil)
+  }
+}

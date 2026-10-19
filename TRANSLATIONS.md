@@ -1,20 +1,23 @@
 # Translations
 
-PocketMesh supports multiple languages. You can help improve translations entirely through GitHub's website — no coding tools or experience required.
+MeshCore One supports multiple languages. You can help improve translations entirely through GitHub's website — no coding tools or experience required.
 
 ## Supported Languages
 
 | Language              | Code    | Status             |
 |-----------------------|---------|--------------------|
-| English               | en      | Complete (source)  |
-| German                | de      | AI-translated      |
 | Dutch                 | nl      | AI-translated      |
-| Polish                | pl      | AI-translated      |
-| Russian               | ru      | AI-translated      |
-| Ukrainian             | uk      | AI-translated      |
-| Spanish               | es      | AI-translated      |
+| English               | en      | Complete (source)  |
 | French                | fr      | AI-translated      |
-| Simplified Chinese    | zh-Hans | Verified by MGJ520 |
+| German                | de      | AI-translated      |
+| Italian               | it      | Verified by corradoignoti #376 |
+| Korean                | ko      | AI-translated      |
+| Polish                | pl      | AI-translated      |
+| Portuguese (Portugal) | pt      | Verified by zadoke #413 |
+| Russian               | ru      | AI-translated      |
+| Simplified Chinese    | zh-Hans | Verified by MGJ520 #225 |
+| Spanish               | es      | AI-translated      |
+| Ukrainian             | uk      | AI-translated      |
 
 Languages marked "AI-translated" were generated using AI and may contain errors. Native speaker verification is welcome.
 
@@ -37,7 +40,7 @@ Translation files use a simple format:
 
 You can fix a translation directly on GitHub — no tools needed.
 
-1. Go to the [Localization folder](https://github.com/Avi0n/PocketMesh/tree/dev/PocketMesh/Resources/Localization) and open your language's folder (e.g., `de.lproj` for German).
+1. Go to the [Localization folder](https://github.com/Avi0n/MeshCoreOne/tree/dev/MC1/Resources/Localization) and open your language's folder (e.g., `de.lproj` for German).
 2. Click the `.strings` file you want to edit (e.g., `Settings.strings`).
 3. Click the **pencil icon** (Edit this file) near the top-right of the file.
 4. GitHub will ask you to **fork the repository** — click **"Fork this repository"**. This creates your own copy so you can make changes.
@@ -60,9 +63,9 @@ You can fix a translation directly on GitHub — no tools needed.
 
 ## How to Add Missing Translations
 
-If you see English text while using PocketMesh in another language, a translation is missing. Here's how to add it:
+If you see English text while using MeshCore One in another language, a translation is missing. Here's how to add it:
 
-1. First, find the English text. Go to `PocketMesh/Resources/Localization/en.lproj/` and search through the `.strings` files until you find the line with that English text.
+1. First, find the English text. Go to `MC1/Resources/Localization/en.lproj/` and search through the `.strings` files until you find the line with that English text.
 2. Note the **key** (the left side of the `=` sign) and which **file** it's in.
 3. Go to the same file in your language's folder (e.g., `de.lproj/`).
 4. Click the **pencil icon** to edit, then click **"Fork this repository"** when prompted.
@@ -76,7 +79,7 @@ If you see English text while using PocketMesh in another language, a translatio
 
 ## How to Request a New Language
 
-Open an [issue](https://github.com/Avi0n/PocketMesh/issues) and include:
+Open an [issue](https://github.com/Avi0n/MeshCoreOne/issues) and include:
 
 - The language name and code (e.g., "Japanese — ja")
 - Whether you'd be willing to help review translations
@@ -85,7 +88,7 @@ We can generate AI translations for new languages, but native speaker review mak
 
 ## File Structure
 
-Translation files are organized by feature under `PocketMesh/Resources/Localization/`:
+Translation files are organized by feature under `MC1/Resources/Localization/`:
 
 ```
 Localization/
@@ -147,11 +150,13 @@ Add the same key to all other language files. You can use AI translation as a st
 "myFeature.submitButton" = "Absenden";
 ```
 
-### Pluralization
+### Language Notes
+
+#### Pluralization
 
 Use `.stringsdict` files for strings that change based on quantity.
 
-#### Simple Languages (English, German, Dutch, Spanish, French)
+##### Simple Languages (English, German, Dutch, Spanish, French, Italian, Portuguese)
 
 These languages use two forms: `one` (exactly 1) and `other` (0, 2+).
 
@@ -174,7 +179,16 @@ These languages use two forms: `one` (exactly 1) and `other` (0, 2+).
 </dict>
 ```
 
-#### Slavic Languages (Polish, Russian, Ukrainian)
+##### Single-Category Languages (Korean, Simplified Chinese)
+
+The plural rules for these languages have only one category, so provide only the `other` form.
+
+```xml
+<key>other</key>
+<string>메시지 %d개</string>
+```
+
+##### Slavic Languages (Polish, Russian, Ukrainian)
 
 These languages have complex plural rules with four forms:
 
@@ -197,11 +211,16 @@ Example for Russian:
 <string>%d сообщений</string>
 ```
 
+#### Korean
+
+- Use Apple's Korean iOS terminology, for example 계속 rather than 계속하기 and 암호 rather than 비밀번호.
+- After a `%@` placeholder, write particles in the combined form, such as 을(를), 이(가), and 와(과).
+
 ### Testing Translations
 
 1. Build the app
 2. Change the simulator/device language in Settings
-3. Launch PocketMesh and verify strings appear correctly
+3. Launch MeshCore One and verify strings appear correctly
 
 For German translations, test at the largest Dynamic Type size since German words are often longer than English.
 

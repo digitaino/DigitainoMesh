@@ -5,17 +5,25 @@
 .DS_Store
 
 # MeshCore references
-MeshCore-references/
+mc-ref/
 
 # AI
 .claude
+.agent*
+.grok
 .ignore
 CLAUDE.md
 AGENTS.md
+CONTEXT.md
 thoughts/
 plans/
+specs/
 tmp/
-.xcodebuildmcp/
+.mobilebuildmcp/
+.codegraph
+.asc
+
+*lock.json
 
 scripts/
 
@@ -23,7 +31,8 @@ scripts/
 xcuserdata/
 
 ## Xcodegen
-PocketMesh.xcodeproj
+*.xcodeproj
+dev.yml
 
 ## Obj-C/Swift specific
 *.hmap
@@ -51,6 +60,7 @@ playground.xcworkspace
 
 build/
 .build/
+.spm-cache/
 
 # CocoaPods
 #
@@ -94,3 +104,12 @@ __pycache__
 
 # idea
 .idea/
+# Brainstorming visual companion mockups
+.superpowers/
+
+# Build-time secrets. Secrets.xcconfig claims in its own header to be ignored —
+# it was not, and it carries a live API key. Never let it become tracked.
+Secrets.xcconfig
+
+# The signal-mapper server is its own repository, checked out inside this tree.
+pocketmesh-survey-server/

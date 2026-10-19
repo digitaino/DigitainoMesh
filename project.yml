@@ -1,41 +1,70 @@
-name: PocketMesh
+name: MC1
 options:
-  bundleIdPrefix: com.pocketmesh
+  bundleIdPrefix: com.meshcoreone
   deploymentTarget:
     iOS: "18.0"
-  xcodeVersion: "26.0"
+  xcodeVersion: "27.0"
   generateEmptyDirectories: true
+
+# dev.yml is gitignored and supplies DEVELOPMENT_TEAM for local signing.
+# It is created empty by `make generate` and in CI.
+include:
+  - dev.yml
 
 settings:
   base:
     SWIFT_VERSION: "6.2"
     SWIFT_STRICT_CONCURRENCY: complete
     ENABLE_USER_SCRIPT_SANDBOXING: YES
-    DEVELOPMENT_TEAM: ""
 
 packages:
   MeshCore:
     path: MeshCore
-  PocketMeshServices:
-    path: PocketMeshServices
+  MC1Services:
+    path: MC1Services
+  # Linked transitively through MC1Services (see docs/SIGNAL_MAPPER_V2.md §2.6); listed
+  # here for the same reason MeshCore is, so Xcode resolves the local checkout itself
+  # instead of leaning on the nested package reference.
+  SurveyKit:
+    path: SurveyKit
   Emojibase:
     url: https://github.com/matrix-org/emojibase-bindings
     from: 1.5.0
+  MapLibre:
+    url: https://github.com/maplibre/maplibre-gl-native-distribution
+    exactVersion: 6.28.0
+  MessagingUI:
+    url: https://github.com/bwees-forks/swiftui-messaging-ui
+    # Pinned to an exact revision: Package.resolved is gitignored (the whole
+    # generated .xcodeproj is), so branch tracking resolves to whatever each
+    # machine last fetched and different developers silently build different
+    # library code. Bump this hash deliberately when the fork advances.
+    revision: 663d6ce9ee9ba459ef9fe3a1848a05c4acffaef8
 
 targets:
-  PocketMesh:
+  MC1:
     type: application
     platform: iOS
     sources:
-      - path: PocketMesh
+      - path: MC1
         excludes:
           - "**/*.md"
       - path: AppIcon.icon
       - path: Shared
     dependencies:
-      - package: PocketMeshServices
+      - package: MC1Services
+      # The raw ride log lives in its own product so the dependency edge — MapperRawLog
+      # depends on MC1Services, never the reverse — keeps raw rows structurally
+      # unreachable from any future upload code (docs/ACTIVE_SURVEY_M3_5.md §2.4).
+      - package: MC1Services
+        product: MapperRawLog
+      # The weather tool reads the MeshWX tables and message types directly (docs/MESHWX.md).
+      - package: MC1Services
+        product: MeshWX
       - package: Emojibase
-      - target: PocketMeshWidgets
+      - package: MapLibre
+      - package: MessagingUI
+      - target: MC1Widgets
     preBuildScripts:
       - name: SwiftGen
         script: |
@@ -47,110 +76,164 @@ targets:
           swiftgen config run --config "${PROJECT_DIR}/swiftgen.yml"
         inputFiles:
           - $(PROJECT_DIR)/swiftgen.yml
-          - $(PROJECT_DIR)/PocketMesh/Resources/Localization/en.lproj/Localizable.strings
-          - $(PROJECT_DIR)/PocketMesh/Resources/Localization/en.lproj/Chats.strings
-          - $(PROJECT_DIR)/PocketMesh/Resources/Localization/en.lproj/Contacts.strings
-          - $(PROJECT_DIR)/PocketMesh/Resources/Localization/en.lproj/Map.strings
-          - $(PROJECT_DIR)/PocketMesh/Resources/Localization/en.lproj/Settings.strings
-          - $(PROJECT_DIR)/PocketMesh/Resources/Localization/en.lproj/Tools.strings
-          - $(PROJECT_DIR)/PocketMesh/Resources/Localization/en.lproj/Onboarding.strings
-          - $(PROJECT_DIR)/PocketMesh/Resources/Localization/en.lproj/RemoteNodes.strings
+          - $(PROJECT_DIR)/MC1/Resources/Localization/en.lproj/Localizable.strings
+          - $(PROJECT_DIR)/MC1/Resources/Localization/en.lproj/Chats.strings
+          - $(PROJECT_DIR)/MC1/Resources/Localization/en.lproj/Contacts.strings
+          - $(PROJECT_DIR)/MC1/Resources/Localization/en.lproj/Map.strings
+          - $(PROJECT_DIR)/MC1/Resources/Localization/en.lproj/Settings.strings
+          - $(PROJECT_DIR)/MC1/Resources/Localization/en.lproj/Tools.strings
+          - $(PROJECT_DIR)/MC1/Resources/Localization/en.lproj/Onboarding.strings
+          - $(PROJECT_DIR)/MC1/Resources/Localization/en.lproj/RemoteNodes.strings
+          - $(PROJECT_DIR)/MC1/Resources/Localization/en.lproj/WhatsNew.strings
+          - $(PROJECT_DIR)/MC1/Resources/Localization/en.lproj/Weather.strings
         outputFiles:
-          - $(PROJECT_DIR)/PocketMesh/Resources/Generated/L10n.swift
+          - $(PROJECT_DIR)/MC1/Resources/Generated/L10n.swift
+        basedOnDependencyAnalysis: false
+    postBuildScripts:
+      # MapLibre is a prebuilt binary with no dSYM in its xcframework, so every
+      # archive uploaded without symbols for it and App Store Connect warned.
+      # Archive builds only: fetch the release's published dSYM for the pinned
+      # version, check its UUIDs against the embedded framework, and add it to
+      # the archive's dSYMs folder. See ci/include-maplibre-dsym.sh.
+      #
+      # User script sandboxing is on (ENABLE_USER_SCRIPT_SANDBOXING above), so the
+      # script, the files it reads and the dSYM it writes are declared here: with
+      # none declared the sandbox refused bash the script itself ("Operation not
+      # permitted") and every archive since 2 September failed on this phase. The
+      # `||` keeps the script's own promise if anything else is refused: a missing
+      # MapLibre dSYM is a warning, never a failed archive.
+      - name: Include MapLibre dSYM in archives
+        script: |
+          "${PROJECT_DIR}/ci/include-maplibre-dsym.sh" || echo "warning: include-maplibre-dsym could not run (exit $?); the archive goes up without MapLibre symbols"
+        inputFiles:
+          - $(PROJECT_DIR)/ci/include-maplibre-dsym.sh
+          - $(PROJECT_DIR)/project.yml
+          - $(TARGET_BUILD_DIR)/$(FRAMEWORKS_FOLDER_PATH)/MapLibre.framework/MapLibre
+        outputFiles:
+          - $(DWARF_DSYM_FOLDER_PATH)/MapLibre.framework.dSYM
+        runOnlyWhenInstalling: true
         basedOnDependencyAnalysis: false
     settings:
       base:
-        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: YES
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        MARKETING_VERSION: 0.10.0
+        MARKETING_VERSION: 1.5.2
         CURRENT_PROJECT_VERSION: 1
         VERSIONING_SYSTEM: apple-generic
         TARGETED_DEVICE_FAMILY: "1,2"
         NSSupportsLiveActivities: true
         UIBackgroundModes:
           - bluetooth-central
-        NSBluetoothAlwaysUsageDescription: "PocketMesh uses Bluetooth to maintain connections with MeshCore radios, even in the background, so you can send and receive messages without opening the app."
-        NSBluetoothPeripheralUsageDescription: "PocketMesh uses Bluetooth to connect to MeshCore radios."
-        NSLocationWhenInUseUsageDescription: "PocketMesh can share your location with contacts on the mesh network."
+        NSBluetoothAlwaysUsageDescription: "DigitainoMesh uses Bluetooth to maintain connections with MeshCore radios, even in the background, so you can send and receive messages without opening the app."
+        NSBluetoothPeripheralUsageDescription: "DigitainoMesh uses Bluetooth to connect to MeshCore radios."
+        NSLocationWhenInUseUsageDescription: "DigitainoMesh uses your location to suggest a recommended radio preset for your area, show your position on maps, and sort contacts by distance. When you enable location sharing, DigitainoMesh also advertises your location to your mesh contacts."
+        NSMotionUsageDescription: "DigitainoMesh uses motion activity to sense when you're moving so signal strength refreshes more often — without GPS, to save battery."
+        NSLocationTemporaryUsageDescriptionDictionary:
+          RideSurvey: "A signal survey ride maps how far your radio reaches. Without precise location, samples cannot be placed accurately and the ride records nothing."
+        NSAccessorySetupSupports:
+          - Bluetooth
         NSAccessorySetupKitSupports:
           - Bluetooth
         NSAccessorySetupBluetoothServices:
           - "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"
-        NSAccessorySetupBluetoothNames:
-          - "MeshCore-"
-          - "Whisper-"
-          - "WisCore"
-          - "XIAO"
-          - "elecrow"
-          - "HT-n5262"
-          - "Seeed"
-          - "BQ"
-          - "ProMicro"
-          - "Keepteen"
-          - "Meshtiny"
-          - "T1000-E-BOOT"
-          - "me25ls01-BOOT"
-          - "NRF52 DK"
       configs:
         Debug:
-          INFOPLIST_FILE: PocketMesh/Info-Debug.plist
-          PRODUCT_BUNDLE_IDENTIFIER: io.pocketmesh.app.debug
+          INFOPLIST_FILE: MC1/Info-Debug.plist
+          PRODUCT_BUNDLE_IDENTIFIER: com.digitaino.PocketMesh
         Release:
-          INFOPLIST_FILE: PocketMesh/Info.plist
-          PRODUCT_BUNDLE_IDENTIFIER: io.pocketmesh.app
+          INFOPLIST_FILE: MC1/Info.plist
+          PRODUCT_BUNDLE_IDENTIFIER: com.digitaino.PocketMesh
 
-  PocketMeshTests:
+  MC1Tests:
     type: bundle.unit-test
     platform: iOS
     sources:
-      - path: PocketMeshTests
+      - path: MC1Tests
     dependencies:
-      - target: PocketMesh
+      - target: MC1
     settings:
       base:
-        INFOPLIST_FILE: PocketMeshTests/Info.plist
-        MARKETING_VERSION: 0.10.0
+        INFOPLIST_FILE: MC1Tests/Info.plist
+        MARKETING_VERSION: 1.5.2
         CURRENT_PROJECT_VERSION: 1
         VERSIONING_SYSTEM: apple-generic
-        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/PocketMesh.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/PocketMesh"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/MC1.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/MC1"
         BUNDLE_LOADER: "$(TEST_HOST)"
 
-  PocketMeshWidgets:
+  # Driven by hand on a real phone with a real radio, never by `make test`: the Weather tool's
+  # UI tests run against the app as the owner left it (docs/Testing.md). They live in their own
+  # scheme so the MC1 scheme's Test action stays the unit suite.
+  MC1UITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: MC1UITests
+    dependencies:
+      - target: MC1
+    settings:
+      base:
+        INFOPLIST_FILE: MC1UITests/Info.plist
+        MARKETING_VERSION: 1.5.2
+        CURRENT_PROJECT_VERSION: 1
+        VERSIONING_SYSTEM: apple-generic
+        TEST_TARGET_NAME: MC1
+        # Under the app's own identifier: the runner is an app of its own and needs a profile
+        # the owner's team can issue for it.
+        PRODUCT_BUNDLE_IDENTIFIER: com.digitaino.PocketMesh.uitests
+
+  MC1Widgets:
     type: app-extension
     platform: iOS
     sources:
-      - path: PocketMeshWidgets
+      - path: MC1Widgets
       - path: Shared
     settings:
       base:
-        MARKETING_VERSION: 0.10.0
+        MARKETING_VERSION: 1.5.2
         CURRENT_PROJECT_VERSION: 1
         VERSIONING_SYSTEM: apple-generic
         TARGETED_DEVICE_FAMILY: "1,2"
       configs:
         Debug:
-          INFOPLIST_FILE: PocketMeshWidgets/Info.plist
-          PRODUCT_BUNDLE_IDENTIFIER: io.pocketmesh.app.debug.widgets
+          INFOPLIST_FILE: MC1Widgets/Info.plist
+          PRODUCT_BUNDLE_IDENTIFIER: com.digitaino.PocketMesh.widgets
         Release:
-          INFOPLIST_FILE: PocketMeshWidgets/Info.plist
-          PRODUCT_BUNDLE_IDENTIFIER: io.pocketmesh.app.widgets
+          INFOPLIST_FILE: MC1Widgets/Info.plist
+          PRODUCT_BUNDLE_IDENTIFIER: com.digitaino.PocketMesh.widgets
 
 schemes:
-  PocketMesh:
+  MC1:
     build:
       targets:
-        PocketMesh: all
-        PocketMeshTests: [test]
-        PocketMeshWidgets: [run]
+        MC1: all
+        MC1Tests: [test]
+        MC1Widgets: [run]
     run:
       config: Debug
     test:
       config: Debug
+      language: en
+      region: US
       targets:
-        - PocketMeshTests
+        - MC1Tests
     profile:
       config: Release
     analyze:
       config: Debug
     archive:
       config: Release
+
+  # `xcodebuild -scheme MC1UITests build-for-testing` / `test-without-building`. Separate from the
+  # MC1 scheme on purpose: these drive a phone and take minutes, and `make test-app` should not.
+  MC1UITests:
+    build:
+      targets:
+        MC1: all
+        MC1UITests: [test]
+        MC1Widgets: [run]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - MC1UITests

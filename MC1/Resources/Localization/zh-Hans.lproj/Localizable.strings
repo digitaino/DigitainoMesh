@@ -1,0 +1,916 @@
+/*
+  Localizable.strings
+  MC1
+
+  Common and shared strings used across the application.
+  This file contains generic UI elements, buttons, and strings
+  that appear in multiple places throughout the app.
+ */
+
+// MARK: - Generic Buttons
+
+/* Standard confirmation button for dialogs */
+"common.ok" = "确定";
+
+/* Standard cancel button for dialogs and sheets */
+"common.cancel" = "取消";
+
+/* Standard done button for completing an action */
+"common.done" = "完成";
+
+/* Standard save button for persisting changes */
+"common.save" = "保存";
+
+/* Standard delete button for removing items */
+"common.delete" = "删除";
+
+/* Standard edit button for entering edit mode */
+"common.edit" = "编辑";
+
+/* Standard close button for dismissing views */
+/* Button to retry a failed operation */
+"common.tryAgain" = "重试";
+
+/* Error label when content fails to load */
+"common.error.failedToLoad" = "加载失败";
+
+/* Network error with underlying error description - %@ is the error description */
+"common.error.networkError" = "网络错误：%@";
+
+/* Invalid response from API */
+"common.error.invalidResponse" = "高程API返回无效响应";
+
+/* API error with message - %@ is the error message */
+"common.error.apiError" = "API错误：%@";
+
+/* No data returned from API */
+"common.error.noElevationData" = "未返回高程数据";
+
+/* Rate limited by elevation API */
+"common.error.rateLimited" = "请求过多，请稍后重试。";
+
+/* Standard remove button for removing items from a list or group */
+// MARK: - Connection Status
+
+/* Location: SyncingPillView.swift - Status shown when syncing data */
+"common.status.syncing" = "同步中";
+
+/* Location: SyncingPillView.swift - Status shown when connecting to device */
+"common.status.connecting" = "连接中";
+
+/* Location: SyncingPillView.swift - Status shown when device is ready */
+"common.status.ready" = "就绪";
+
+/* Location: SyncingPillView.swift - Status shown when device is disconnected */
+"common.status.disconnected" = "已断开";
+
+// MARK: - Tab Bar
+
+/* Tab bar title for the messaging/conversations screen */
+"tabs.chats" = "聊天";
+
+/* VoiceOver value announcing the unread message count on the Chats sidebar icon. %d is the count. */
+"tabs.chatsUnreadAccessibilityValue" = "%d条未读";
+
+/* Tab bar title for the nodes/contacts list screen */
+"tabs.nodes" = "节点";
+
+/* Tab bar title for the map screen showing node locations */
+"tabs.map" = "地图";
+
+/* Tab bar title for the tools/utilities screen */
+"tabs.tools" = "工具";
+
+/* Tab bar title for the app settings screen */
+"tabs.settings" = "设置";
+
+// MARK: - Connection Alerts
+
+/* Alert title when device connection fails */
+"alert.connectionFailed.title" = "连接失败";
+
+/* Alert title when connection cannot be established */
+"alert.couldNotConnect.title" = "无法连接";
+
+/* Alert title when device pairing fails (e.g., wrong PIN) */
+"alert.pairingFailed.title" = "配对失败";
+
+/* Default message when device connection fails */
+"alert.connectionFailed.defaultMessage" = "无法连接到设备";
+
+/* Message suggesting another app may be connected to the device */
+"alert.couldNotConnect.otherAppMessage" = "请确保没有其他应用连接到该设备，然后重试。";
+
+/* Button to remove failed pairing and retry connection */
+"alert.connectionFailed.removeAndRetry" = "移除并重试";
+
+/* VoiceOver label for the destructive Remove and Try Again button — clarifies that "remove" means removing the device pairing */
+"accessibility.alert.connectionFailed.removeAndRetry" = "移除设备配对并重试";
+
+// MARK: - Stale Node Location Prompt
+
+/* Alert title offering to move the radio's configured advert location to the phone's current position */
+"alert.nodeLocationStale.title" = "更新节点位置？";
+
+/* Alert body for the stale node-location prompt - %@ is the localized distance between the radio's configured location and the phone, e.g. "1,400 mi" */
+"alert.nodeLocationStale.message" = "你的电台仍在报告约 %@ 外的位置，整个 Mesh 网络看到的就是这个位置。要将它设为你当前的位置吗？";
+
+/* Button that writes the phone's current coordinates to the radio */
+"alert.nodeLocationStale.update" = "更新";
+
+/* Button that dismisses the stale node-location prompt (snoozed for a week) */
+"alert.nodeLocationStale.notNow" = "暂不";
+
+// MARK: - Accessibility
+
+/* Location: SyncingPillView.swift - Accessibility hint for disconnected state */
+"common.accessibility.connectHint" = "双击以连接设备";
+
+/* VoiceOver announcement when viewing cached data while disconnected from device */
+/* Location: View+RadioDisabled.swift - VoiceOver hint when a control is disabled because the radio is not connected */
+"accessibility.requiresRadioConnection" = "请先开启设备连接";
+
+/* Accessibility value for toggle in On state */
+"accessibility.on" = "开启";
+
+/* Accessibility value for toggle in Off state */
+"accessibility.off" = "关闭";
+
+// MARK: - Node Types
+
+/* Node type for a person or contact */
+/* Node type for a mesh network repeater device */
+/* Node type for a group chat room */
+// MARK: - Permission Levels
+
+/* Permission level with limited access */
+/* Permission level with standard access */
+/* Permission level with full administrative access */
+// MARK: - Reaction Notifications
+
+/* Notification body when someone reacts to your message - %1$@ is the emoji, %2$@ is the message preview */
+"notifications.reaction.body" = "%1$@ 回应了您的消息：\"%2$@\"";
+
+// MARK: - Discovery Notifications
+
+/* Notification title when a new contact is discovered on the mesh network */
+"notifications.discovery.contact" = "发现新联系人";
+
+/* Notification title when a new repeater node is discovered on the mesh network */
+"notifications.discovery.repeater" = "发现新转发节点";
+
+/* Notification title when a new room is discovered on the mesh network */
+"notifications.discovery.room" = "发现新房间";
+
+// MARK: - Notification Actions
+
+/* Notification action button to reply to a message */
+"notifications.action.reply" = "回复";
+
+/* Notification action button to send a quick reply */
+"notifications.action.send" = "发送";
+
+/* Notification action placeholder for quick reply text input */
+"notifications.action.messagePlaceholder" = "消息...";
+
+/* Notification action button to mark a message as read */
+"notifications.action.markAsRead" = "标为已读";
+
+// MARK: - Low Battery Notifications
+
+/* Notification title for low battery warning */
+"notifications.lowBattery.title" = "设备电量低";
+
+/* Notification body for low battery warning - %1$@ is device name, %2$d is battery percentage */
+"notifications.lowBattery.body" = "%1$@ 电量为 %2$d%%";
+
+/* Notification title when a quick reply fails to send */
+"notifications.quickReplyFailed.title" = "消息未发送";
+
+/* Notification body when a quick reply fails - %@ is the contact or channel name */
+"notifications.quickReplyFailed.body" = "无法发送给%@的回复。";
+
+/* Fallback display name for a discovered contact with no advertised name */
+"notifications.discovery.unknownContact" = "未知联系人";
+
+// MARK: - Connection VoiceOver Announcements
+
+/* VoiceOver announcement when sync fails and device is disconnecting */
+"accessibility.connection.syncFailedDisconnecting" = "同步失败。正在断开连接。";
+
+/* VoiceOver announcement when device connection is lost */
+"accessibility.connection.deviceConnectionLost" = "设备连接已断开";
+
+/* VoiceOver announcement when device reconnects */
+"accessibility.connection.deviceReconnected" = "设备已重新连接";
+
+/* VoiceOver signal-strength descriptors for the device picker signal bars */
+"accessibility.signalStrength.weak" = "弱信号";
+"accessibility.signalStrength.medium" = "中等信号";
+"accessibility.signalStrength.strong" = "强信号";
+
+// MARK: - Status Pill
+
+/* Status pill message when sync has failed */
+"statusPill.syncFailed" = "同步失败";
+
+// MARK: - Signal Bars
+
+/* Location: RepeaterSignalPopover.swift - Title of the repeater signal table */
+"signalBars.title" = "Repeaters";
+
+/* Location: RepeaterSignalToolbarItem.swift - Toolbar value when no repeater has been heard */
+"signalBars.noRepeaters" = "No repeaters heard";
+
+/* Location: RepeaterSignalPopover.swift - Placeholder while the table is still empty */
+"signalBars.scanning" = "Looking for repeaters…";
+
+
+/* Location: RepeaterSignalPopover.swift - Source label when the radio owns the table */
+"signalBars.sourceRadio" = "Synced with radio";
+
+/* Location: RepeaterSignalPopover.swift - Source label when the app measures the table itself */
+"signalBars.sourceApp" = "Measured on this iPhone";
+
+/* Location: RepeaterSignalPopover.swift - Button that re-scans for repeaters */
+"signalBars.scan" = "Scan for repeaters";
+
+/* Location: RepeaterSignalPopover.swift - Button that hides every stale row */
+"signalBars.clearStale" = "Clear stale repeaters";
+
+/* Location: RepeaterSignalPopover.swift - Row action that measures one repeater now */
+"signalBars.pingNow" = "Ping Now";
+
+/* Location: RepeaterSignalPopover.swift - Row action that starts watching a repeater */
+"signalBars.watch" = "Watch Repeater";
+
+/* Location: RepeaterSignalPopover.swift - Row action that stops watching a repeater */
+"signalBars.stopWatching" = "Stop Watching";
+
+/* Location: RepeaterSignalPopover.swift - Row action that hides a repeater until it is heard again */
+"signalBars.removeFromList" = "Remove from List";
+
+/* Location: RepeaterSignalPopover.swift - Label of the transmit power control */
+"signalBars.txPower" = "TX Power";
+
+/* Location: RepeaterSignalPopover.swift - Menu action returning transmit power to the base step */
+"signalBars.resetPower" = "Reset to Base";
+
+/* Location: RepeaterSignalGlyph.swift - Compact signal-to-noise readout - %lld is the value in dB */
+"signalBars.snrValue" = "%llddB";
+
+/* Location: RepeaterSignalRow.swift - Compact round-trip time readout - %lld is the value in milliseconds */
+"signalBars.rttValue" = "%lldms";
+
+/* Location: RepeaterSignalPopover.swift - Column header for the repeater identifier */
+"signalBars.column.id" = "ID";
+
+/* Location: RepeaterSignalPopover.swift - Column header for how well we hear the repeater */
+"signalBars.column.rx" = "RX";
+
+/* Location: RepeaterSignalPopover.swift - Column header for how well the repeater hears us */
+"signalBars.column.tx" = "TX";
+
+/* Location: RepeaterSignalPopover.swift - Column header for how long ago the repeater was heard */
+"signalBars.column.age" = "Age";
+
+/* Location: RepeaterSignalToolbarItem.swift - VoiceOver hint for the signal bars toolbar button */
+"signalBars.accessibility.toolbarHint" = "Shows every reachable repeater and its signal";
+
+/* Location: RepeaterSignalGlyph.swift - VoiceOver description of the receive leg - %1$@ is a quality word, %2$lld is the SNR in dB */
+"signalBars.accessibility.rxLeg" = "we hear it %1$@ at %2$lld decibels";
+
+/* Location: RepeaterSignalGlyph.swift - VoiceOver description when the receive leg has no measurement */
+"signalBars.accessibility.rxUnknown" = "not yet heard";
+
+/* Location: RepeaterSignalGlyph.swift - VoiceOver description of the transmit leg - %1$@ is a quality word, %2$lld is the SNR in dB */
+"signalBars.accessibility.txLeg" = "it hears us %1$@ at %2$lld decibels";
+
+/* Location: RepeaterSignalGlyph.swift - VoiceOver description when the transmit leg has never been probed */
+"signalBars.accessibility.txUnknown" = "unknown whether it hears us";
+
+/* Location: RepeaterSignalGlyph.swift - VoiceOver description while a transmit probe is in flight */
+"signalBars.accessibility.txMeasuring" = "measuring whether it hears us";
+
+/* Location: RepeaterSignalGlyph.swift - VoiceOver description when the transmit probe got no answer */
+"signalBars.accessibility.txFailed" = "it did not answer our probe";
+
+/* Location: RepeaterSignalRow.swift - VoiceOver suffix marking the watched repeater */
+"signalBars.accessibility.watched" = "watched";
+
+// MARK: - Error Messages
+
+/* Location: MeshCoreError+UserFacingMessage.swift - Session operation timed out */
+"error.meshCore.timeout" = "操作超时，请重试。";
+
+/* Location: MeshCoreError+UserFacingMessage.swift - Device response could not be parsed - %@ is the parse failure detail */
+"error.meshCore.parseError" = "无法解析设备响应：%@";
+
+/* Location: MeshCoreError+UserFacingMessage.swift - No active connection to the radio */
+"error.meshCore.notConnected" = "未连接到设备。";
+
+/* Location: MeshCoreError+UserFacingMessage.swift - A command failed on the device - %@ is the failure reason */
+"error.meshCore.commandFailed" = "命令失败：%@";
+
+/* Location: MeshCoreError+UserFacingMessage.swift - Unexpected device response - %1$@ is the expected response, %2$@ is the received response */
+"error.meshCore.invalidResponse" = "设备返回了意外响应（预期 %1$@，实际收到 %2$@）。";
+
+/* Location: MeshCoreError+UserFacingMessage.swift - Contact missing from the radio */
+"error.meshCore.contactNotFound" = "在设备上未找到联系人。";
+
+/* Location: MeshCoreError+UserFacingMessage.swift - Payload exceeds device limit - %1$lld is the actual size in bytes, %2$lld is the maximum */
+"error.meshCore.dataTooLarge" = "数据过大（%1$lld 字节，最大为 %2$lld）。";
+
+/* Location: MeshCoreError+UserFacingMessage.swift - Cryptographic signing failed - %@ is the failure reason */
+"error.meshCore.signingFailed" = "签名失败：%@";
+
+/* Location: MeshCoreError+UserFacingMessage.swift - Invalid input - %@ is the validation detail */
+"error.meshCore.invalidInput" = "输入无效：%@";
+
+/* Location: MeshCoreError+UserFacingMessage.swift - Unknown error - %@ is the error detail */
+"error.meshCore.unknown" = "发生未知错误：%@";
+
+/* Location: MeshCoreError+UserFacingMessage.swift - Bluetooth hardware unavailable */
+"error.meshCore.bluetoothUnavailable" = "此设备上的蓝牙不可用。";
+
+/* Location: MeshCoreError+UserFacingMessage.swift - Bluetooth permission denied */
+"error.meshCore.bluetoothUnauthorized" = "需要蓝牙权限，请在设置中启用。";
+
+/* Location: MeshCoreError+UserFacingMessage.swift - Bluetooth radio is off */
+"error.meshCore.bluetoothPoweredOff" = "蓝牙已关闭，请开启蓝牙以连接。";
+
+/* Location: MeshCoreError+UserFacingMessage.swift - Connection lost with detail - %@ is the underlying error message */
+"error.meshCore.connectionLost" = "与设备的连接已断开：%@";
+
+/* Location: MeshCoreError+UserFacingMessage.swift - Connection lost without further detail */
+"error.meshCore.connectionLostNoDetail" = "与设备的连接已断开。";
+
+/* Location: MeshCoreError+UserFacingMessage.swift - Session not started */
+"error.meshCore.sessionNotStarted" = "会话尚未开始。";
+
+/* Location: MeshCoreError+UserFacingMessage.swift - Feature disabled in device firmware */
+"error.meshCore.featureDisabled" = "设备上已禁用此功能。";
+
+/* Location: MeshCoreError+UserFacingMessage.swift, ProtocolError+UserFacingMessage.swift - Firmware error code: command unsupported */
+"error.device.unsupportedCommand" = "设备固件不支持该命令。";
+
+/* Location: MeshCoreError+UserFacingMessage.swift, ProtocolError+UserFacingMessage.swift - Firmware error code: item not found */
+"error.device.notFound" = "在设备上未找到该项目。";
+
+/* Location: MeshCoreError+UserFacingMessage.swift, ProtocolError+UserFacingMessage.swift - Firmware error code: storage full */
+"error.device.storageFull" = "设备存储空间已满。";
+
+/* Location: MeshCoreError+UserFacingMessage.swift, ProtocolError+UserFacingMessage.swift - Firmware error code: invalid state */
+"error.device.invalidState" = "设备当前状态无法执行此操作。";
+
+/* Location: MeshCoreError+UserFacingMessage.swift, ProtocolError+UserFacingMessage.swift - Firmware error code: file system error */
+"error.device.fileSystem" = "设备文件系统错误。";
+
+/* Location: MeshCoreError+UserFacingMessage.swift, ProtocolError+UserFacingMessage.swift - Firmware error code: invalid parameter */
+"error.device.invalidParameter" = "发送给设备的参数无效。";
+
+/* Location: MeshCoreError+UserFacingMessage.swift - Firmware error code outside the known range - %lld is the raw code */
+"error.device.unknown" = "设备错误（代码 %lld）。";
+
+/* Location: TimeoutError+UserFacingMessage.swift - Generic timeout for async operations */
+"error.timeout.operationTimedOut" = "操作超时，请重试。";
+
+/* Location: BLEError+UserFacingMessage.swift - Bluetooth hardware unavailable */
+"error.ble.bluetoothUnavailable" = "此设备上的蓝牙不可用。";
+
+/* Location: BLEError+UserFacingMessage.swift - Bluetooth permission denied */
+"error.ble.bluetoothUnauthorized" = "需要蓝牙权限，请在设置中启用。";
+
+/* Location: BLEError+UserFacingMessage.swift - Bluetooth radio is off */
+"error.ble.bluetoothPoweredOff" = "蓝牙已关闭，请开启蓝牙以连接。";
+
+/* Location: BLEError+UserFacingMessage.swift - Scanned device could not be found */
+"error.ble.deviceNotFound" = "未找到设备，请确保设备已开机并在附近。";
+
+/* Location: BLEError+UserFacingMessage.swift - BLE connection failed - %@ is the failure detail */
+"error.ble.connectionFailed" = "连接失败：%@";
+
+/* Location: BLEError+UserFacingMessage.swift - BLE connection attempt timed out */
+"error.ble.connectionTimeout" = "连接超时，请重试。";
+
+/* Location: BLEError+UserFacingMessage.swift - No BLE device connected */
+"error.ble.notConnected" = "未连接到任何设备。";
+
+/* Location: BLEError+UserFacingMessage.swift - Required BLE characteristic missing */
+"error.ble.characteristicNotFound" = "无法与设备通信，请尝试重新连接。";
+
+/* Location: BLEError+UserFacingMessage.swift - BLE write failed - %@ is the failure detail */
+"error.ble.writeError" = "发送数据失败：%@";
+
+/* Location: BLEError+UserFacingMessage.swift - Malformed BLE response */
+"error.ble.invalidResponse" = "设备响应无效，请重试。";
+
+/* Location: BLEError+UserFacingMessage.swift - BLE operation timed out */
+"error.ble.operationTimeout" = "操作超时，请重试。";
+
+/* Location: BLEError+UserFacingMessage.swift - BLE PIN authentication failed */
+"error.ble.authenticationFailed" = "认证失败，请检查设备的 PIN 码。";
+
+/* Location: BLEError+UserFacingMessage.swift - Bluetooth pairing failed - %@ is the failure reason */
+"error.ble.pairingFailed" = "蓝牙配对失败：%@";
+
+/* Location: BLEError+UserFacingMessage.swift - Radio already in use by another app */
+"error.ble.deviceConnectedToOtherApp" = "此设备已连接到其他应用。为避免通信问题，同一时间只能有一个应用使用无线电。";
+
+/* Location: ConnectionError+UserFacingMessage.swift - Connection failed - %@ is the failure reason */
+"error.connection.connectionFailed" = "连接失败：%@";
+
+/* Location: ConnectionError+UserFacingMessage.swift - Device to connect to was not found */
+"error.connection.deviceNotFound" = "未找到设备";
+
+/* Location: ConnectionError+UserFacingMessage.swift - No active device connection */
+"error.connection.notConnected" = "未连接到设备";
+
+/* Location: ConnectionError+UserFacingMessage.swift - Post-connect device initialization failed - %@ is the failure reason */
+"error.connection.initializationFailed" = "设备初始化失败：%@";
+
+/* Location: WiFiTransportError+UserFacingMessage.swift - WiFi connection failed - %@ is the failure reason */
+"error.wifi.connectionFailed" = "连接失败：%@";
+
+/* Location: WiFiTransportError+UserFacingMessage.swift - WiFi connection attempt timed out */
+"error.wifi.connectionTimeout" = "连接超时。请检查主机名或 IP 地址，并确保可以连接到设备。";
+
+/* Location: WiFiTransportError+UserFacingMessage.swift - No active WiFi connection */
+"error.wifi.notConnected" = "未连接到设备。";
+
+/* Location: WiFiTransportError+UserFacingMessage.swift - WiFi send failed - %@ is the failure reason */
+"error.wifi.sendFailed" = "发送数据失败：%@";
+
+/* Location: WiFiTransportError+UserFacingMessage.swift - WiFi send timed out */
+"error.wifi.sendTimeout" = "发送操作超时。";
+
+/* Location: WiFiTransportError+UserFacingMessage.swift - Configured hostname or IP address is invalid */
+"error.wifi.invalidHost" = "主机名或 IP 地址无效。";
+
+/* Location: WiFiTransportError+UserFacingMessage.swift - Configured port number is invalid */
+"error.wifi.invalidPort" = "端口号无效。";
+
+/* Location: WiFiTransportError+UserFacingMessage.swift - WiFi connection info missing */
+"error.wifi.notConfigured" = "连接尚未配置。";
+
+/* Location: AccessorySetupKitError+UserFacingMessage.swift - AccessorySetupKit session not active */
+"error.accessorySetup.sessionNotActive" = "蓝牙尚未就绪。请确保蓝牙已开启，然后重试。";
+
+/* Location: AccessorySetupKitError+UserFacingMessage.swift - AccessorySetupKit session invalidated */
+"error.accessorySetup.sessionInvalidated" = "蓝牙会话意外结束，请重新启动应用。";
+
+/* Location: AccessorySetupKitError+UserFacingMessage.swift - User dismissed the accessory picker */
+"error.accessorySetup.pickerDismissed" = "设备选择已取消。";
+
+/* Location: AccessorySetupKitError+UserFacingMessage.swift - Accessory picker could not be shown */
+"error.accessorySetup.pickerRestricted" = "无法显示设备选择器。请检查蓝牙是否已开启，稍候片刻后重试。";
+
+/* Location: AccessorySetupKitError+UserFacingMessage.swift - Accessory picker already on screen */
+"error.accessorySetup.pickerAlreadyActive" = "设备选择器已在显示中。";
+
+/* Location: AccessorySetupKitError+UserFacingMessage.swift - Accessory pairing failed - %@ is the failure reason */
+"error.accessorySetup.pairingFailed" = "配对失败：%@";
+
+/* Location: AccessorySetupKitError+UserFacingMessage.swift - Picked accessory lacks a Bluetooth identifier */
+"error.accessorySetup.noBluetoothIdentifier" = "所选设备不支持蓝牙连接。";
+
+/* Location: AccessorySetupKitError+UserFacingMessage.swift - Accessory discovery timed out */
+"error.accessorySetup.discoveryTimeout" = "未找到设备。请确保你的设备已开机并在附近。";
+
+/* Location: AccessorySetupKitError+UserFacingMessage.swift - Connection to picked accessory failed */
+"error.accessorySetup.connectionFailed" = "无法连接到设备，请重试。";
+
+/* Location: ContactServiceError+UserFacingMessage.swift - No active connection to the radio */
+"error.contactService.notConnected" = "未连接到无线电";
+
+/* Location: ContactServiceError+UserFacingMessage.swift - Contact operation message failed to send */
+"error.contactService.sendFailed" = "发送消息失败";
+
+/* Location: ContactServiceError+UserFacingMessage.swift - Malformed device response during a contact operation */
+"error.contactService.invalidResponse" = "设备响应无效";
+
+/* Location: ContactServiceError+UserFacingMessage.swift - Contact sync stopped before finishing */
+"error.contactService.syncInterrupted" = "同步已中断";
+
+/* Location: ContactServiceError+UserFacingMessage.swift - Contact missing from the radio */
+"error.contactService.contactNotFound" = "在设备上未找到联系人";
+
+/* Location: ContactServiceError+UserFacingMessage.swift - Radio node list has no free slots */
+"error.contactService.contactTableFull" = "设备节点列表已满";
+
+/* Location: ContactServiceError+UserFacingMessage.swift - Node advertisement missing or stale, so the node cannot be shared */
+"error.contactService.shareContactUnavailable" = "无法分享节点。该节点的广播可能缺失或过旧。";
+
+/* Location: MessageServiceError+UserFacingMessage.swift - No active connection to the radio */
+"error.messageService.notConnected" = "未连接到设备。";
+
+/* Location: MessageServiceError+UserFacingMessage.swift - Recipient contact missing from the database */
+"error.messageService.contactNotFound" = "未找到联系人。";
+
+/* Location: MessageServiceError+UserFacingMessage.swift - Target channel missing from the database */
+"error.messageService.channelNotFound" = "未找到频道。";
+
+/* Location: MessageServiceError+UserFacingMessage.swift - Message send failed */
+"error.messageService.sendFailed" = "发送失败。";
+
+/* Location: MessageServiceError+UserFacingMessage.swift - Recipient cannot receive direct messages */
+"error.messageService.invalidRecipient" = "无法向此收件人发送消息。";
+
+/* Location: MessageServiceError+UserFacingMessage.swift - Message text exceeds the maximum length */
+"error.messageService.messageTooLong" = "消息超出允许的最大长度。";
+
+/* Location: ChannelServiceError+UserFacingMessage.swift - No active connection to the radio */
+"error.channelService.notConnected" = "未连接到设备。";
+
+/* Location: ChannelServiceError+UserFacingMessage.swift - Channel missing from the database */
+"error.channelService.channelNotFound" = "未找到频道。";
+
+/* Location: ChannelServiceError+UserFacingMessage.swift - Channel slot index out of range */
+"error.channelService.invalidChannelIndex" = "频道索引无效。";
+
+/* Location: ChannelServiceError+UserFacingMessage.swift - Hashing the channel secret key failed */
+"error.channelService.secretHashingFailed" = "频道密钥哈希计算失败。";
+
+/* Location: ChannelServiceError+UserFacingMessage.swift - Channel save failed - %@ is the failure reason */
+"error.channelService.saveFailed" = "保存频道失败：%@";
+
+/* Location: ChannelServiceError+UserFacingMessage.swift - Channel message send failed - %@ is the failure reason */
+"error.channelService.sendFailed" = "发送失败：%@";
+
+/* Location: ChannelServiceError+UserFacingMessage.swift - Channel sync already running */
+"error.channelService.syncAlreadyInProgress" = "频道同步已在进行中。";
+
+/* Location: ChannelServiceError+UserFacingMessage.swift - Channel sync suspended - %lld is the consecutive failure count */
+"error.channelService.circuitBreakerOpen" = "连续失败 %lld 次后，频道同步已暂停。";
+
+/* Location: IntentError.swift - No radio is connected, so retrying alone will not help until one is connected */
+"error.intent.notConnected" = "未连接任何电台。请在 DigitainoMesh 中连接电台后重试。";
+
+/* Location: IntentError.swift - The chosen recipient cannot receive messages */
+"error.intent.invalidRecipient" = "请选择一个收信人，可以是联系人或能接收消息的频道。";
+
+/* Location: IntentError.swift - The message text exceeds the maximum length the radio can send */
+"error.intent.messageTooLong" = "消息过长，无法发送。";
+
+/* Location: IntentError.swift - Persisting the message to the send queue failed, so it was never queued */
+"error.intent.sendFailed" = "无法将消息加入发送队列。请重试。";
+
+/* Title of the radio-status Control Center control that opens the app; resolved in the app process */
+"Open DigitainoMesh" = "打开 DigitainoMesh";
+
+/* Location: ChatSendQueueServiceError+UserFacingMessage.swift - Queueing a message for send failed - %@ is the underlying error message */
+"error.chatSendQueue.persistFailed" = "无法将消息加入发送队列：%@";
+
+/* Location: ChatSendQueueServiceError+UserFacingMessage.swift - No active connection to the radio */
+"error.chatSendQueue.notConnected" = "未连接到设备。";
+
+/* Location: MessagePollingError+UserFacingMessage.swift - No active connection to the radio */
+"error.messagePolling.notConnected" = "未连接到设备。";
+
+/* Location: MessagePollingError+UserFacingMessage.swift - Fetching queued messages from the radio failed */
+"error.messagePolling.pollingFailed" = "获取消息失败。";
+
+/* Location: AdvertisementError+UserFacingMessage.swift - No active connection to the radio */
+"error.advertisement.notConnected" = "未连接到设备。";
+
+/* Location: AdvertisementError+UserFacingMessage.swift - Self-advertisement broadcast failed */
+"error.advertisement.sendFailed" = "发送广播失败。";
+
+/* Location: AdvertisementError+UserFacingMessage.swift - Malformed device response to an advertisement command */
+"error.advertisement.invalidResponse" = "设备响应无效。";
+
+/* Location: RemoteNodeError+UserFacingMessage.swift - No active connection to the mesh radio */
+"error.remoteNode.notConnected" = "未连接到 Mesh 设备";
+
+/* Location: RemoteNodeError+UserFacingMessage.swift - Remote node login failed */
+"error.remoteNode.loginFailed" = "登录失败。";
+
+/* Location: RemoteNodeError+UserFacingMessage.swift - Sending to the remote node failed */
+"error.remoteNode.sendFailed" = "发送失败。";
+
+/* Location: RemoteNodeError+UserFacingMessage.swift - Malformed response from the remote node */
+"error.remoteNode.invalidResponse" = "远程节点响应无效";
+
+/* Location: RemoteNodeError+UserFacingMessage.swift - Remote node rejected the operation */
+"error.remoteNode.permissionDenied" = "权限被拒绝";
+
+/* Location: RemoteNodeError+UserFacingMessage.swift - Remote node request timed out */
+"error.remoteNode.timeout" = "请求超时";
+
+/* Location: RemoteNodeError+UserFacingMessage.swift - No stored session for the remote node */
+"error.remoteNode.sessionNotFound" = "未找到远程节点会话";
+
+/* Location: RemoteNodeError+UserFacingMessage.swift - Saved password missing from the keychain */
+"error.remoteNode.passwordNotFound" = "未在钥匙串中找到密码";
+
+/* Location: RemoteNodeError+UserFacingMessage.swift - Keep-alive needs a direct path but the route is flood-routed */
+"error.remoteNode.floodRouted" = "保活请求需要直接路由路径";
+
+/* Location: RemoteNodeError+UserFacingMessage.swift - Establishing a direct path to the node failed */
+"error.remoteNode.pathDiscoveryFailed" = "无法建立直接路径";
+
+/* Location: RemoteNodeError+UserFacingMessage.swift - Remote node contact missing from the database */
+"error.remoteNode.contactNotFound" = "数据库中未找到联系人";
+
+/* Location: RemoteNodeError+UserFacingMessage.swift - Radio contact table full; cannot auto-add the node during login */
+"error.remoteNode.radioContactsFull" = "你的设备联系人槽位已满。请删除一个不再需要的联系人，然后重新登录。";
+
+/* Location: RemoteNodeError+UserFacingMessage.swift - Login attempt cancelled by a duplicate attempt or shutdown */
+"error.remoteNode.cancelled" = "登录已取消";
+
+/* Location: RoomServerError+UserFacingMessage.swift - No active connection to the radio */
+"error.roomServer.notConnected" = "未连接到设备。";
+
+/* Location: RoomServerError+UserFacingMessage.swift - No stored session for the room server */
+"error.roomServer.sessionNotFound" = "未找到房间会话。";
+
+/* Location: RoomServerError+UserFacingMessage.swift - Room message send failed */
+"error.roomServer.sendFailed" = "发送失败。";
+
+/* Location: RoomServerError+UserFacingMessage.swift - Room server rejected the operation */
+"error.roomServer.permissionDenied" = "权限被拒绝。";
+
+/* Location: RoomServerError+UserFacingMessage.swift - Malformed device response during a room operation */
+"error.roomServer.invalidResponse" = "设备响应无效。";
+
+/* Location: BinaryProtocolError+UserFacingMessage.swift - No active connection to the radio */
+"error.binaryProtocol.notConnected" = "未连接到设备。";
+
+/* Location: BinaryProtocolError+UserFacingMessage.swift - Binary request failed to send */
+"error.binaryProtocol.sendFailed" = "发送请求失败。";
+
+/* Location: BinaryProtocolError+UserFacingMessage.swift - Binary request timed out */
+"error.binaryProtocol.timeout" = "请求超时。";
+
+/* Location: BinaryProtocolError+UserFacingMessage.swift - Malformed device response to a binary request */
+"error.binaryProtocol.invalidResponse" = "设备响应无效。";
+
+/* Location: PersistenceStoreError+UserFacingMessage.swift - Device row missing from the database */
+"error.persistence.deviceNotFound" = "未找到设备。";
+
+/* Location: PersistenceStoreError+UserFacingMessage.swift - Contact row missing from the database */
+"error.persistence.contactNotFound" = "未找到联系人。";
+
+/* Location: PersistenceStoreError+UserFacingMessage.swift - Message row missing from the database */
+"error.persistence.messageNotFound" = "未找到消息。";
+
+/* Location: PersistenceStoreError+UserFacingMessage.swift - Channel row missing from the database */
+"error.persistence.channelNotFound" = "未找到频道。";
+
+/* Location: PersistenceStoreError+UserFacingMessage.swift - Remote node session row missing from the database */
+"error.persistence.remoteNodeSessionNotFound" = "未找到远程节点会话。";
+
+/* Location: PersistenceStoreError+UserFacingMessage.swift - Database save failed - %@ is the failure reason */
+"error.persistence.saveFailed" = "保存失败：%@";
+
+/* Location: PersistenceStoreError+UserFacingMessage.swift - Database fetch failed - %@ is the failure reason */
+"error.persistence.fetchFailed" = "读取失败：%@";
+
+/* Location: PersistenceStoreError+UserFacingMessage.swift - Stored data is malformed */
+"error.persistence.invalidData" = "数据无效。";
+
+/* Location: SyncCoordinatorError+UserFacingMessage.swift - No active connection to the radio */
+"error.syncCoordinator.notConnected" = "未连接到设备。";
+
+/* Location: SyncCoordinatorError+UserFacingMessage.swift - Full sync failed - %@ is the failure reason */
+"error.syncCoordinator.syncFailed" = "同步失败：%@";
+
+/* Location: SyncCoordinatorError+UserFacingMessage.swift - A sync is already running */
+"error.syncCoordinator.alreadySyncing" = "同步已在进行中。";
+
+/* Location: DeviceServiceError+UserFacingMessage.swift - Device row missing from the database */
+"error.deviceService.deviceNotFound" = "未找到设备";
+
+/* Location: DeviceServiceError+UserFacingMessage.swift - Saving device settings failed - %@ is the failure reason */
+"error.deviceService.persistenceFailed" = "保存设备设置失败：%@";
+
+/* Location: SettingsServiceError+UserFacingMessage.swift - No active connection to the radio */
+"error.settings.notConnected" = "设备未连接";
+
+/* Location: SettingsServiceError+UserFacingMessage.swift - Sending a settings command failed */
+"error.settings.sendFailed" = "发送命令失败";
+
+/* Location: SettingsServiceError+UserFacingMessage.swift - Malformed device response to a settings command */
+"error.settings.invalidResponse" = "设备响应无效";
+
+/* Location: SettingsServiceError+UserFacingMessage.swift - Setting write-back mismatch - %1$@ is the expected value, %2$@ is the value the device reports */
+"error.settings.verificationFailed" = "设置未保存。期望值为“%1$@”，但设备报告为“%2$@”。";
+
+/* Location: SettingsServiceError+UserFacingMessage.swift - GPS write-back mismatch when GPS should be on */
+"error.settings.gpsNotSavedExpectedOn" = "设备 GPS 设置未保存。期望开启，但设备报告为关闭。";
+
+/* Location: SettingsServiceError+UserFacingMessage.swift - GPS write-back mismatch when GPS should be off */
+"error.settings.gpsNotSavedExpectedOff" = "设备 GPS 设置未保存。期望关闭，但设备报告为开启。";
+
+/* Location: KeychainError+UserFacingMessage.swift - Encoding a password for keychain storage failed */
+"error.keychain.encodingFailed" = "密码编码失败";
+
+/* Location: KeychainError+UserFacingMessage.swift - Keychain write failed - %lld is the OSStatus code */
+"error.keychain.storageFailed" = "存储密码失败（错误 %lld）";
+
+/* Location: KeychainError+UserFacingMessage.swift - Keychain read failed - %lld is the OSStatus code */
+"error.keychain.retrievalFailed" = "读取密码失败（错误 %lld）";
+
+/* Location: KeychainError+UserFacingMessage.swift - Keychain delete failed - %lld is the OSStatus code */
+"error.keychain.deletionFailed" = "删除密码失败（错误 %lld）";
+
+/* Location: KeyGenerationError+UserFacingMessage.swift - Vanity prefix search exhausted its attempt budget */
+"error.keyGeneration.maxAttemptsExceeded" = "无法生成具有该前缀的密钥。请尝试其他前缀。";
+
+/* Location: KeyGenerationError+UserFacingMessage.swift - Requested prefix byte is reserved by firmware */
+"error.keyGeneration.reservedPrefix" = "该前缀已被保留，无法使用。";
+
+/* Location: KeyGenerationError+UserFacingMessage.swift - System random number generator failed */
+"error.keyGeneration.randomGenerationFailed" = "安全随机数生成失败。请重试。";
+
+/* Location: KeyGenerationError+UserFacingMessage.swift - Key data is not a valid Ed25519 expanded private key */
+"error.keyGeneration.invalidKey" = "该密钥不是有效的 Ed25519 私钥。";
+
+// MARK: - Repeater Watch
+
+/* Location: RepeaterWatchView.swift - Navigation title of the range-testing screen */
+"signalBars.watch.title" = "Repeater Watch";
+
+/* Location: RepeaterWatchView.swift - Button and title for choosing which repeater to watch */
+"signalBars.watch.choose" = "Choose Repeater";
+
+/* Location: RepeaterWatchView.swift - Empty state title when nothing is being watched */
+"signalBars.watch.emptyTitle" = "Nothing Watched";
+
+/* Location: RepeaterWatchView.swift - Empty state description */
+"signalBars.watch.emptyDescription" = "Watch a repeater to see how often it is heard while you move — useful for finding the edge of its range.";
+
+/* Location: RepeaterWatchView.swift - Label under the count of times the repeater has been heard */
+"signalBars.watch.heardCountLabel" = "times heard";
+
+/* Location: RepeaterWatchView.swift - Prefix before the relative time of the last sighting */
+"signalBars.watch.lastHeard" = "Last heard";
+
+/* Location: RepeaterWatchView.swift - Shown when the watch has started but nothing has arrived yet */
+"signalBars.watch.notYetHeard" = "Not heard yet";
+
+/* Location: RepeaterWatchView.swift - Signal value; %@ is the already-formatted decibel number */
+"signalBars.watch.decibels" = "%@ dB";
+
+/* Location: RepeaterWatchView.swift - Section header for the audible alert settings */
+"signalBars.watch.alerts" = "Alerts";
+
+/* Location: RepeaterWatchView.swift - Toggle enabling a sound on every sighting */
+"signalBars.watch.alertTone" = "Play a Tone When Heard";
+
+/* Location: RepeaterWatchView.swift - Section footer explaining silent-switch behavior */
+"signalBars.watch.alertsFooter" = "The tone plays through headphones or the speaker even when the phone is on silent, and mixes with whatever else is playing.";
+
+/* Location: RepeaterWatchView.swift - Picker label for which tone to play */
+"signalBars.watch.tone" = "Tone";
+
+/* Location: RepeaterWatchView.swift - Button that plays the selected tone once */
+"signalBars.watch.preview" = "Play Preview";
+
+/* Location: RepeaterWatchView.swift - Button that switches to a different repeater */
+"signalBars.watch.change" = "Change Repeater";
+
+/* Location: RepeaterWatchView.swift - VoiceOver summary of the live readout; %1$@ is the repeater name, %2$lld the times heard */
+"signalBars.watch.accessibilitySummary" = "Watching %1$@, heard %2$lld times";
+
+/* Location: RepeaterSignalPopover.swift - VoiceOver label for the row that opens the watch screen; %@ is the repeater name */
+"signalBars.watch.openAccessibility" = "Open Repeater Watch for %@";
+
+/* Location: RepeaterWatchTone.swift - Alert tone name */
+"signalBars.watch.tones.note" = "Note";
+
+/* Location: RepeaterWatchTone.swift - Alert tone name */
+"signalBars.watch.tones.chime" = "Chime";
+
+/* Location: RepeaterWatchTone.swift - Alert tone name */
+"signalBars.watch.tones.bell" = "Bell";
+
+/* Location: RepeaterWatchTone.swift - Alert tone name */
+"signalBars.watch.tones.tweet" = "Tweet";
+
+/* Location: RepeaterWatchTone.swift - Alert tone name */
+"signalBars.watch.tones.tink" = "Tink";
+
+/* Location: RepeaterWatchTone.swift - Alert tone name */
+"signalBars.watch.tones.tock" = "Tock";
+
+// MARK: - Store Recovery
+
+/* Location: StoreRecoveryView.swift - Title of the screen shown when the app's database cannot be opened */
+"storeRecovery.title" = "无法打开你的数据";
+
+/* Location: StoreRecoveryView.swift - Reassurance shown under the title */
+"storeRecovery.message" = "DigitainoMesh 无法打开其数据库。没有删除任何内容 — 你的消息和联系人仍在此设备上。";
+
+/* Location: StoreRecoveryView.swift - Button that moves the current database aside and starts fresh */
+"storeRecovery.backUpAndReset" = "备份并重置";
+
+/* Location: StoreRecoveryView.swift - Explains what Back Up & Reset does */
+"storeRecovery.backUpAndReset.footnote" = "将当前数据移动到应用存储中带日期的备份文件夹，并以空数据库启动。不会删除任何内容。";
+
+/* Location: StoreRecoveryView.swift - Confirmation dialog title before resetting */
+"storeRecovery.confirm.title" = "备份并重置？";
+
+/* Location: StoreRecoveryView.swift - Confirmation dialog message before resetting */
+"storeRecovery.confirm.message" = "当前数据会被移动到带日期的备份文件夹，应用将以空数据库启动。备份仍保存在此设备上，但应用不会显示它。";
+
+/* Location: StoreRecoveryView.swift - Expandable section holding the underlying error text */
+"storeRecovery.details" = "技术详情";
+
+/* Location: StoreRecoveryView.swift - Shown while a recovery attempt is running */
+"storeRecovery.working" = "处理中…";
+
+/* Location: PacketScopeDetailView.swift - observer coverage for one message */
+"packetScope.title" = "网络视图";
+"packetScope.refresh" = "刷新";
+"packetScope.loading" = "正在检查观察站…";
+"packetScope.observerCount" = "观察站（%d）";
+"packetScope.notObserved" = "没有观察站听到此数据包";
+"packetScope.notObservedFooter" = "该数据包未到达观察站网络——但仍可能已在网状网中送达。观察站仅覆盖其所在区域。";
+"packetScope.coverageFooter" = "覆盖情况仅反映所配置的观察站网络。消息可能已送达但未被观察到。";
+"packetScope.signalFooter" = "只有观察站直接收到发送方电台时才显示信号值。经过中继时，该数值衡量的是中继的链路。";
+"packetScope.heardDirectly" = "直接听到";
+"packetScope.via" = "经由 %@";
+"packetScope.error.disabled" = "Packet Scope 已在设置中关闭。";
+"packetScope.error.invalidBaseUrl" = "Packet Scope 服务器地址不是有效的 HTTPS URL。";
+"packetScope.error.invalidResponse" = "观察站服务器返回了应用无法读取的响应。";
+
+/* Location: PacketScopeDetailView.swift - propagation summary and per-observer detail */
+"packetScope.bestSignal" = "最佳直接信号";
+"packetScope.shortestRoute" = "最短路径";
+"packetScope.direct" = "直达，无中继";
+"packetScope.hopCount" = "%d 跳";
+"packetScope.propagation" = "传播";
+"packetScope.spreadSeconds" = "%@ 秒传遍网状网";
+"packetScope.receptions" = "接收总次数";
+"packetScope.timesHeard" = "×%d";
+
+/* Location: PacketScopeDetailView.swift - rejected hash and retried-message caveat */
+"packetScope.error.unreadableHash" = "此消息的数据包标识符无法读取，未进行查询。";
+"packetScope.retriedFooter" = "已发送 %d 次；每次尝试都是独立数据包。此处显示最先被听到的那一个。";
+
+/* Location: PacketScopeDetailView.swift - row caption under the coverage map for an observer it cannot place */
+"packetScope.observerNotOnMap" = "无位置";
+
+/* Location: PacketScopeDetailView.swift - redesigned observer panel: headline, live state, sort menu, route ladder */
+"packetScope.heardBy" = "%d 个观察站听到";
+"packetScope.best" = "直接最佳 %@";
+"packetScope.shortest" = "最短 %@";
+"packetScope.stillArriving" = "仍在接收";
+"packetScope.settled" = "已稳定";
+"packetScope.settledIn" = "%@ 秒后稳定";
+"packetScope.hopOne" = "1 跳";
+"packetScope.sort" = "排序";
+"packetScope.sortFewestHops" = "跳数最少";
+"packetScope.sortMostObservers" = "观察站最多";
+"packetScope.sortFirstHeard" = "最先收到";
+"packetScope.new" = "新";
+"packetScope.showAll" = "显示全部";
+
+/* Packet Scope: focus (route / observer selection on the map) */
+"packetScope.filterAll" = "全部";
+"packetScope.tapHint" = "点按一条路径，再点按观察站，即可在地图上追踪";
+"packetScope.hintRoute" = "在地图上显示这条路径";
+"packetScope.hintPath" = "显示经由此路径收到它的所有观察站";
+"packetScope.notOnMapRoute" = "这条路径无法在地图上绘制";
+"packetScope.notOnMapPath" = "此路径无法在地图上绘制";
+"packetScope.notOnMapObserver" = "该观测点未公布位置，其中继器也都无法定位";
+"packetScope.hopNotOnMap" = "不在地图上";
+"packetScope.tailUnknown" = "+%d 跳不在地图上";
+"packetScope.sameDrawnPath" = "%d 条路径绘制的是同一轨迹";
+"packetScope.rssiBest" = "直接 RSSI %@ dBm";
+"packetScope.heardOffset" = "+%@ 秒";
+"packetScope.heardDirectlyInline" = "直接收到";
+"packetScope.lowerBound" = "≥ %@";
+"packetScope.farthest" = "最远 %@";
+"packetScope.directCount" = "%d 个直接收到";
+"packetScope.sortFarthest" = "最远";
+"packetScope.drawn" = "已绘制 %@";
+"packetScope.routeCount" = "%d 条路径";
+"packetScope.previousRoute" = "上一条路径";
+"packetScope.nextRoute" = "下一条路径";
+"packetScope.showObservers" = "显示观测点";
+"packetScope.hideObservers" = "隐藏观测点";
+"packetScope.copySummary" = "复制摘要";
+"packetScope.a11yExpanded" = "已展开";
+"packetScope.a11yCollapsed" = "已折叠";
+"packetScope.a11yNotDrawable" = "未在地图上显示";
+"packetScope.a11yShowingRoute" = "正在显示经 %2$@ 到 %1$@ 的路径";
+"packetScope.a11yShowingObserver" = "正在显示到 %2$@ 的 %1$d 条路径";
+"packetScope.a11yShowingAll" = "正在显示所有观测点";
+"packetScope.routeOne" = "1 条路径";
+"packetScope.pathObserverOne" = "1 个观察站";
+"packetScope.pathObservers" = "%d 个观察站";
+"packetScope.tailUnknownOne" = "+1 跳不在地图上";
+"packetScope.a11yShowingObserverOne" = "正在显示到 %@ 的 1 条路径";
+"packetScope.a11yShowingPathOne" = "正在显示经由 %@ 收到它的 1 个观察站";
+"packetScope.a11yShowingPath" = "正在显示经由 %2$@ 收到它的 %1$d 个观察站";
+"packetScope.a11yShowingDirect" = "正在显示 %@ 的直接接收";
+
+/* Location: PacketScopeDetailView.swift - grouping the observer list by path or by observer */
+"packetScope.groupBy" = "分组方式";
+"packetScope.groupByPath" = "按路径";
+"packetScope.groupByObserver" = "按观察站";
+"packetScope.sortMostRoutes" = "路由最多";
+"packetScope.hintObserver" = "在地图上显示该观察站的路由";
+"packetScope.tapHintObserver" = "轻点一个观察站，再轻点一条路由，即可在地图上追踪";

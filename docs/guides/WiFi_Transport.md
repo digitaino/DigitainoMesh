@@ -1,23 +1,23 @@
 # WiFi Transport Guide
 
-This guide explains PocketMesh's WiFi/TCP transport path for connecting to MeshCore devices over the local network.
+This guide explains MeshCore One's WiFi/TCP transport path for connecting to MeshCore devices over the local network.
 
 ## Overview
 
-PocketMesh supports two transport types:
+MeshCore One supports two transport types:
 
-- BLE (Bluetooth Low Energy) via `iOSBLETransport` in PocketMeshServices
+- BLE (Bluetooth Low Energy) via `iOSBLETransport` in MC1Services
 - WiFi/TCP via `WiFiTransport` in MeshCore
 
-WiFi is configured manually (host + port) and is typically used for fixed installations or devices that expose a TCP service.
+WiFi is configured manually (hostname or IPv4 address + port) and is typically used for fixed installations or devices that expose a TCP service. Network.framework resolves the host at connect time, including mDNS `.local` names. The transport does not browse Bonjour services.
 
 ## Where the Code Lives
 
 - MeshCore transport: `MeshCore/Sources/MeshCore/Transport/WiFiTransport.swift`
 - WiFi frame codec: `MeshCore/Sources/MeshCore/Transport/WiFiFrameCodec.swift`
-- PocketMesh connection orchestration: `PocketMeshServices/Sources/PocketMeshServices/ConnectionManager.swift`
-- UI for entering connection details: `PocketMesh/Views/Onboarding/WiFiConnectionSheet.swift`
-- UI for editing connection details while connected: `PocketMesh/Views/Settings/Sections/WiFiEditSheet.swift`
+- MeshCore One connection orchestration: `MC1Services/Sources/MC1Services/Connection/ConnectionManager.swift` (WiFi-specific logic in `MC1Services/Sources/MC1Services/Connection/ConnectionManager+WiFi.swift`)
+- UI for entering connection details: `MC1/Views/Onboarding/WiFiConnectionSheet.swift`
+- UI for editing connection details while connected: `MC1/Views/Settings/Sections/WiFiEditSheet.swift`
 
 ## Transport Architecture
 
@@ -45,7 +45,7 @@ The framed payload is the same MeshCore binary protocol payload used over BLE.
 import MeshCore
 
 let transport = WiFiTransport()
-await transport.setConnectionInfo(host: "192.168.1.50", port: 5000)
+await transport.setConnectionInfo(host: "radio.local", port: 5000)
 try await transport.connect()
 
 let session = MeshCoreSession(transport: transport)
@@ -54,13 +54,13 @@ try await session.start()
 
 Notes:
 
-- The transport itself does not implement discovery (mDNS/Bonjour) or keep-alives.
+- The transport itself does not implement discovery (mDNS/Bonjour browsing) or keep-alives. Connecting to a hostname still uses Network.framework DNS, including mDNS for `.local`.
 - Reconnect behavior is handled at higher layers (e.g., `ConnectionManager`).
 - Use `Logger` for diagnostics; avoid `print()`.
 
 ## WiFi Reconnection & Health (ConnectionManager)
 
-PocketMesh manages WiFi reconnection and connection health at the app layer:
+MeshCore One manages WiFi reconnection and connection health at the app layer:
 
 - **Heartbeat probes:** When connected, the app sends a lightweight `getTime()` probe every 30 seconds to detect dead TCP connections (ESP32 stacks often ignore TCP keepalives).
 - **Auto-reconnect:** If the probe fails, `ConnectionManager` tears down the session and starts a reconnect loop.
@@ -71,7 +71,7 @@ PocketMesh manages WiFi reconnection and connection health at the app layer:
 ## Troubleshooting
 
 - Verify the iPhone and device are on the same reachable network.
-- Double check the host and port (PocketMesh defaults to port 5000 in the WiFi connection UI).
+- Double check the hostname or IP and port (MeshCore One defaults to port 5000 in the WiFi connection UI).
 - If you have a dev machine on the same network, `nc -zv <host> <port>` can help validate basic reachability.
 
 ## Further Reading

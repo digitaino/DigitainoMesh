@@ -1,6 +1,6 @@
-# PocketMesh User Guide
+# MeshCore One User Guide
 
-PocketMesh is a messaging app designed for off-grid communication using MeshCore-compatible mesh networking radios.
+MeshCore One is a messaging app designed for off-grid communication using MeshCore-compatible mesh networking radios.
 
 ## 1. Getting Started
 
@@ -15,7 +15,8 @@ PocketMesh is a messaging app designed for off-grid communication using MeshCore
 2. **Permissions**: Grant permissions for **Notifications** and **Location**. Location is needed for sharing your position with other mesh users.
 3. **Discovery**: The app will scan for nearby MeshCore devices using AccessorySetupKit. Select your device from the list.
 4. **Pairing**: Follow the on-screen instructions to pair your device. Bluetooth permission is requested automatically by AccessorySetupKit during device discovery. You may be prompted to enter a device PIN (device-specific).
-5. **Radio Preset**: Choose a starter radio preset to configure frequency, power, and bandwidth quickly.
+5. **Region**: Choose your region (detected from your location when available, or selected manually). This narrows the radio presets shown to ones that work in your area.
+6. **Radio Preset**: Choose a starter radio preset to configure frequency, power, and bandwidth quickly.
 
 ---
 
@@ -28,9 +29,9 @@ PocketMesh is a messaging app designed for off-grid communication using MeshCore
 - Type your message and tap **Send**.
 - **Delivery Status** (shown as text labels below outgoing messages):
   - **"Sending..."**: Message is pending or being transmitted to your radio.
-  - **"Sent"**: The message has been successfully transmitted by your radio.
+  - **"Sent"**: Your radio has accepted the message and queued it for transmission.
   - **"Delivered"**: The recipient's radio has confirmed receipt of message.
-  - **"Retrying..."**: The app is attempting to resend using flood routing (with spinner indicator).
+  - **"Retrying..."**: The app is attempting to resend (first via direct routing, then falling back to flood routing once the direct attempts are exhausted), shown with a spinner indicator.
   - **"Failed"**: The message could not be delivered after multiple attempts (red bubble background with exclamation icon).
 
 ### @Mentions
@@ -50,17 +51,18 @@ Mention other contacts in group chats to get their attention:
 
 ### Link Previews
 
-PocketMesh automatically generates rich previews for URLs shared in messages:
+MeshCore One automatically generates rich previews for URLs shared in messages:
 
 1. Paste a URL into the message input (e.g., `https://example.com`).
 2. The app will fetch metadata (title, description, image) when the message is sent.
 3. Recipients see a preview card instead of just the raw URL.
 4. Tap the preview card to open the link in Safari.
-5. Toggle link previews on/off in **Settings** > **Link Preview Settings**.
+5. Toggle link previews on/off in **Settings** > **Chats**.
 
-**Link Preview Settings**:
-- **Enable Link Previews**: Turn automatic preview generation on/off.
-- **Always Fetch Previews**: Fetch previews even when using WiFi or cellular data (for testing).
+**Link Preview Settings** (Settings > Chats):
+- **Link Previews**: Turn automatic preview generation on/off.
+- **Show in Direct Messages**: Fetch and show previews in direct messages.
+- **Show in Channels**: Fetch and show previews in channels.
 - Preview cards are fetched on-demand when messages are loaded.
 
 ### Reactions
@@ -83,11 +85,11 @@ Long-press a message to view more context without leaving the sheet:
 
 Mute notifications for individual conversations to reduce distractions:
 
-1. In the **Chats** list, swipe left on the conversation you want to mute.
+1. In the **Chats** list, long-press the conversation you want to mute to open its context menu.
 2. Tap **Mute**.
 3. The conversation will show a **muted bell icon** to indicate it's muted.
 4. You'll still receive messages, but no notifications will appear.
-5. Swipe left again and tap **Unmute** to re-enable notifications.
+5. Long-press the conversation again and tap **Unmute** to re-enable notifications.
 
 **Note**: Muted conversations still display unread message badges in the app, just not push notifications.
 
@@ -95,26 +97,26 @@ Mute notifications for individual conversations to reduce distractions:
 
 Block unwanted contacts to prevent receiving messages from them:
 
-1. In the **Nodes** list, swipe left on the contact you want to block.
+1. In the **Nodes** list, long-press the contact you want to block to open its context menu.
 2. Tap **Block**.
 3. The contact will be moved to **Blocked Contacts** section.
 4. Blocked contacts cannot send you messages.
 5. You can view and manage blocked contacts from the **Nodes** tab.
-6. Swipe left on a blocked contact and tap **Unblock** to allow messages again.
+6. Long-press a blocked contact and tap **Unblock** to allow messages again.
 
-**Note**: Repeaters and room servers cannot be blocked (block option is hidden for these contact types).
+**Note**: The Block option appears only for chat-type contacts; repeaters and room servers cannot be blocked (the option is hidden for these contact types).
 
 ### Retrying Failed Messages
 
 If a message fails to deliver:
 
 1. Tap the **Retry** button that appears below the failed message.
-2. The app will attempt to resend using flood routing (broadcast to all nearby nodes).
-3. You'll see retry progress: "Retrying 1/4...", "Retrying 2/4...", etc.
+2. The app re-attempts direct routing first, then falls back to flood routing (broadcast to all nearby nodes) only after the direct attempts are exhausted (by default, 3 direct attempts followed by 1 flood attempt).
+3. You'll see which of the four sends is going out: "2/4", "3/4", then "4/4" for the flood send.
 
 ### Group Channels
 
-- PocketMesh supports up to the device's channel limit (commonly 8 slots).
+- MeshCore One supports up to the device's channel limit (commonly 8 slots).
 - **Slot 0 (Public)**: A default public channel for open communication.
 - **Private Channels**: Configure a channel with a name and a passphrase to create a private group. Others must use the same name and passphrase to join.
 
@@ -147,7 +149,7 @@ When connecting to a room that requires authentication:
 - Room servers can be public or require authentication.
 - **Read-only** guests can view but not send messages.
 - **Read/Write** guests can participate fully.
-- To leave a room, swipe left on the room conversation in the Chats list and select **Delete**. This will remove the room, delete all messages, and remove the associated contact.
+- To leave a room, long-press the room conversation in the Chats list to open its context menu and select **Delete**. This will remove the room, delete all messages, and remove the associated contact.
 
 ---
 
@@ -156,7 +158,7 @@ When connecting to a room that requires authentication:
 ### Discovering Contacts
 
 - Contacts are discovered when they "advertise" their presence on the mesh network.
-- You can manually send an advertisement from the **Nodes** tab by going to the **ellipsis menu** (top right) > **Discovery**.
+- You can manually send an advertisement from the **Nodes** tab by going to the **ellipsis menu** (top right) > **Discover**.
 
 ### QR Code Sharing
 
@@ -167,7 +169,7 @@ Share your contact info or a channel via QR code:
 1. Go to **Nodes** tab.
 2. Tap the **ellipsis menu** (top right).
 3. Select **Share My Contact**.
-4. Show the QR code to another PocketMesh user.
+4. Show the QR code to another MeshCore One user.
 5. They scan it to add you as a contact.
 
 #### Sharing a Channel
@@ -185,7 +187,7 @@ Share your contact info or a channel via QR code:
 2. Tap the **ellipsis menu** (top right).
 3. Select **Add Contact**.
 4. Tap **Scan QR Code**.
-5. Point your camera at a PocketMesh QR code.
+5. Point your camera at a MeshCore One QR code.
 6. The contact or channel is automatically added.
 
 ### Map View
@@ -198,10 +200,11 @@ Share your contact info or a channel via QR code:
 
 ### Contact Actions
 
-You can perform quick actions on contacts using swipe gestures:
+Long-press a node row to open its context menu, where you can perform quick actions:
 
-- **Swipe right**: Mark as **Favorite** (or remove from favorites).
-- **Swipe left**: **Block** or **Delete** the contact.
+- **Favorite / Unfavorite**: Mark the contact as a favorite or remove it from favorites.
+- **Block / Unblock**: Block or unblock the contact (available only for chat-type contacts).
+- **Delete**: Remove the contact.
 
 ### Discovery View
 
@@ -209,7 +212,7 @@ The Discovery view shows contacts that have been discovered on the mesh but not 
 
 1. Go to **Nodes** tab.
 2. Tap the **ellipsis menu** (top right).
-3. Select **Discovery**.
+3. Select **Discover** (this opens the Discovery view).
 4. You'll see a list of discovered contacts with an **Add** button next to each.
 5. Tap **Add** to add a contact to your device.
 
@@ -241,12 +244,12 @@ The status section displays:
 - **Packets Sent**: Total packets transmitted.
 - **Packets Received**: Total packets received.
 
-### Ping Repeater
+### Zero-Hop Ping
 
-Use **Ping Repeater** to measure direct-link health:
+Use **Zero-Hop Ping** to measure direct-link health:
 
 1. Open the repeater detail view.
-2. Tap **Ping Repeater**.
+2. Tap **Zero-Hop Ping**.
 3. A result row shows round-trip time and SNR (if the repeater is directly reachable).
 
 ### Viewing Neighbors
@@ -271,11 +274,10 @@ Access Settings from the **Settings** tab.
 
 ### Radio Configuration
 
-- Configure your LoRa radio parameters using presets or custom values:
-  - **Presets**: Quick configuration options for common use cases.
-  - **Frequency**: The channel you are communicating on.
-  - **Transmit Power**: Increase for better range, decrease to save battery.
-  - **Spreading Factor & Bandwidth**: Adjust for a balance between speed and range.
+- **Location** on Settings → Radio filters the preset list to nearby radios. It does not change frequency, bandwidth, spreading factor, or coding rate.
+- Presets sit under Location. Repeat Mode stays on the preset section.
+- Path Hash Size sits below Radio on firmware v10+. Larger hashes reduce routing collisions but limit hops.
+- Advanced holds frequency, bandwidth, spreading factor, coding rate, and TX power. Apply those values together with **Apply Radio Settings**.
 
 ### Device Info
 
@@ -296,7 +298,6 @@ Advanced settings are available for power users:
 
 Advanced settings include:
 
-- **Manual Radio Configuration**: Fine-tune radio parameters beyond standard presets.
 - **Nodes Settings**: Configure auto-add behavior and other node management options.
 - **Telemetry Settings**: Configure sensor data reporting.
 - **Danger Zone**: Reset device, clear data, and other destructive operations.
@@ -305,7 +306,7 @@ Advanced settings include:
 
 ## 7. Network Diagnostics Tools
 
-PocketMesh includes powerful diagnostic tools for optimizing your mesh network performance and troubleshooting connectivity issues.
+MeshCore One includes powerful diagnostic tools for optimizing your mesh network performance and troubleshooting connectivity issues.
 
 ### Line of Sight Analysis
 
@@ -313,10 +314,9 @@ The Line of Sight (LoS) tool analyzes radio propagation between two points to he
 
 #### Accessing Line of Sight
 
-1. Go to **Nodes** tab.
-2. Find the contact or repeater you want to analyze.
-3. Tap to open detail view.
-4. Tap **Line of Sight** button in the toolbar.
+1. Go to **Tools** tab.
+2. Tap **Line of Sight**.
+3. Choose the two points to analyze (your location, a contact, or a repeater).
 
 #### Understanding the Analysis
 
@@ -329,10 +329,10 @@ The tool provides:
   - **Yellow**: Partial obstruction, signal may be degraded
   - **Red**: Obstructed path, poor signal or no connection likely
 - **RF Parameters**: Calculated signal metrics:
-  - **Path Loss**: Expected signal attenuation (in dB)
-  - **Signal Strength**: Estimated received signal at target
-  - **First Fresnel Zone**: Percentage of clear Fresnel zone
-  - **Maximum Range**: Theoretical maximum communication distance
+  - **Path Loss**: Total path loss (free-space plus diffraction breakdown, in dB)
+  - **Distance**: Distance between the two points
+  - **First Fresnel Zone**: Worst Fresnel zone clearance percentage
+  - **Obstructions**: Number of obstruction points along the path
 
 #### Tips for Better Results
 
@@ -347,8 +347,8 @@ Discover optimal routing paths through your mesh network with the Trace Path too
 
 #### Using Trace Path
 
-1. Go to **Nodes** tab.
-2. Tap **Trace Path** in the toolbar.
+1. Go to **Tools** tab.
+2. Tap **Trace Path**.
 3. The app will discover available routes through repeaters to your target.
 4. Review the suggested path with signal quality indicators.
 5. Tap **Save Path** to store the route for future use.
@@ -367,7 +367,7 @@ Each path shows:
 
 #### Saved Paths
 
-1. Go to **Nodes** tab.
+1. Go to **Tools** tab.
 2. Tap **Trace Path** > **Saved Paths**.
 3. View all saved routing paths with statistics.
 4. Tap a saved path to see details:
@@ -401,9 +401,10 @@ The log shows:
 #### Features
 
 - **Live Capture**: Real-time packet stream
-- **Auto-Scroll**: Automatically scrolls to newest packets
-- **Filter**: Filter by packet type, source, or destination
-- **Export**: Save logs for analysis
+- **Filter**: Filter by route and decryption status
+- **Group Duplicates**: Collapse repeated packets into a single entry
+- **Copy Payload**: Copy a packet's raw payload hex to the clipboard
+- **Clear Log**: Delete the captured logs
 
 #### Tips
 
@@ -414,9 +415,38 @@ The log shows:
 
 ---
 
+### Weather
+
+The Weather tool shows severe weather alerts, current conditions and the forecast for one place, from a MeshWX weather bot on the mesh. A bot is a chat node named `WX-<city>` (WX-AUS in Austin) that puts National Weather Service products on the `#meshwx` channel as compact binary messages; the app decodes them with tables it carries, so the tool works with no internet at all.
+
+**Requirements**
+
+- MeshCore companion firmware 1.15 or newer on the radio. Older firmware never delivers these packets; the tool tells you when that is the case.
+- The `#meshwx` channel on the radio. Once your radio's channel list has loaded, the tool offers to add it; nothing is written until you tap **Add channel**, and only into a slot the radio confirms is empty.
+- A bot in range. Bots advertise like any node. With more than one, **About weather on the mesh** (the ⓘ in the header) lists them and offers **Choose automatically**.
+
+**The place**
+
+Everything on the screen answers for one place, named in the header. It is your location when the app has one; tap **Search a town**, or the place name, to pick a town or an airport code instead, for this visit, and **Back to my location** to return. Picking a place asks the bot for its forecast when the phone has none fresh for it. With no location the screen asks **Where do you want weather for?** and offers **Use my location** and **Search a town**. A location more than an hour old is shown as last known, with its age, and never earns the green check.
+
+**What the screen shows**
+
+1. **Alerts for <place>**: warnings, watches and advisories that cover the place or lie within 50 km, most dangerous first, each with its colour, a countdown, and for a nearby one its distance and direction. Tornado, extreme wind, flash flood and severe thunderstorm warnings are always listed; lesser alerts beyond two fold into "more". One line under the rows says what the app can vouch for:
+   - a green check, **No alerts received**, only when a fresh alert list arrived while your radio was connected, no messages were missed, the place is inside the area the bot reports on, and nothing is active anywhere in that area;
+   - otherwise the reason it can't tell (no alert list yet, the list is old, messages were missed, your radio isn't connected, the place is outside the bot's area), with **Ask for alerts** where asking would help.
+
+   Tap an alert for its map (the storm polygon, or the zones and counties filled from bundled boundaries), whether it covers your place, its details and areas, and **Ask for full text** for the forecaster's narrative. **Alerts in WX-AUS's area** puts every alert the bot holds on one map and list.
+2. **Now**: the nearest fresh weather station's reading, with its distance and the time of the report. When the phone holds no reading near the place, the card names the nearest weather station and offers **Ask for current conditions**. **Weather stations** lists every station the bot reports on; a station's page has all its readings and its coded airport reports, with **Ask for METAR (conditions)** and **Ask for TAF (forecast)**.
+3. **Forecast**: the forecast for the place's nearest forecast point, labelled Today, Tonight, Tomorrow and by weekday, with **Ask for forecast** when nothing is held for it. A place more than 115 km from any forecast point says so rather than borrowing a distant one.
+4. **Weather Service text reports**: the forecast discussion, hazardous weather outlook, storm reports and rainfall totals for your state (which you can change), and space weather, each with **Ask for latest**. Long replies arrive in parts; a part that never arrives is marked.
+
+**How asking works**
+
+Asking is public: a request is a direct message to the bot, and the answer comes back on `#meshwx` for every phone listening. The tool says so under the first ask button, labels answers somebody else asked for as theirs, and doesn't ask for anything the channel delivered in the last five minutes. It never asks on its own: one request per tap, five seconds apart, and one retry only if the bot has gone silent, after which it says the bot may be out of range. The bot's own broadcasts (warnings as they change, the alert list every three hours, station readings every hour) are kept whether or not the tool is open, and the last picture is shown with its age even with no radio connected. **Clear received weather**, in About, removes everything received from a bot.
+
 ## 8. iPad Experience
 
-PocketMesh provides an optimized experience on iPad with split-view navigation and enhanced layouts.
+MeshCore One provides an optimized experience on iPad with split-view navigation and enhanced layouts.
 
 ### Split-View Navigation
 
@@ -449,7 +479,7 @@ On iPad, the app uses a split-view layout:
 
 ### Orientation Support
 
-- **Portrait**: Stacked panels (list on top, detail below)
+- **Portrait / narrow widths**: The split view collapses to a single column (showing the list, with the sidebar overlaid or pushed in)
 - **Landscape**: Side-by-side panels (list on left, detail on right)
 - **Resize**: Drag divider to adjust panel sizes (when supported by iOS)
 

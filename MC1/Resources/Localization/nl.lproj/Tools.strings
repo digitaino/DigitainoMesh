@@ -1,0 +1,1509 @@
+/*
+  Tools.strings
+  MC1
+
+  Dutch translation of strings for the Tools feature.
+  AI-translated - please verify with native speakers.
+*/
+
+// MARK: - Tools View
+
+/* Location: ToolsView.swift - Navigation title */
+"tools.title" = "Hulpmiddelen";
+
+/* Location: ToolsView.swift - Tool selection label */
+"tools.tracePath" = "Pad traceren";
+
+/* Location: ToolsView.swift - Tool selection label */
+"tools.lineOfSight" = "Zichtlijn";
+
+/* Location: ToolsView.swift - Tool selection label */
+"tools.rxLog" = "RX-logboek";
+
+/* Location: ToolsView.swift - Tool selection label */
+"tools.noiseFloor" = "Ruisvloer";
+
+/* Location: ToolsView.swift - Tool selection label */
+"tools.nodeDiscovery" = "Knooppunten ontdekken";
+
+/* Location: ToolsView.swift - Empty state when no tool selected */
+"tools.selectTool" = "Selecteer een hulpmiddel";
+
+// MARK: - RX Log View
+
+/* Location: RxLogView.swift - Empty state title when listening */
+"tools.rxLog.listening" = "Luisteren...";
+
+/* Location: RxLogView.swift - Empty state description */
+"tools.rxLog.listeningDescription" = "RF-pakketten verschijnen hier wanneer ze binnenkomen.";
+
+/* Location: RxLogView.swift - Disconnected state title */
+"tools.rxLog.notConnected" = "Niet verbonden";
+
+/* Location: RxLogView.swift - Disconnected state description */
+"tools.rxLog.notConnectedDescription" = "Verbind met een mesh-radio om RF-pakketten te bekijken.";
+
+/* Location: RxLogView.swift - Live status indicator */
+"tools.rxLog.live" = "Live";
+
+/* Location: RxLogView.swift - Offline status indicator */
+"tools.rxLog.offline" = "Offline";
+
+/* Location: RxLogView.swift - Packet count in header, %lld is count */
+"tools.rxLog.packetsCount" = "%lld pakketten";
+
+/* Location: RxLogView.swift - Filter menu section header */
+"tools.rxLog.routeType" = "Routetype";
+
+/* Location: RxLogView.swift - Filter menu section header */
+"tools.rxLog.decryptStatus" = "Ontsleutelingsstatus";
+
+/* Location: RxLogView.swift - Filter button label */
+"tools.rxLog.filter" = "Filter";
+
+/* Location: RxLogView.swift - Overflow menu button label */
+"tools.rxLog.more" = "Meer";
+
+/* Location: RxLogView.swift - Group duplicates toggle */
+"tools.rxLog.groupDuplicates" = "Duplicaten groeperen";
+
+/* Location: RxLogView.swift - Delete logs button */
+"tools.rxLog.deleteLogs" = "Logboeken verwijderen";
+
+/* Location: RxLogView.swift - Delete confirmation dialog title */
+"tools.rxLog.deleteConfirmation" = "Alle logboeken verwijderen?";
+
+/* Location: RxLogView.swift - Delete confirmation button */
+"tools.rxLog.delete" = "Verwijderen";
+
+/* Location: RxLogView.swift - Direct route label */
+"tools.rxLog.direct" = "Direct";
+
+/* Location: RxLogView.swift - Path detail for single hop */
+"tools.rxLog.hopSingular" = "sprong";
+
+/* Location: RxLogView.swift - Path detail for multiple hops */
+"tools.rxLog.hopPlural" = "sprongen";
+
+/* Location: RxLogView.swift - Signal strength accessibility label, %@ is quality */
+"tools.rxLog.signalStrength" = "Signaalsterkte: %@";
+
+/* Location: RxLogView.swift - Duplicate count accessibility label, %lld is count */
+"tools.rxLog.receivedTimes" = "%lld keer ontvangen";
+
+/* Location: RxLogView.swift - Raw payload section title */
+"tools.rxLog.rawPayload" = "Ruwe payload";
+
+/* Location: RxLogView.swift - Copy button */
+"tools.rxLog.copy" = "Kopiëren";
+
+/* Location: RxLogView.swift - RSSI label */
+"tools.rxLog.rssiLabel" = "RSSI:";
+
+/* Location: RxLogView.swift - SNR label */
+"tools.rxLog.snrLabel" = "SNR:";
+
+/* Location: RxLogView.swift - Type label */
+"tools.rxLog.typeLabel" = "Type:";
+
+/* Location: RxLogView.swift - Size label */
+"tools.rxLog.sizeLabel" = "Grootte:";
+
+/* Location: RxLogView.swift - Path label */
+"tools.rxLog.pathLabel" = "Pad:";
+
+/* Location: RxLogView.swift - Hash label */
+"tools.rxLog.hashLabel" = "Hash:";
+
+/* Location: RxLogView.swift - From label */
+"tools.rxLog.fromLabel" = "Van:";
+
+/* Location: RxLogView.swift - To label */
+"tools.rxLog.toLabel" = "Naar:";
+
+/* Location: RxLogView.swift - Channel hash label */
+"tools.rxLog.channelHashLabel" = "Kanaal-hash:";
+
+/* Location: RxLogView.swift - Channel name label */
+"tools.rxLog.channelNameLabel" = "Kanaalnaam:";
+
+/* Location: RxLogView.swift - Region label */
+"tools.rxLog.regionLabel" = "Regio:";
+
+/* Location: RxLogView.swift - Unresolved region value */
+"tools.rxLog.regionUnresolved" = "Onbekend";
+
+/* Location: RxLogView.swift - Text label */
+"tools.rxLog.textLabel" = "Tekst:";
+
+/* Location: RxLogView.swift - Bytes suffix for size display */
+"tools.rxLog.bytes" = "bytes";
+
+// MARK: - RX Log Filters
+
+/* Location: RxLogViewModel.swift - Route filter: all */
+"tools.rxLog.filter.all" = "Alle";
+
+/* Location: RxLogViewModel.swift - Route filter: flood only */
+"tools.rxLog.filter.floodOnly" = "Alleen flood";
+
+/* Location: RxLogViewModel.swift - Route filter: direct only */
+"tools.rxLog.filter.directOnly" = "Alleen direct";
+
+/* Location: RxLogViewModel.swift - Decrypt filter: decrypted */
+"tools.rxLog.filter.decrypted" = "Ontsleuteld";
+
+/* Location: RxLogViewModel.swift - Decrypt filter: failed */
+"tools.rxLog.filter.failed" = "Mislukt";
+
+/* Location: DecryptStatus+Display.swift - Decrypt status: not a decryptable packet */
+"tools.rxLog.decryptStatus.notApplicable" = "N.v.t.";
+
+/* Location: DecryptStatus+Display.swift - Decrypt status: no stored channel key matches */
+"tools.rxLog.decryptStatus.noKey" = "Geen sleutel";
+
+/* Location: DecryptStatus+Display.swift - Decrypt status: HMAC validation failed */
+"tools.rxLog.decryptStatus.hmacFailed" = "HMAC mislukt";
+
+/* Location: DecryptStatus+Display.swift - Decrypt status: AES decryption failed */
+"tools.rxLog.decryptStatus.decryptFailed" = "Ontsleuteling mislukt";
+
+/* Location: DecryptStatus+Display.swift - Decrypt status: decrypted successfully */
+"tools.rxLog.decryptStatus.decrypted" = "Ontsleuteld";
+
+/* Location: DecryptStatus+Display.swift - Decrypt status: key found, decryption pending */
+"tools.rxLog.decryptStatus.hasKey" = "Sleutel aanwezig";
+
+/* Location: DecryptStatus+Display.swift - Decrypt status: missing direct message key */
+"tools.rxLog.decryptStatus.noDmKey" = "Geen DM-sleutel";
+
+/* Location: RxLogRowView - Label for local device in path display */
+"tools.rxLog.pathYou" = "Jij";
+
+/* Location: RxLogRowView - Route label for TRACE target hashes */
+"tools.rxLog.traceRouteLabel" = "Route:";
+
+// MARK: - Noise Floor View
+
+/* Location: NoiseFloorView.swift - Disconnected state description */
+"tools.noiseFloor.notConnectedDescription" = "Verbind met een mesh-radio om ruisvloer te meten.";
+
+/* Location: NoiseFloorView.swift - Collecting data title */
+"tools.noiseFloor.collectingData" = "Gegevens verzamelen...";
+
+/* Location: NoiseFloorView.swift - Collecting data description */
+"tools.noiseFloor.collectingDataDescription" = "Ruisvloermetingen verschijnen wanneer ze worden verzameld.";
+
+/* Location: NoiseFloorView.swift - Unit label */
+"tools.noiseFloor.dBm" = "dBm";
+
+/* Location: NoiseFloorView.swift - Unit label for decibels */
+"tools.noiseFloor.dB" = "dB";
+
+/* Location: NoiseFloorView.swift - No reading accessibility */
+"tools.noiseFloor.noReading" = "Geen meting beschikbaar";
+
+/* Location: NoiseFloorView.swift - Chart accessibility, %lld readings, %lld min, %lld max, %lld avg, %@ trend */
+"tools.noiseFloor.chartAccessibility" = "Ruisvloergeschiedenis: %lld metingen, minimum %lld dBm, maximum %lld dBm, gemiddelde %lld dBm, trend %@";
+
+/* Location: NoiseFloorView.swift - Chart accessibility when empty */
+"tools.noiseFloor.chartAccessibilityEmpty" = "Ruisvloergeschiedenisgrafiek, geen gegevens";
+
+/* Location: NoiseFloorView.swift - Statistics section title */
+"tools.noiseFloor.statistics" = "Statistieken";
+
+/* Location: NoiseFloorView.swift - Minimum label */
+"tools.noiseFloor.minimum" = "Minimum";
+
+/* Location: NoiseFloorView.swift - Average label */
+"tools.noiseFloor.average" = "Gemiddelde";
+
+/* Location: NoiseFloorView.swift - Maximum label */
+"tools.noiseFloor.maximum" = "Maximum";
+
+/* Location: NoiseFloorView.swift - Last RSSI label */
+"tools.noiseFloor.lastRssi" = "Laatste RSSI";
+
+/* Location: NoiseFloorView.swift - Last SNR label */
+"tools.noiseFloor.lastSnr" = "Laatste SNR";
+
+/* Location: NoiseFloorView.swift - Trend: stable */
+"tools.noiseFloor.trendStable" = "stabiel";
+
+/* Location: NoiseFloorView.swift - Trend: increasing */
+"tools.noiseFloor.trendIncreasing" = "stijgend";
+
+/* Location: NoiseFloorView.swift - Trend: decreasing */
+"tools.noiseFloor.trendDecreasing" = "dalend";
+
+// MARK: - Noise Floor Signal Quality
+
+/* Location: NoiseFloorViewModel.swift - Signal quality: excellent */
+"tools.noiseFloor.quality.excellent" = "Uitstekend";
+
+/* Location: NoiseFloorViewModel.swift - Signal quality: good */
+"tools.noiseFloor.quality.good" = "Goed";
+
+/* Location: NoiseFloorViewModel.swift - Signal quality: fair */
+"tools.noiseFloor.quality.fair" = "Redelijk";
+
+/* Location: NoiseFloorViewModel.swift - Signal quality: poor */
+"tools.noiseFloor.quality.poor" = "Slecht";
+
+/* Location: NoiseFloorViewModel.swift - Signal quality: unknown */
+"tools.noiseFloor.quality.unknown" = "Onbekend";
+
+/* Location: NoiseFloorViewModel.swift - Error: device disconnected */
+"tools.noiseFloor.error.disconnected" = "Apparaat niet verbonden";
+
+/* Location: NoiseFloorViewModel.swift - Error: unable to read stats */
+"tools.noiseFloor.error.unableToRead" = "Kan radiostatistieken niet lezen";
+
+// MARK: - Node Discovery View
+
+/* Location: NodeDiscoveryView.swift - Disconnected state description */
+"tools.nodeDiscovery.notConnectedDescription" = "Verbind met een mesh-radio om %@ te ontdekken.";
+
+/* Location: NodeDiscoveryView.swift - Initial empty state title */
+"tools.nodeDiscovery.scanPrompt" = "Zoek naar %@";
+
+/* Location: NodeDiscoveryView.swift - Initial empty state description */
+"tools.nodeDiscovery.scanPromptDescription" = "Tik op de knop hieronder om nabijgelegen %@ te ontdekken.";
+
+/* Location: NodeDiscoveryView.swift - No results empty state title */
+"tools.nodeDiscovery.noResults" = "Geen %@ gevonden";
+
+/* Location: NodeDiscoveryView.swift - No results empty state description */
+"tools.nodeDiscovery.noResultsDescription" = "Geen %@ heeft gereageerd op de ontdekkingsping. Probeer het opnieuw of ga dichter bij het mesh-netwerk.";
+
+/* Location: NodeDiscoveryView.swift - Scan button label (idle) */
+"tools.nodeDiscovery.scanButton" = "Zoek naar %@";
+
+/* Location: NodeDiscoveryView.swift - Scan button label (scanning) */
+"tools.nodeDiscovery.stopButton" = "Zoeken stoppen";
+
+/* Location: NodeDiscoveryView.swift - Segment label */
+"tools.nodeDiscovery.repeaters" = "Repeaters";
+
+/* Location: NodeDiscoveryView.swift - Segment label */
+"tools.nodeDiscovery.sensors" = "Sensoren";
+
+/* Location: NodeDiscoveryView.swift - Sort option */
+"tools.nodeDiscovery.sortSignal" = "Signaalsterkte";
+
+/* Location: NodeDiscoveryView.swift - Sort option */
+"tools.nodeDiscovery.sortName" = "Naam";
+
+/* Location: NodeDiscoveryView.swift - Sort menu accessibility label */
+"tools.nodeDiscovery.sortMenu" = "Knooppunten sorteren";
+
+/* Location: NodeDiscoveryView.swift - Sort menu accessibility hint */
+"tools.nodeDiscovery.sortMenuHint" = "Wijzigt de sorteervolgorde van ontdekte knooppunten";
+
+/* Location: NodeDiscoveryRowView.swift - Unknown node name fallback */
+"tools.nodeDiscovery.unknownNode" = "Onbekend";
+
+/* Location: NodeDiscoveryRowView.swift - Node type: repeater */
+"tools.nodeDiscovery.typeRepeater" = "Repeater";
+
+/* Location: NodeDiscoveryRowView.swift - Node type: sensor */
+"tools.nodeDiscovery.typeSensor" = "Sensor";
+
+/* Location: NodeDiscoveryRowView.swift - SNR label (local receive) */
+"tools.nodeDiscovery.snrDown" = "↓ %@ dB";
+
+/* Location: NodeDiscoveryRowView.swift - SNR label (remote receive) */
+"tools.nodeDiscovery.snrUp" = "↑ %@ dB";
+
+/* Location: NodeDiscoveryRowView.swift - RSSI label */
+"tools.nodeDiscovery.rssi" = "RSSI %@ dBm";
+
+/* Location: NodeDiscoveryView.swift - Error alert title */
+"tools.nodeDiscovery.errorTitle" = "Zoeken mislukt";
+
+// MARK: - Line of Sight View
+
+/* Location: LineOfSightView.swift - Map style: standard */
+/* Location: LineOfSightView.swift - Map style: terrain */
+/* Location: LineOfSightView.swift - Back button label */
+"tools.lineOfSight.back" = "Terug";
+
+/* Location: LineOfSightView.swift - Point A annotation */
+"tools.lineOfSight.pointA" = "Punt A";
+
+/* Location: LineOfSightView.swift - Point B annotation */
+"tools.lineOfSight.pointB" = "Punt B";
+
+/* Location: LineOfSightView.swift - Repeater annotation */
+"tools.lineOfSight.repeater" = "Repeater";
+
+/* Location: LineOfSightView.swift - Points section title */
+"tools.lineOfSight.points" = "Punten";
+
+/* Location: LineOfSightView.swift - Cancel button */
+"tools.lineOfSight.cancel" = "Annuleren";
+
+/* Location: LineOfSightView.swift - Relocating message, %@ is point name */
+"tools.lineOfSight.relocating" = "%@ verplaatsen...";
+
+/* Location: LineOfSightView.swift - Tap map instruction */
+"tools.lineOfSight.tapMapInstruction" = "Tik op de kaart om een nieuwe locatie in te stellen";
+
+/* Location: LineOfSightView.swift - Not selected placeholder */
+"tools.lineOfSight.notSelected" = "Niet geselecteerd";
+
+/* Location: LineOfSightView.swift - Loading elevation status */
+"tools.lineOfSight.loadingElevation" = "Hoogte laden...";
+
+/* Location: LineOfSightView.swift - Long press points hint */
+"tools.lineOfSight.longPressPointsHint" = "Houd ingedrukt op de kaart om een locatie toe te voegen";
+
+/* Location: LineOfSightView.swift - Elevation unavailable warning */
+"tools.lineOfSight.elevationUnavailable" = "Hoogtegegevens niet beschikbaar. Zeeniveau (0m) wordt gebruikt als benadering.";
+
+/* Location: LineOfSightView.swift - Open in Maps button */
+"tools.lineOfSight.openInMaps" = "Openen in Kaarten";
+
+/* Location: LineOfSightView.swift - Copy coordinates button */
+"tools.lineOfSight.copyCoordinates" = "Coördinaten kopiëren";
+
+/* Location: LineOfSightView.swift - Share button */
+"tools.lineOfSight.share" = "Delen...";
+
+/* Location: LineOfSightView.swift - Share label */
+"tools.lineOfSight.shareLabel" = "Delen";
+
+/* Location: LineOfSightView.swift - Relocate button */
+"tools.lineOfSight.relocate" = "Verplaatsen";
+
+/* Location: LineOfSightView.swift - Done button */
+"tools.lineOfSight.done" = "Klaar";
+
+/* Location: LineOfSightView.swift - Edit button */
+"tools.lineOfSight.edit" = "Bewerken";
+
+/* Location: LineOfSightView.swift - Clear button */
+"tools.lineOfSight.clear" = "Wissen";
+
+/* Location: LineOfSightView.swift - Ground elevation label */
+"tools.lineOfSight.groundElevation" = "Grondhoogte";
+
+/* Location: LineOfSightView.swift - Additional height label */
+"tools.lineOfSight.additionalHeight" = "Extra hoogte";
+
+/* Location: LineOfSightView.swift - Total height label */
+"tools.lineOfSight.totalHeight" = "Totale hoogte";
+
+/* Location: LineOfSightView.swift - Add repeater button */
+"tools.lineOfSight.addRepeater" = "Repeater toevoegen";
+
+/* Location: LineOfSightView.swift - Analyze button */
+"tools.lineOfSight.analyze" = "Zichtlijn analyseren";
+
+/* Location: LineOfSightView.swift - Terrain profile section */
+"tools.lineOfSight.terrainProfile" = "Terreinprofiel";
+
+/* Location: LineOfSightView.swift - Earth curvature note, %@ is k-factor */
+"tools.lineOfSight.earthCurvature" = "Gecorrigeerd voor aardkromming (%@)";
+
+/* Location: LineOfSightView.swift - Drag to adjust tooltip */
+"tools.lineOfSight.dragToAdjust" = "Sleep om aan te passen";
+
+/* Location: LineOfSightView.swift - RF Settings section */
+"tools.lineOfSight.rfSettings" = "RF-instellingen";
+
+/* Location: LineOfSightView.swift - Frequency label */
+"tools.lineOfSight.frequency" = "Frequentie";
+
+/* Location: LineOfSightView.swift - MHz unit */
+"tools.lineOfSight.mhz" = "MHz";
+
+/* Location: LineOfSightView.swift - Refraction label */
+"tools.lineOfSight.refraction" = "Refractie";
+
+/* Location: LineOfSightView.swift - Refraction: none */
+"tools.lineOfSight.refraction.none" = "Geen";
+
+/* Location: LineOfSightView.swift - Refraction: standard */
+"tools.lineOfSight.refraction.standard" = "Standaard (k=1,33)";
+
+/* Location: LineOfSightView.swift - Refraction: ducting */
+"tools.lineOfSight.refraction.ducting" = "Ducting (k=4)";
+
+/* Location: LineOfSightView.swift - Analyzing progress */
+"tools.lineOfSight.analyzing" = "Pad analyseren...";
+
+/* Location: LineOfSightView.swift - Analysis failed title */
+"tools.lineOfSight.analysisFailed" = "Analyse mislukt";
+
+/* Location: LineOfSightView.swift - Retry button */
+"tools.lineOfSight.retry" = "Opnieuw proberen";
+
+/* Location: LineOfSightView.swift - Repeater location map item name */
+"tools.lineOfSight.repeaterLocation" = "Repeaterlocatie";
+
+/* Location: LineOfSightViewModel.swift - Dropped pin display name */
+"tools.lineOfSight.droppedPin" = "Geplaatste speld";
+
+/* Location: LineOfSightView.swift - Accessibility hint for repeater pin */
+/* Location: LineOfSightView.swift - Accessibility hint for point pin */
+/* Location: LineOfSightView.swift - Accessibility hint for repeater target */
+// MARK: - Terrain Profile Canvas
+
+/* Location: TerrainProfileCanvas.swift - Empty state title */
+"tools.lineOfSight.noData" = "Geen gegevens";
+
+/* Location: TerrainProfileCanvas.swift - Empty state description */
+"tools.lineOfSight.selectTwoPoints" = "Selecteer twee punten om te analyseren";
+
+/* Location: TerrainProfileCanvas.swift - Legend: terrain */
+"tools.lineOfSight.legend.terrain" = "Terrein";
+
+/* Location: TerrainProfileCanvas.swift - Legend: line of sight */
+"tools.lineOfSight.legend.los" = "Zichtlijn";
+
+/* Location: TerrainProfileCanvas.swift - Legend: clear */
+"tools.lineOfSight.legend.clear" = "Vrij";
+
+/* Location: TerrainProfileCanvas.swift - Legend: obstructed */
+"tools.lineOfSight.legend.obstructed" = "Geblokkeerd";
+
+/* Location: TerrainProfileCanvas.swift - Indirect route label */
+"tools.lineOfSight.indirectRoute" = "Indirecte route via R · Verplaats op kaart om aan te passen";
+
+/* Location: TerrainProfileCanvas.swift - Elevation data attribution */
+"tools.lineOfSight.elevationAttribution" = "Hoogtegegevens: Copernicus DEM GLO-90 via Open-Meteo";
+
+// MARK: - Results Card View
+
+/* Location: ResultsCardView.swift - Section title */
+"tools.lineOfSight.results" = "Resultaten";
+
+/* Location: ResultsCardView.swift - Loss suffix */
+"tools.lineOfSight.loss" = "verlies";
+
+/* Location: ResultsCardView.swift - Path loss breakdown section */
+"tools.lineOfSight.pathLossBreakdown" = "Padverlies-uitsplitsing";
+
+/* Location: ResultsCardView.swift - Free space loss label */
+"tools.lineOfSight.freeSpaceLoss" = "Vrije-ruimteverlies";
+
+/* Location: ResultsCardView.swift - Diffraction loss label */
+"tools.lineOfSight.diffractionLoss" = "Diffractieverlies";
+
+/* Location: ResultsCardView.swift - Total label */
+"tools.lineOfSight.total" = "Totaal";
+
+/* Location: ResultsCardView.swift - Clearance section title */
+"tools.lineOfSight.clearance" = "Vrijheid";
+
+/* Location: ResultsCardView.swift - Obstructions found label */
+"tools.lineOfSight.obstructionsFound" = "Obstakels gevonden";
+
+/* Location: ResultsCardView.swift - Status label */
+"tools.lineOfSight.status" = "Status";
+
+/* Location: ResultsCardView.swift - Distance label */
+"tools.lineOfSight.distance" = "Afstand";
+
+/* Location: ResultsCardView.swift - Worst clearance short label */
+"tools.lineOfSight.worstClearanceShort" = "Slechtste vrijheid";
+
+/* Location: ResultsCardView.swift - Assumptions footnote; %1$@ is frequency, %2$@ is k-factor */
+"tools.lineOfSight.assumptions" = "%1$@, %2$@, drempel van 60 %% van de 1e fresnelzone";
+
+/* Location: ClearanceStatusView.swift - Clearance percentage, %lld is percent */
+"tools.lineOfSight.clearancePercent" = "%lld%% vrijheid";
+
+/* Location: ClearanceStatusView.swift, ResultsCardView.swift - Clearance status: clear */
+"tools.lineOfSight.status.clear" = "Vrij";
+
+/* Location: ClearanceStatusView.swift, ResultsCardView.swift - Clearance status: marginal */
+"tools.lineOfSight.status.marginal" = "Marginaal";
+
+/* Location: ClearanceStatusView.swift, ResultsCardView.swift - Clearance status: partial obstruction */
+"tools.lineOfSight.status.partialObstruction" = "Gedeeltelijke obstructie";
+
+/* Location: ClearanceStatusView.swift, ResultsCardView.swift - Clearance status: blocked */
+"tools.lineOfSight.status.blocked" = "Geblokkeerd";
+
+/* Location: ResultsCardView.swift - Subtitle shown when path is blocked */
+"tools.lineOfSight.status.blockedSubtitle" = "Direct pad kruist terrein";
+
+// MARK: - CLI Tool View
+
+/* Location: CLIToolView.swift - Tool selection label */
+"tools.cli" = "CLI";
+
+/* Location: CLIToolView.swift - Disconnected state title */
+"tools.cli.notConnected" = "Niet verbonden";
+
+/* Location: CLIToolView.swift - Disconnected state description */
+"tools.cli.notConnectedDescription" = "Verbind met een mesh-radio om de CLI te gebruiken.";
+
+/* Location: CLIToolView.swift - Prompt suffix */
+"tools.cli.promptSuffix" = ">";
+
+/* Location: CLIToolView.swift - Waiting indicator */
+/* Location: CLIToolView.swift - Disconnected prompt */
+"tools.cli.disconnected" = "niet verbonden";
+
+/* Location: CLIToolView.swift - Help command output header */
+"tools.cli.helpHeader" = "Beschikbare opdrachten:";
+
+/* Location: CLIToolView.swift - Session list header */
+"tools.cli.sessionListHeader" = "Actieve sessies:";
+
+/* Location: CLIToolView.swift - Local session label */
+"tools.cli.sessionLocal" = "lokaal";
+
+/* Location: CLIToolView.swift - No sessions message */
+/* Location: CLIToolView.swift - History empty message */
+/* Location: CLIToolView.swift - Unknown command error */
+"tools.cli.unknownCommand" = "Onbekende opdracht:";
+
+/* Location: CLIToolView.swift - Login success */
+"tools.cli.loginSuccess" = "Ingelogd op";
+
+/* Location: CLIToolView.swift - Login failed */
+"tools.cli.loginFailed" = "Inloggen mislukt:";
+
+/* Location: CLIToolView.swift - Login failed reason */
+"tools.cli.loginFailedAuth" = "Authenticatie mislukt";
+
+/* Location: CLIToolView.swift - Node not found error */
+"tools.cli.nodeNotFound" = "Knooppunt niet gevonden:";
+
+/* Location: CLIToolView.swift - Password required error */
+"tools.cli.passwordRequired" = "Wachtwoord vereist";
+
+/* Location: CLIToolViewModel.swift - Password prompt */
+"tools.cli.passwordPrompt" = "Wachtwoord:";
+
+/* Location: CLIToolViewModel.swift - Login countdown */
+"tools.cli.loggingIn" = "Inloggen... (%ds)";
+
+/* Location: CLIToolView.swift - Logout success */
+"tools.cli.logoutSuccess" = "Uitgelogd";
+
+/* Location: CLIToolView.swift - Not logged in error */
+"tools.cli.notLoggedIn" = "Niet ingelogd op een repeater";
+
+/* Location: CLIToolView.swift - Session switched */
+"tools.cli.sessionSwitched" = "Gewisseld naar";
+
+/* Location: CLIToolView.swift - Session not found */
+"tools.cli.sessionNotFound" = "Sessie niet gevonden:";
+
+/* Location: CLIToolView.swift - Command timeout */
+"tools.cli.timeout" = "Time-out bij wachten op reactie";
+
+/* Location: CLIToolView.swift - Command cancelled */
+"tools.cli.cancelled" = "Opdracht geannuleerd";
+
+/* Location: CLIToolView.swift - Login from local only */
+"tools.cli.loginFromLocalOnly" = "Inloggen alleen beschikbaar vanuit lokale sessie";
+
+/* Location: CLIToolView.swift - Login usage */
+"tools.cli.loginUsage" = "Gebruik: login [-f] <node>";
+
+/* Location: CLIToolView.swift - Accessory button: history up */
+"tools.cli.historyUp" = "Vorige opdracht";
+
+/* Location: CLIToolView.swift - Accessory button: history down */
+"tools.cli.historyDown" = "Volgende opdracht";
+
+/* Location: CLIToolView.swift - Accessory button: tab complete */
+"tools.cli.tabComplete" = "Automatisch aanvullen";
+
+/* Location: CLIInputAccessoryView.swift - Cursor left button */
+"tools.cli.cursorLeft" = "Cursor naar links";
+
+/* Location: CLIInputAccessoryView.swift - Cursor right button */
+"tools.cli.cursorRight" = "Cursor naar rechts";
+
+/* Location: CLIInputAccessoryView.swift - Paste button */
+"tools.cli.paste" = "Plakken";
+
+/* Location: CLIToolView.swift - Accessory button: clear */
+/* Location: CLIToolView.swift - Accessory button: sessions */
+"tools.cli.sessions" = "Sessies";
+
+/* Location: CLIToolView.swift - Accessory button: dismiss */
+"tools.cli.dismiss" = "Toetsenbord verbergen";
+
+/* Location: CLIToolView.swift - Default device name */
+"tools.cli.defaultDevice" = "Apparaat";
+
+/* Location: CLIToolViewModel.swift - Help: login command */
+"tools.cli.helpLogin" = "  login [-f] <node>\n    Inloggen op repeater (-f: opgeslagen wachtwoord vergeten)";
+
+/* Location: CLIToolViewModel.swift - Help: logout command */
+"tools.cli.helpLogout" = "  logout\n    Externe sessie beëindigen";
+
+/* Location: CLIToolViewModel.swift - Help: session list command */
+"tools.cli.helpSessionList" = "  session list\n    Actieve sessies tonen";
+
+/* Location: CLIToolViewModel.swift - Help: session local command */
+"tools.cli.helpSessionLocal" = "  session local\n    Naar lokale sessie wisselen";
+
+/* Location: CLIToolViewModel.swift - Help: session name command */
+"tools.cli.helpSessionName" = "  session <name>\n    Naar sessie wisselen";
+
+/* Location: CLIToolViewModel.swift - Help: session shortcut */
+"tools.cli.helpSessionShortcut" = "  s<n>\n    Naar sessie n wisselen (bijv. s1, s2)";
+
+/* Location: CLIToolViewModel.swift - Help: clear command */
+"tools.cli.helpClear" = "  clear\n    Terminal wissen";
+
+/* Location: CLIToolViewModel.swift - Help: help command */
+"tools.cli.helpHelp" = "  help\n    Deze hulp tonen";
+
+/* Location: CLIToolViewModel.swift - Help: nodes command */
+"tools.cli.helpNodes" = "  nodes\n    Lijst van repeaters en kamers tonen";
+
+/* Location: CLIToolViewModel.swift - Help: channels command */
+"tools.cli.helpChannels" = "  channels\n    Lijst van kanalen met apparaatslotnummers tonen";
+
+/* Location: CLIToolViewModel.swift - Help: repeater commands header */
+"tools.cli.helpRepeaterHeader" = "Repeater-opdrachten (doorgifte):";
+
+/* Location: CLIToolViewModel.swift - Help: repeater commands list 1 */
+"tools.cli.helpRepeaterList1" = "  ver, clock, reboot, advert, neighbors";
+
+/* Location: CLIToolViewModel.swift - Help: repeater commands list 2 */
+"tools.cli.helpRepeaterList2" = "  get/set <param>, password <new>";
+
+/* Location: CLIToolViewModel.swift - Help: repeater commands list 3 */
+"tools.cli.helpRepeaterList3" = "  log start/stop/erase";
+
+/* Location: CLIToolViewModel.swift - Help: repeater commands list 4 */
+"tools.cli.helpRepeaterList4" = "  setperm, tempradio, neighbor.remove";
+
+/* Location: CLIToolViewModel+Sessions.swift - Nodes header with count */
+"tools.cli.nodesHeader" = "Knooppunten (%lld):";
+
+/* Location: CLIToolViewModel+Sessions.swift - Channels header with count */
+"tools.cli.channelsHeader" = "Kanalen (%lld):";
+
+/* Location: CLIToolViewModel+Sessions.swift - No nodes found */
+"tools.cli.noNodes" = "Geen knooppunten gevonden";
+
+/* Location: CLIToolViewModel+Sessions.swift - No channels found */
+"tools.cli.noChannels" = "Geen kanalen gevonden";
+
+/* Location: CLIToolViewModel+Sessions.swift - Channel empty name placeholder */
+"tools.cli.channelEmpty" = "leeg";
+
+/* Location: CLIToolViewModel.swift - Welcome banner line 1 */
+"tools.cli.welcomeLine1" = "DigitainoMesh CLI";
+
+/* Location: CLIToolViewModel.swift - Welcome banner line 2 */
+"tools.cli.welcomeConnected" = "Verbonden met %@";
+
+/* Location: CLIToolViewModel.swift - Welcome banner line 3 */
+"tools.cli.welcomeHint" = "Typ 'help' voor beschikbare opdrachten.";
+
+/* Location: CLIToolView.swift - Jump to bottom button */
+"tools.cli.jumpToBottom" = "Naar beneden";
+
+/* Location: CLIToolView.swift - Accessibility label for command input */
+"tools.cli.commandInput" = "Opdrachtinvoer";
+
+/* Location: CLIToolView.swift - Accessibility label for command prompt */
+"tools.cli.commandPrompt" = "Opdrachtprompt";
+
+/* Location: CLIInputAccessoryView.swift - Cancel operation button label */
+"tools.cli.cancelOperation" = "Bewerking annuleren";
+
+/* Location: CLIToolViewModel.swift - Command timeout (post-login) */
+"tools.cli.commandTimeout" = "Time-out van verzoek";
+
+/* Location: CLIToolViewModel.swift - Reboot command confirmation */
+"tools.cli.rebootSent" = "Herstartopdracht verzonden";
+
+/* Accessibility label for completion suggestions container */
+/* Accessibility value for completion suggestions - %lld is count, %@ is selected */
+/* Confirmation prompt for a dangerous local command */
+"tools.cli.confirmPrompt" = "%@ bevestigen? (yes/no):";
+
+/* Usage for the get command */
+"tools.cli.usageGet" = "Gebruik: get <key>";
+
+/* Usage for the set command */
+"tools.cli.usageSet" = "Gebruik: set <key> <value>";
+
+/* Usage for set radio */
+"tools.cli.usageSetRadio" = "Gebruik: set radio <freq>,<bw>,<sf>,<cr>";
+
+/* Invalid value error */
+"tools.cli.invalidValue" = "Ongeldige waarde";
+
+/* Custom var key/value contains a reserved character */
+"tools.cli.invalidCustomVarToken" = "Sleutels mogen geen ':' of ',' bevatten; waarden geen ','";
+
+/* Local radio commands help header */
+"tools.cli.helpLocalHeader" = "Lokale radiocommando's:";
+
+/* Local radio commands help line 1 */
+"tools.cli.helpLocalList1" = "  clock [sync], ver, board";
+
+/* Local radio commands help line 2 */
+"tools.cli.helpLocalList2" = "  advert (zero-hop), floodadv (flood), reboot";
+
+/* Local radio commands help line 3 */
+"tools.cli.helpLocalList3" = "  get <key>, set <key> <value>";
+
+/* Local radio commands help line 4 */
+"tools.cli.helpLocalList4" = "    keys: name, lat, lon, tx, radio, freq, multi.acks, path.hash.mode, public.key, bat";
+
+/* Local radio commands help line 5 */
+"tools.cli.helpLocalList5" = "  get custom  (all custom firmware vars); unknown get/set keys route to custom vars";
+
+// MARK: - Saved Paths
+
+/* Location: SavedPathsViewModel.swift - Error loading saved paths */
+"tools.savedPaths.loadFailed" = "Kan opgeslagen paden niet laden.";
+
+/* Location: SavedPathsViewModel.swift - Error renaming a saved path */
+"tools.savedPaths.renameFailed" = "Kan pad niet hernoemen.";
+
+/* Location: SavedPathsViewModel.swift - Error deleting a saved path */
+"tools.savedPaths.deleteFailed" = "Kan pad niet verwijderen.";
+
+// MARK: - App Intents
+
+/* Location: MessageTargetEntity.swift - App Intents entity type name for a send target (a contact DM or a channel broadcast) */
+"intent.entity.target" = "Ontvanger";
+
+/* Location: MessageTargetEntity.swift - App Intents recipient-picker subtitle marking a channel (broadcast) target */
+"intent.entity.channel" = "Kanaal";
+
+/* Location: StatusQueryIntent.swift - App Intents: title of the radio status query intent */
+"intent.status.title" = "Radiostatus controleren";
+
+/* Location: MC1AppShortcutsProvider.swift - App Shortcuts: short title for the radio status shortcut */
+"intent.status.shortTitle" = "Radiostatus";
+
+/* Location: StatusQueryIntent.swift - App Intents: description of the radio status query intent */
+"intent.status.description" = "Geeft de naam, verbindingsstatus en het laatst bekende batterijniveau van je verbonden radio weer.";
+
+/* Location: StatusQueryIntent.swift - Spoken when the app is still launching and has no state to read yet */
+"intent.status.dialog.notReady" = "DigitainoMesh start nog op. Probeer het zo opnieuw.";
+
+/* Location: StatusQueryIntent.swift - Spoken when connected; %1$@ is the radio name, %2$lld is the cached battery percent */
+"intent.status.dialog.connectedWithBattery" = "%1$@ is verbonden. De batterij is ongeveer %2$lld%%, op basis van de laatste meting.";
+
+/* Location: StatusQueryIntent.swift - Spoken when connected but no battery reading is available; %@ is the radio name */
+"intent.status.dialog.connectedNoBattery" = "%@ is verbonden. Geen batterijwaarde beschikbaar.";
+
+/* Location: StatusQueryIntent.swift - Spoken while the radio is connecting; %@ is the radio name */
+"intent.status.dialog.connecting" = "%@ maakt verbinding.";
+
+/* Location: StatusQueryIntent.swift - Spoken when not connected and a last radio name is known; %@ is the radio name */
+"intent.status.dialog.disconnectedNamed" = "%@ is niet verbonden.";
+
+/* Location: StatusQueryIntent.swift - Spoken when not connected and no radio has been connected before */
+"intent.status.dialog.disconnectedUnknown" = "Er is geen radio verbonden.";
+
+/* Location: StatusQueryIntent.swift - Generic radio name used when no device name is known */
+"intent.status.radioFallbackName" = "Je radio";
+
+/* Location: SendMessageIntent.swift - App Intents: title of the send message intent */
+"intent.send.title" = "Een bericht sturen";
+
+/* Location: MC1AppShortcutsProvider.swift - App Shortcuts: short title for the send message shortcut */
+"intent.send.shortTitle" = "Bericht sturen";
+
+/* Location: SendMessageIntent.swift - App Intents: description of the send message intent */
+"intent.send.description" = "Stuur tekst naar een contact of een kanaal op je radio.";
+
+/* Location: SendMessageIntent.swift - App Intents: title of the recipient parameter (a contact or a channel) */
+"intent.send.param.target" = "Ontvanger";
+
+/* Location: SendMessageIntent.swift - App Intents: title of the message text parameter */
+"intent.send.param.message" = "Bericht";
+
+/* Location: SendMessageIntent.swift - Confirmation prompt shown before sending; %@ is the recipient name */
+"intent.send.confirm" = "Dit bericht naar %@ sturen?";
+
+/* Location: SendMessageIntent.swift - Spoken when the app must come to the foreground to send (still connecting or reconnecting) */
+"intent.send.foreground" = "Open DigitainoMesh om dit bericht te versturen.";
+
+/* Location: SendMessageIntent.swift - App Intents parameter summary shown in the shortcut editor; ${message} and ${target} are framework parameter tokens */
+"Send ${message} to ${target}" = "${message} naar ${target} sturen";
+
+// MARK: - Send Advert Intent
+
+/* Location: SendAdvertIntent.swift - App Intents: title of the send advert intent */
+"intent.advert.title" = "Advertentie verzenden";
+
+/* Location: MC1AppShortcutsProvider.swift - App Shortcuts: short title for the send advert shortcut */
+"intent.advert.shortTitle" = "Advertentie verzenden";
+
+/* Location: SendAdvertIntent.swift - App Intents: description of the send advert intent */
+"intent.advert.description" = "Verzend een zelfadvertentie zodat mesh-knooppunten in de buurt je radio kunnen ontdekken.";
+
+/* Location: SendAdvertIntent.swift - App Intents: title of the advert reach parameter (zero-hop or flood) */
+"intent.advert.param.reach" = "Bereik";
+
+/* Location: AdvertReach.swift - App Intents: type name for the advert reach enum */
+"intent.advert.reach.type" = "Advertentiebereik";
+
+/* Location: AdvertReach.swift - App Intents: zero-hop reach case (direct neighbors only) */
+"intent.advert.reach.zeroHop" = "Zero-Hop";
+
+/* Location: AdvertReach.swift - App Intents: flood reach case (entire mesh) */
+"intent.advert.reach.flood" = "Flood";
+
+/* Location: SendAdvertIntent.swift - Spoken after a zero-hop advert is sent */
+"intent.advert.dialog.sentZeroHop" = "Je advertentie is naar nabijgelegen knooppunten verzonden.";
+
+/* Location: SendAdvertIntent.swift - Spoken after a flood advert is sent */
+"intent.advert.dialog.sentFlood" = "Je advertentie is over het hele mesh-netwerk verzonden.";
+
+/* Location: SendAdvertIntent.swift - App Intents parameter summary shown in the shortcut editor; ${reach} is the framework parameter token */
+"Send a ${reach} advert" = "Een ${reach}-advertentie verzenden";
+
+// MARK: - Repeater Benchmark
+
+/* Location: ToolSelection.swift - Tool selection label */
+"tools.benchmark" = "Repeater Benchmark";
+
+/* Location: RepeaterBenchmarkView.swift - Disconnected state title */
+"tools.benchmark.notConnected" = "Radio Required";
+
+/* Location: RepeaterBenchmarkView.swift - Disconnected state description */
+"tools.benchmark.notConnectedDescription" = "Connect a radio to benchmark the repeaters around it.";
+
+/* Location: RepeaterBenchmarkView.swift - Toolbar button opening saved runs */
+"tools.benchmark.history" = "History";
+
+/* Location: RepeaterBenchmarkView.swift - Title of the error alert */
+"tools.benchmark.errorTitle" = "Benchmark Error";
+
+/* Location: RepeaterBenchmarkView.swift - Section header for the run setup fields */
+"tools.benchmark.setup" = "Setup";
+
+/* Location: RepeaterBenchmarkView.swift - Section footer explaining what is measured */
+"tools.benchmark.setupFooter" = "Each probe travels out through the test repeater to a target and back, so one reply measures both directions of the link.";
+
+/* Location: RepeaterBenchmarkView.swift - Row label for the repeater whose links are measured */
+"tools.benchmark.testRepeater" = "Test Repeater";
+
+/* Location: RepeaterBenchmarkView.swift - Row label for the repeaters being reached */
+"tools.benchmark.targets" = "Targets";
+
+/* Location: RepeaterBenchmarkView.swift - Placeholder shown when nothing is chosen yet */
+"tools.benchmark.selectPrompt" = "Select…";
+
+/* Location: RepeaterBenchmarkView.swift - Trailing value showing how many targets are chosen; %lld is the count */
+"tools.benchmark.targetsSelected" = "%lld selected";
+
+/* Location: RepeaterBenchmarkView.swift - Toolbar action selecting every repeater currently being heard */
+"tools.benchmark.selectHeard" = "Select Heard";
+
+/* Location: RepeaterBenchmarkView.swift - Picker label for the number of probes sent at each target */
+"tools.benchmark.tracesPerTarget" = "Probes per Target";
+
+/* Location: RepeaterBenchmarkView.swift - Button that starts the run */
+"tools.benchmark.run" = "Run Benchmark";
+
+/* Location: RepeaterBenchmarkView.swift - Button that stops a run in progress */
+"tools.benchmark.cancel" = "Cancel";
+
+/* Location: RepeaterBenchmarkView.swift - Section header while a run is in progress */
+"tools.benchmark.progress" = "Progress";
+
+/* Location: RepeaterBenchmarkView.swift - Which target is being probed; %1$lld is the current index, %2$lld the total */
+"tools.benchmark.targetProgress" = "Target %1$lld of %2$lld";
+
+/* Location: RepeaterBenchmarkView.swift - Which probe is in flight; %1$lld is the current index, %2$lld the batch size */
+"tools.benchmark.traceProgress" = "Probe %1$lld of %2$lld";
+
+/* Location: RepeaterBenchmarkView.swift - Section header for the measured results */
+"tools.benchmark.results" = "Results";
+
+/* Location: RepeaterBenchmarkView.swift - Text field placeholder for the note a run is saved under */
+"tools.benchmark.notePlaceholder" = "Note (e.g. \"stock whip antenna\")";
+
+/* Location: RepeaterBenchmarkView.swift - Section header for saving results */
+"tools.benchmark.saveHeader" = "Save";
+
+/* Location: RepeaterBenchmarkView.swift - Section footer explaining how saved runs are grouped */
+"tools.benchmark.saveFooter" = "Runs are grouped in history by their note, so two notes can be compared side by side.";
+
+/* Location: RepeaterBenchmarkView.swift - Button that saves the run to history */
+"tools.benchmark.save" = "Save Results";
+
+/* Location: RepeaterBenchmarkView.swift - Button state after the run has been saved */
+"tools.benchmark.saved" = "Saved";
+
+/* Location: BenchmarkTargetRow.swift - Disclosure label for the per-probe log; %lld is the probe count */
+"tools.benchmark.traceLog" = "Probes (%lld)";
+
+/* Location: BenchmarkTargetRow.swift - Successful probes out of total; %1$lld is successes, %2$lld the total */
+"tools.benchmark.successCount" = "%1$lld/%2$lld";
+
+/* Location: BenchmarkTargetRow.swift - Round-trip time value; %lld is milliseconds */
+"tools.benchmark.milliseconds" = "%lldms";
+
+/* Location: BenchmarkHistoryView.swift - Average round-trip time of a saved run; %lld is milliseconds */
+"tools.benchmark.averageMilliseconds" = "avg %lldms";
+
+/* Location: BenchmarkTargetRow.swift - Signal value; %@ is the already-formatted decibel number */
+"tools.benchmark.decibels" = "%@ dB";
+
+/* Location: BenchmarkHistoryView.swift - Success rate; %lld is the percentage */
+"tools.benchmark.percent" = "%lld%%";
+
+/* Location: BenchmarkTargetRow.swift - Probe failed because the radio refused the send */
+"tools.benchmark.sendFailed" = "send failed";
+
+/* Location: BenchmarkTargetRow.swift - Probe failed because no reply arrived in time */
+"tools.benchmark.timedOut" = "timed out";
+
+/* Location: BenchmarkHistoryView.swift - Toolbar button opening the comparison of two runs */
+"tools.benchmark.compare" = "Compare";
+
+/* Location: BenchmarkTargetRow.swift - Mean round-trip time label */
+"tools.benchmark.stat.average" = "avg";
+
+/* Location: BenchmarkTargetRow.swift - Fastest round-trip time label */
+"tools.benchmark.stat.minimum" = "min";
+
+/* Location: BenchmarkTargetRow.swift - Slowest round-trip time label */
+"tools.benchmark.stat.maximum" = "max";
+
+/* Location: BenchmarkComparisonView.swift - Unit suffix appended to a round-trip delta */
+"tools.benchmark.unit.milliseconds" = "ms";
+
+/* Location: BenchmarkComparisonView.swift - Unit suffix appended to a signal delta */
+"tools.benchmark.unit.decibels" = " dB";
+
+/* Location: BenchmarkComparisonView.swift - Unit suffix appended to a success-rate delta */
+"tools.benchmark.unit.percent" = "%%";
+
+/* Location: RepeaterPickerView.swift - Empty state when no repeater matches */
+"tools.benchmark.picker.empty" = "No Repeaters";
+
+/* Location: RepeaterPickerView.swift - Empty state description */
+"tools.benchmark.picker.emptyDescription" = "Repeaters appear here once they are saved as contacts or heard on the mesh.";
+
+/* Location: RepeaterPickerView.swift - Search field prompt */
+"tools.benchmark.picker.searchPrompt" = "Name or hex prefix";
+
+/* Location: RepeaterPickerView.swift - Toolbar button that closes the picker */
+"tools.benchmark.picker.done" = "Done";
+
+/* Location: BenchmarkHistoryView.swift - Navigation title of saved runs */
+"tools.benchmark.history.title" = "Benchmark History";
+
+/* Location: BenchmarkHistoryView.swift - Empty state title */
+"tools.benchmark.history.empty" = "No Saved Runs";
+
+/* Location: BenchmarkHistoryView.swift - Empty state description */
+"tools.benchmark.history.emptyDescription" = "Run a benchmark and save the results to compare them later.";
+
+/* Location: BenchmarkHistoryView.swift - Section header telling the user to pick runs to compare */
+"tools.benchmark.history.selectPrompt" = "Tap to select runs for comparison";
+
+/* Location: BenchmarkHistoryView.swift - Section footer counting picked runs; %lld is how many of two are chosen */
+"tools.benchmark.history.selectedCount" = "%lld of 2 selected";
+
+/* Location: BenchmarkHistoryView.swift - Name shown for a run saved without a note */
+"tools.benchmark.history.untitled" = "No note";
+
+/* Location: BenchmarkHistoryView.swift - How many targets a saved run covered; %lld is the count */
+"tools.benchmark.history.targetCount" = "%lld targets";
+
+/* Location: BenchmarkHistoryView.swift - Swipe action deleting a saved run */
+"tools.benchmark.history.delete" = "Delete";
+
+/* Location: BenchmarkHistoryView.swift - Swipe action loading a saved run's setup back into the plan */
+"tools.benchmark.history.repeatRun" = "Repeat";
+
+/* Location: BenchmarkComparisonView.swift - Navigation title */
+"tools.benchmark.comparison.title" = "Comparison";
+
+/* Location: BenchmarkComparisonView.swift - Section header naming the two runs being compared */
+"tools.benchmark.comparison.comparing" = "Comparing";
+
+/* Location: BenchmarkComparisonView.swift - Label for the older of the two runs */
+"tools.benchmark.comparison.before" = "A (Before)";
+
+/* Location: BenchmarkComparisonView.swift - Label for the newer of the two runs */
+"tools.benchmark.comparison.after" = "B (After)";
+
+/* Location: BenchmarkComparisonView.swift - Section header for the overall deltas */
+"tools.benchmark.comparison.summary" = "Summary";
+
+/* Location: BenchmarkComparisonView.swift - Section header for the per-target deltas */
+"tools.benchmark.comparison.perTarget" = "Per Target";
+
+/* Location: BenchmarkComparisonView.swift - Round-trip time metric label */
+"tools.benchmark.comparison.roundTrip" = "RTT";
+
+/* Location: BenchmarkComparisonView.swift - Success rate metric label */
+"tools.benchmark.comparison.reliability" = "Success";
+
+// MARK: - Traffic Map
+
+/* Location: ToolSelection.swift - Tool selection label */
+"tools.trafficMap" = "Verkeerskaart";
+
+/* Location: TrafficHeatmapView.swift - Disconnected state title */
+"tools.trafficMap.notConnected" = "Radio vereist";
+
+/* Location: TrafficHeatmapView.swift - Disconnected state description */
+"tools.trafficMap.notConnectedDescription" = "Verbind een radio om het verkeer dat hij heeft gehoord in kaart te brengen.";
+
+/* Location: TrafficHeatmapView.swift - Empty state title when the packet log is empty */
+"tools.trafficMap.noData" = "Nog geen verkeer";
+
+/* Location: TrafficHeatmapView.swift - Empty state description when the packet log is empty */
+"tools.trafficMap.noDataDescription" = "Pakketten verschijnen hier zodra je radio ze hoort. Laat hem een tijdje meeluisteren en kom later terug.";
+
+/* Location: TrafficHeatmapView.swift - Empty state title when no relaying node has a known location */
+"tools.trafficMap.noPlacedNodes" = "Niets te plaatsen";
+
+/* Location: TrafficHeatmapView.swift - Empty state description when no relaying node has a known location */
+"tools.trafficMap.noPlacedNodesDescription" = "Er is verkeer gehoord, maar geen van de repeaters die het doorgaven heeft al een bekende locatie.";
+
+/* Location: TrafficHeatmapView.swift - Toolbar menu selecting how far back the map reaches */
+"tools.trafficMap.timeWindow" = "Tijdvenster";
+
+/* Location: TrafficHeatmapView.swift - Banner counting what the map is showing; %1$lld is nodes, %2$lld links, %3$lld packets */
+"tools.trafficMap.summary" = "%1$lld knooppunten · %2$lld verbindingen · %3$lld pakketten";
+
+/* Location: TrafficHeatmapView.swift - Map control that frames every mapped node */
+"tools.trafficMap.centerOnTraffic" = "Op verkeer centreren";
+
+/* Location: TrafficHeatmapView.swift - Time window covering the last fifteen minutes */
+"tools.trafficMap.window.minutes15" = "Laatste 15 minuten";
+
+/* Location: TrafficHeatmapView.swift - Time window covering the last thirty minutes */
+"tools.trafficMap.window.minutes30" = "Laatste 30 minuten";
+
+/* Location: TrafficHeatmapView.swift - Time window covering the last hour */
+"tools.trafficMap.window.hour1" = "Laatste uur";
+
+/* Location: TrafficHeatmapView.swift - Time window covering the last three hours */
+"tools.trafficMap.window.hours3" = "Laatste 3 uur";
+
+/* Location: TrafficHeatmapView.swift - Time window covering the last six hours */
+"tools.trafficMap.window.hours6" = "Laatste 6 uur";
+
+/* Location: TrafficHeatmapView.swift - Time window covering the last twelve hours */
+"tools.trafficMap.window.hours12" = "Laatste 12 uur";
+
+/* Location: TrafficHeatmapView.swift - Time window covering the last day */
+"tools.trafficMap.window.day1" = "Laatste 24 uur";
+
+/* Location: TrafficHeatmapView.swift - Time window covering the last three days */
+"tools.trafficMap.window.days3" = "Laatste 3 dagen";
+
+/* Location: TrafficHeatmapView.swift - Time window covering the last seven days */
+"tools.trafficMap.window.days7" = "Laatste 7 dagen";
+
+/* Location: TrafficHeatmapView.swift - Time window covering everything still logged */
+"tools.trafficMap.window.all" = "Alles";
+
+/* Location: TrafficHeatmapLegend.swift - Legend title */
+"tools.trafficMap.legend.title" = "Legenda";
+
+/* Location: TrafficHeatmapLegend.swift - Legend note explaining size and thickness */
+"tools.trafficMap.legend.weight" = "Grotere bellen en dikkere verbindingen dragen meer verkeer.";
+
+/* Location: TrafficHeatmapLegend.swift - Legend note explaining bubble color */
+"tools.trafficMap.legend.signal" = "De kleur van de bel geeft aan hoe goed je radio dat knooppunt rechtstreeks hoort. Verbindingen worden nooit op signaal gekleurd — alleen de laatste hop naar je radio wordt gemeten.";
+
+/* Location: TrafficNodeCallout.swift - Packets a node relayed; %lld is the count */
+"tools.trafficMap.callout.packets" = "%lld pakketten doorgegeven";
+
+/* Location: TrafficNodeCallout.swift - Mean signal when this node was the last hop; %@ is the already-formatted decibel number */
+"tools.trafficMap.callout.averageSignal" = "%@ dB gemiddeld";
+
+/* Location: TrafficNodeCallout.swift - Shown for a node only ever seen relaying for others */
+"tools.trafficMap.callout.neverHeardDirectly" = "Nooit rechtstreeks gehoord";
+
+// MARK: - Signal Mapper
+
+/* Location: ToolSelection.swift - Tool selection label */
+"tools.signalMapper" = "Signaalkaart";
+
+/* Location: SignalMapperCoverageView.swift - Empty state title before anything has been captured */
+"tools.signalMapper.empty" = "Nog geen dekking vastgelegd";
+
+/* Location: SignalMapperCoverageView.swift - Empty state description explaining how to start capturing */
+"tools.signalMapper.emptyDescription" = "Zet hieronder het vastleggen aan en neem de app mee. Pakketten die je radio hoort, echo's van je eigen berichten via repeaters en bezorgbevestigingen komen terecht op de zeshoek waar je stond.";
+
+/* Location: SignalMapperCoverageView.swift - Toggle switching passive coverage capture on and off */
+"tools.signalMapper.captureToggle" = "Dekking vastleggen tijdens gebruik van de app";
+
+/* Location: SignalMapperCoverageView.swift - Explains what capture does, under the toggle */
+"tools.signalMapper.captureExplainer" = "Werkt alleen als de app open is en zendt nooit iets op het mesh. Het brengt het verkeer in kaart dat je radio toch al zou verwerken.";
+
+/* Location: SignalMapperCoverageView.swift - Privacy note under the capture toggle */
+"tools.signalMapper.privacyNote" = "Alles blijft op dit apparaat. Je exacte positie wordt nooit opgeslagen — alleen de zeshoek waarin je was. Er wordt nooit iets geüpload zonder het eerst te vragen.";
+
+/* Location: SignalMapperCoverageView.swift - Explains that frequently-visited areas are excluded from the map */
+"tools.signalMapper.anchorNote" = "Plekken waar je veel tijd doorbrengt worden bewust van de kaart weggelaten.";
+
+/* Location: SignalMapperCoverageView.swift - Map control that frames every captured cell */
+"tools.signalMapper.centerOnCoverage" = "Centreren op dekking";
+
+/* Location: SignalMapperCoverageView.swift - Toolbar menu holding the tool's options */
+"tools.signalMapper.options" = "Opties";
+
+/* Location: SignalMapperCoverageView.swift - Menu item that deletes every captured cell */
+"tools.signalMapper.delete.action" = "Vastgelegde dekking verwijderen";
+
+/* Location: SignalMapperCoverageView.swift - Confirmation alert title before deleting captured cells */
+"tools.signalMapper.delete.title" = "Vastgelegde dekking verwijderen?";
+
+/* Location: SignalMapperCoverageView.swift - Confirmation alert body before deleting captured cells */
+"tools.signalMapper.delete.message" = "Verwijdert elke zeshoek en elke waarneming die op dit apparaat is vastgelegd, inclusief de rijen die je zou kunnen exporteren. Dit kan niet ongedaan worden gemaakt.";
+
+/* Location: SignalMapperLegend.swift - Legend title */
+"tools.signalMapper.legend.title" = "Legenda";
+
+/* Location: SignalMapperLegend.swift - Legend note explaining hexagon opacity */
+"tools.signalMapper.legend.density" = "Vollere zeshoeken zijn vaker waargenomen dan bleke.";
+
+/* Location: SignalMapperLegend.swift - Legend note explaining hexagon color */
+"tools.signalMapper.legend.signal" = "De kleur is het gemiddelde signaal waarmee het mesh die zeshoek bereikte.";
+
+/* Location: SignalQuality+Color.swift - Signal quality below the poor threshold */
+"tools.signalMapper.quality.veryPoor" = "Zeer slecht";
+
+/* Location: SignalMapperCellDetailSheet.swift - Shown for a cell proved only by delivery receipts */
+"tools.signalMapper.detail.noPacketsHeard" = "Geen pakketten gehoord";
+
+/* Location: SignalMapperCellDetailSheet.swift - Accessibility label marking a repeater name as a best guess */
+"tools.signalMapper.detail.ambiguousName" = "Meer dan één node past bij deze hash";
+
+// MARK: - Signal Mapper Survey (M3)
+
+"tools.signalMapper.survey.start" = "Meting starten";
+"tools.signalMapper.survey.stop" = "Meting beëindigen";
+"tools.signalMapper.survey.spotCheck" = "Puntmeting";
+"tools.signalMapper.survey.hud" = "Meting bezig · %1$lld probes · %2$lld antwoorden";
+"tools.signalMapper.survey.summary.title" = "Meting voltooid";
+"tools.signalMapper.survey.summary.probes" = "Verzonden meetcycli";
+"tools.signalMapper.survey.summary.replies" = "Gehoorde antwoorden";
+"tools.signalMapper.survey.summary.noReply" = "Probes zonder antwoord";
+"tools.signalMapper.survey.summary.localNote" = "Meetresultaten blijven alleen op dit apparaat.";
+
+/* Location: SignalMapperRideHUD.swift - Banner while the BLE link to the radio is down mid-ride */
+"tools.signalMapper.ride.radioDisconnected" = "Radio losgekoppeld — positie wordt nog steeds vastgelegd";
+
+/* Location: SignalMapperRideHUD.swift - Button opening the lock-on repeater picker */
+"tools.signalMapper.ride.lockOn" = "Repeaters vergrendelen";
+
+/* Location: SignalMapperRideHUD.swift - Seconds since a focus repeater was last heard; %lld seconds */
+"tools.signalMapper.ride.age" = "%llds";
+
+/* Location: SignalMapperRideHUD.swift - Expanded HUD row: probes sent · replies · lost */
+"tools.signalMapper.ride.probes" = "Probes · antwoorden · verloren";
+
+/* Location: SignalMapperRideHUD.swift - Expanded HUD row: hexagons probed this run */
+"tools.signalMapper.ride.cells" = "Gemeten zeshoeken";
+
+/* Location: SignalMapperRideHUD.swift - Expanded HUD row: samples skipped for lack of a GPS fix (loud when Precise Location is off) */
+"tools.signalMapper.ride.noFixDrops" = "Overgeslagen: geen bruikbare locatiebepaling";
+
+/* Location: SignalMapperRideHUD.swift - Expanded HUD row: farthest reply distance for a focus repeater; %@ is its name */
+"tools.signalMapper.ride.maxRange" = "Max. bereik · %@";
+
+/* Location: SignalMapperFocusPickerView.swift - Empty state when no repeater with a known key exists */
+"tools.signalMapper.focus.empty" = "Nog geen repeaters met bekende sleutels. Rijd een stukje — ontdekkingsantwoorden vinden ze vanzelf.";
+
+/* Location: SignalMapperFocusPickerView.swift - Footer; %lld is the selection cap */
+"tools.signalMapper.focus.footer" = "Kies maximaal %lld repeaters om live te volgen. Al het andere wordt op de achtergrond gewoon vastgelegd.";
+
+/* Location: SignalMapperFocusPickerView.swift - Confirm button applying the lock-on selection */
+"tools.signalMapper.focus.apply" = "Vergrendelen";
+
+/* Location: SignalMapperCoverageView.swift - Alert title when Precise Location is off before a ride */
+"tools.signalMapper.precise.title" = "Precieze locatie staat uit";
+
+/* Location: SignalMapperCoverageView.swift - Alert body explaining why the ride would record nothing */
+"tools.signalMapper.precise.message" = "Zonder precieze locatie zakt elk monster voor de nauwkeurigheidscontrole en legt de rit niets vast. Sta precieze locatie toe voor deze sessie, of zet het aan bij Instellingen → Privacy → Locatievoorzieningen.";
+
+/* Location: SignalMapperCoverageView.swift - Alert button requesting temporary full accuracy */
+"tools.signalMapper.precise.enable" = "Precieze locatie toestaan";
+
+/* Location: SignalMapperCoverageView.swift - Alert button starting the ride regardless */
+"tools.signalMapper.precise.startAnyway" = "Toch starten";
+
+/* Location: SignalMapperCoverageView.swift - Map layer picker title */
+"tools.signalMapper.layer.title" = "Kaartlaag";
+
+/* Location: SignalMapperCoverageView.swift - Layer showing what the phone heard (downlink) */
+"tools.signalMapper.layer.heard" = "Ik hoor ze";
+
+/* Location: SignalMapperCoverageView.swift - Layer showing what hears the phone (uplink) */
+"tools.signalMapper.layer.reach" = "Zij horen mij";
+
+/* Location: SignalMapperLegend.swift - Legend caption for the Reach layer's color scale */
+"tools.signalMapper.legend.reachSignal" = "De kleur geeft aan hoe goed repeaters je uitzendingen vanuit die zeshoek hoorden.";
+
+/* Location: SignalMapperLegend.swift - Legend row for probed-but-never-heard cells */
+"tools.signalMapper.legend.noReach" = "gemeten, niemand hoorde";
+
+/* Location: SignalMapperSessionSummarySheet.swift - Row: how long the run lasted */
+"tools.signalMapper.survey.summary.duration" = "Duur";
+
+/* Location: SignalMapperSessionSummarySheet.swift - Button generating the shareable ride log */
+"tools.signalMapper.survey.summary.export" = "Ritlogboek exporteren";
+
+/* Location: SignalMapperSessionSummarySheet.swift - Share button once the export file is ready */
+"tools.signalMapper.survey.summary.share" = "Ritlogboek delen";
+
+/* Location: SignalMapperSessionSummarySheet.swift - Caption under the export button explaining the scrubbing */
+"tools.signalMapper.survey.summary.exportNote" = "Gedeelde bestanden worden opgeschoond: posities vergrofd, de eerste en laatste 500 m weggelaten, repeatersleutels ingekort. Het volledige logboek blijft op dit apparaat.";
+
+/* Location: SignalMapperCellDetailSheet.swift - Value when probes went out and nothing ever answered */
+"tools.signalMapper.detail.neverHeardBack" = "Nooit iets teruggehoord";
+
+/* Location: SignalMapperLiveStrip.swift - Accessibility hint on the live strip (opens run details) */
+"tools.signalMapper.strip.detailHint" = "Toont de details van de meting";
+
+/* Location: SignalMapperLiveStrip.swift - Warning chip while GPS fixes are being rejected */
+"tools.signalMapper.strip.noFix" = "Geen locatie";
+
+/* Location: SignalMapperLiveStrip.swift - Warning chip while GPS fixes exist but are too poor to place observations */
+"tools.signalMapper.strip.fixRejected" = "Locaties verworpen";
+
+/* Location: SignalMapperLiveStrip.swift - Spoken explanation of the fix-rejected chip */
+"tools.signalMapper.strip.fixRejectedHint" = "De gps-nauwkeurigheid is te laag om te plaatsen wat de radio hoort";
+
+/* Location: SignalMapperLiveStrip.swift - Spoken value of the adaptive-power chip; %@ is the step label */
+"tools.signalMapper.strip.power" = "Zendvermogen %@.";
+
+/* Location: SignalMapperLiveStrip.swift - Accessibility summary; %1$@ elapsed, %2$lld probes, %3$lld replies, %4$lld lost, %5$lld hexagons */
+"tools.signalMapper.strip.accessibility" = "Meting loopt al %1$@. %2$lld probes, %3$lld antwoorden, %4$lld verloren, %5$lld zeshoeken.";
+
+/* Location: SignalMapperCoverageView.swift - Disabled start button while no radio is connected */
+"tools.signalMapper.survey.connectToStart" = "Verbinden om te starten";
+
+/* Location: SignalMapperRunDetailSheet.swift - Sheet title */
+"tools.signalMapper.ride.detailTitle" = "Details van de meting";
+
+/* Location: SignalMapperRunDetailSheet.swift - Raw ride-log rows recorded so far */
+"tools.signalMapper.ride.rawSamples" = "Ruwe meetpunten";
+
+/* Location: SignalMapperRunDetailSheet.swift - Max-range value before any reply arrived */
+"tools.signalMapper.ride.noReplyYet" = "Nog geen antwoord";
+
+/* Location: SignalMapperRunDetailSheet.swift - Section header over per-repeater max reply distances */
+"tools.signalMapper.ride.maxRangeHeader" = "Verste antwoord";
+
+/* Location: SignalMapperFocusPickerView.swift - Start the run with no lock-on selection */
+"tools.signalMapper.focus.startWithout" = "Starten zonder vergrendeling";
+
+/* Location: SignalMapperFocusBlocks.swift - Link state: replies flowing both ways */
+"tools.signalMapper.focus.stateHeard" = "In beide richtingen gehoord";
+
+/* Location: SignalMapperFocusBlocks.swift - Link state: we hear them, they are not answering */
+"tools.signalMapper.focus.stateDownlinkOnly" = "Alleen ontvangst";
+
+/* Location: SignalMapperFocusBlocks.swift - Link state: probes going unanswered */
+"tools.signalMapper.focus.stateLost" = "Buiten bereik";
+
+/* Location: SignalMapperFocusBlocks.swift - Link state: nothing heard recently */
+"tools.signalMapper.focus.stateUnknown" = "Nog geen signaal";
+
+/* Location: SignalMapperFocusBlocks.swift - Accessibility fragment; %lld is the uplink SNR in dB */
+"tools.signalMapper.focus.uplinkAccessibility" = "ze horen je op %lld decibel";
+
+/* Location: SignalMapperLiveStrip.swift - Live counts; %1$lld probes, %2$lld replies, %3$lld lost */
+"tools.signalMapper.strip.counts" = "%1$lld probes · %2$lld antwoorden · %3$lld verloren";
+
+/* Location: SignalMapperFocusBlocks.swift - Caption over the automatic repeater blocks when nothing is locked on */
+"tools.signalMapper.ride.hearingNow" = "Nu te horen";
+
+/* Location: SignalMapperFocusBlocks.swift - Empty auto row before any repeater has replied */
+"tools.signalMapper.ride.listening" = "Luisteren naar repeaters…";
+
+/* Location: SignalMapperFocusPickerView.swift - Section: repeaters that answered during this survey */
+"tools.signalMapper.focus.sectionHeard" = "Gehoord in deze meting";
+
+/* Location: SignalMapperFocusPickerView.swift - Section: repeaters with known positions, nearest first */
+"tools.signalMapper.focus.sectionNearby" = "In de buurt";
+
+/* Location: SignalMapperFocusPickerView.swift - Section: everything else */
+"tools.signalMapper.focus.sectionOther" = "Overige repeaters";
+
+/* Location: SignalMapperFocusPickerView.swift - Search field placeholder */
+"tools.signalMapper.focus.search" = "Repeaters zoeken";
+
+/* Location: SignalMapperCellCard.swift - Header when the card follows the rider's current hexagon */
+"tools.signalMapper.card.myCell" = "Mijn cel";
+
+/* Location: SignalMapperCellCard.swift - VoiceOver; %lld is decibels we hear them at */
+"tools.signalMapper.card.downlinkAccessibility" = "je hoort ze op %lld decibel";
+
+/* Location: SignalMapperFocusBlocks.swift - Caption above the locked-on rows */
+"tools.signalMapper.ride.lockedOn" = "Vergrendeld";
+
+/* Location: SignalMapperCellCard.swift - Header when probes from this hexagon were never answered */
+"tools.signalMapper.card.noResponse" = "Geen antwoord";
+
+/* Location: SignalMapperCellCard.swift - Subtitle of the no-response header */
+"tools.signalMapper.card.noResponseDetail" = "Probe verzonden, geen antwoord";
+
+/* Location: SignalMapperFocusBlocks.swift - Removes one repeater from the lock-on set */
+"tools.signalMapper.focus.unlock" = "Ontgrendelen";
+
+/* Location: SignalMapperTransmitSheet.swift - Title of the manual transmission sheet */
+"tools.signalMapper.transmit.title" = "Zenden";
+
+/* Location: SignalMapperTransmitSheet.swift - Section header for directed probes */
+"tools.signalMapper.transmit.probesHeader" = "Probes";
+
+/* Location: SignalMapperTransmitSheet.swift - Sends one zero-hop discover broadcast */
+"tools.signalMapper.transmit.discover" = "Ontdekking verzenden";
+
+/* Location: SignalMapperTransmitSheet.swift - Sends one directed trace */
+"tools.signalMapper.transmit.trace" = "Trace verzenden";
+
+/* Location: SignalMapperTransmitSheet.swift - Picker label for the trace destination */
+"tools.signalMapper.transmit.traceTarget" = "Repeater";
+
+/* Location: SignalMapperTransmitSheet.swift - Footer explaining what the probes do */
+"tools.signalMapper.transmit.probesFooter" = "Een ontdekking vraagt elke repeater binnen direct bereik om te antwoorden. Een trace gaat naar één repeater en komt terug. Geen van beide wordt verder doorgestuurd, dus ze komen niet bij de radio van iemand anders terecht.";
+
+/* Location: SignalMapperTransmitSheet.swift - Footer when no survey is running */
+"tools.signalMapper.transmit.needsSurvey" = "Start eerst een meting. Antwoorden worden vastgelegd bij de zeshoek van waaruit je zendt, en zonder lopende rit is er niets om ze in vast te leggen.";
+
+/* Location: SignalMapperTransmitSheet.swift - Section header for the flood test */
+"tools.signalMapper.transmit.floodHeader" = "Flood-test";
+
+/* Location: SignalMapperTransmitSheet.swift - Sends a real relayed message */
+"tools.signalMapper.transmit.flood" = "Flood-bericht verzenden";
+
+/* Location: SignalMapperTransmitSheet.swift - Picker label for the flood channel */
+"tools.signalMapper.transmit.channel" = "Kanaal";
+
+/* Location: SignalMapperTransmitSheet.swift - Creates a private channel for flood tests */
+"tools.signalMapper.transmit.createChannel" = "Meetkanaal aanmaken";
+
+/* Location: SignalMapperTransmitSheet.swift - Name given to the created survey channel */
+"tools.signalMapper.transmit.channelName" = "Meting";
+
+/* Location: SignalMapperTransmitSheet.swift - Body of the flood test message */
+"tools.signalMapper.transmit.floodText" = "signaalmeting";
+
+/* Location: SignalMapperTransmitSheet.swift - Footer explaining the flood test */
+"tools.signalMapper.transmit.floodFooter" = "Dit bericht wordt wél door het hele mesh doorgegeven — dat is juist de bedoeling: repeaters die je eigen pakket opnieuw uitzenden zijn het enige bewijs dat je signaal eruit kwam. Het gaat over een privékanaal, dus het reist mee zonder dat iemand het kan lezen. De automatische meting floodt nooit.";
+
+/* Location: SignalMapperTransmitSheet.swift - A transmission went out */
+"tools.signalMapper.transmit.sent" = "Verzonden";
+
+/* Location: SignalMapperTransmitSheet.swift - A transmission was refused (no fix, no budget, no radio) */
+"tools.signalMapper.transmit.refused" = "Niet verzonden — geen bruikbare locatiebepaling, geen zendbudget meer of geen radio";
+
+/* Location: SignalMapperTransmitBar.swift - Compact button on the ride HUD */
+"tools.signalMapper.transmit.discoverShort" = "Ontdekking";
+
+/* Location: SignalMapperTransmitBar.swift - Compact button on the ride HUD */
+"tools.signalMapper.transmit.traceShort" = "Trace";
+
+/* Location: SignalMapperTransmitBar.swift - Compact button on the ride HUD */
+"tools.signalMapper.transmit.floodShort" = "Flood";
+
+/* Location: SignalMapperCellCard.swift - Packets heard in this hexagon; %lld is the count */
+"tools.signalMapper.card.heardCount" = "%lld gehoord";
+/* Location: SignalMapperCellCard.swift - Uplink readings repeaters reported for you here; %lld is the count */
+"tools.signalMapper.card.readingsOfYou" = "%lld metingen van jou";
+/* Location: SignalMapperCellCard.swift - Age of the most recent evidence; %@ is a duration */
+"tools.signalMapper.card.lastHeardAgo" = "%@ geleden";
+/* Location: SignalMapperCellCard.swift - Downlink readings for one repeater; %1$@ latest, %2$@ best, %3$@ average */
+"tools.signalMapper.card.rxLine" = "%1$@ nu · %2$@ beste · %3$@ gem";
+/* Location: SignalMapperCellCard.swift - Uplink readings one repeater reported; %1$@ latest, %2$@ best, %3$@ average */
+"tools.signalMapper.card.txLine" = "hoort je %1$@ nu · %2$@ beste · %3$@ gem";
+/* Location: SignalMapperCellCard.swift - A repeater reported the SNR it received you at; %@ is decibels */
+"tools.signalMapper.card.hearsYou" = "hoort je op %@ dB";
+/* Location: SignalMapperCellCard.swift - A repeater echoed your packet, proving it heard you without a number */
+"tools.signalMapper.card.heardYou" = "hoorde je";
+/* Location: SignalMapperCellCard.swift - Card scope limited to the open ride */
+"tools.signalMapper.card.thisRide" = "Deze rit";
+/* Location: SignalMapperCellCard.swift - Card scope covering everything recorded */
+"tools.signalMapper.card.allTime" = "Altijd";
+/* Location: SignalMapperCellCard.swift - Shown when the ride has heard nothing in this hexagon */
+"tools.signalMapper.card.nothingThisRide" = "Niets gehoord hier tijdens deze rit";
+
+/* Location: SignalMapperCellCard.swift - Repeater listed from a reply or an echo that our radio has never measured */
+"tools.signalMapper.card.noDirectReading" = "hier niet rechtstreeks gehoord";
+
+/* Location: SignalMapperCellCard.swift - Shown when the ride has captured nothing anywhere yet */
+"tools.signalMapper.card.nothingYet" = "Nog niets vastgelegd tijdens deze rit";
+
+/* Location: SignalMapperCellCard.swift - Shown when GPS quality is refusing to place anything */
+"tools.signalMapper.card.fixesRejected" = "Gps te onnauwkeurig om hier iets te plaatsen";
+/* Location: SignalMapperCellCard.swift - Shown when there is no GPS fix at all yet */
+"tools.signalMapper.card.noFixYet" = "Nog geen gps-positie, dus er kan niets worden geplaatst";
+/* Location: SignalMapperCellCard.swift - Shown when packets were heard here but none credit a repeater; %lld packets heard */
+"tools.signalMapper.card.noneAttributable" = "%lld gehoord, geen enkele van een repeater die we kunnen benoemen";
+/* Location: SignalMapperCellCard.swift - Accessibility hint for a repeater row */
+"tools.signalMapper.card.rowHint" = "Opent elke waarneming van deze repeater in deze zeshoek";
+/* Location: SignalMapperCellCard.swift - Accessibility label on the chevron that grows the repeater list */
+"tools.signalMapper.card.expand" = "Meer repeaters tonen";
+/* Location: SignalMapperCellCard.swift - Accessibility label on the chevron that returns the repeater list to three rows */
+"tools.signalMapper.card.collapse" = "Minder repeaters tonen";
+/* Location: SignalMapperCellCard.swift - Accessibility label on the header readout for the strongest link in this hexagon */
+"tools.signalMapper.card.bestLink" = "Beste verbinding hier";
+/* Location: SignalMapperCoverageView.swift - Legend totals for the whole map; %1$lld hexagons, %2$lld observations */
+"tools.signalMapper.legend.allTime" = "Altijd · %1$lld zeshoeken · %2$lld waarnemingen";
+/* Location: SignalMapperCoverageView.swift - Legend totals for the open ride; %1$lld hexagons, %2$lld observations */
+"tools.signalMapper.legend.thisRide" = "Deze rit · %1$lld zeshoeken · %2$lld waarnemingen";
+/* Location: SignalMapperLegend.swift - Legend row for cells where repeaters echoed you but reported no number */
+"tools.signalMapper.legend.heardYou" = "hoorde je, zonder waarde";
+/* Location: SignalMapperRepeaterDetailView.swift - Repeater subtitle; %1$lld packets heard directly, %2$@ the first date */
+"tools.signalMapper.detail.inThisHexagon" = "In deze zeshoek · %1$lld direct gehoord · sinds %2$@";
+/* Location: SignalMapperRepeaterDetailView.swift - Chart key for the downlink series */
+"tools.signalMapper.detail.youHearIt" = "↓ jij hoort hem";
+/* Location: SignalMapperRepeaterDetailView.swift - Chart key for the uplink series */
+"tools.signalMapper.detail.itHearsYou" = "↑ hij hoort jou";
+/* Location: SignalMapperRepeaterDetailView.swift - Section header above the raw rows */
+"tools.signalMapper.detail.observationsHere" = "Waarnemingen hier";
+/* Location: SignalMapperRepeaterDetailView.swift - Total row count when the list is capped; %lld is the total */
+"tools.signalMapper.detail.allRows" = "Alle %lld …";
+/* Location: SignalMapperRepeaterDetailView.swift - How many hops a packet had taken; %lld is the count */
+"tools.signalMapper.detail.hops" = "%lld sprongen";
+/* Location: SignalMapperRepeaterDetailView.swift - Row kind: a received advert */
+"tools.signalMapper.detail.kind.advert" = "advert";
+/* Location: SignalMapperRepeaterDetailView.swift - Row kind: a flood-routed packet */
+"tools.signalMapper.detail.kind.flood" = "flood";
+/* Location: SignalMapperRepeaterDetailView.swift - Row kind: a direct-routed packet */
+"tools.signalMapper.detail.kind.direct" = "direct";
+/* Location: SignalMapperRepeaterDetailView.swift - Row kind: a received packet of unknown route */
+"tools.signalMapper.detail.kind.heard" = "gehoord";
+/* Location: SignalMapperRepeaterDetailView.swift - Row kind: one of your own packets heard being rebroadcast */
+"tools.signalMapper.detail.kind.echo" = "echo van je bericht";
+/* Location: SignalMapperRepeaterDetailView.swift - Row kind: a reply to a trace probe */
+"tools.signalMapper.detail.kind.traceReply" = "trace-antwoord";
+/* Location: SignalMapperRepeaterDetailView.swift - Row kind: a reply to a discover probe */
+"tools.signalMapper.detail.kind.discoverReply" = "discover-antwoord";
+/* Location: SignalMapperRepeaterDetailView.swift - Row kind: a probe this radio transmitted */
+"tools.signalMapper.detail.kind.probeSent" = "probe verzonden";
+/* Location: SignalMapperRepeaterDetailView.swift - Row kind: a probe nothing answered */
+"tools.signalMapper.detail.kind.probeLost" = "geen antwoord";
+/* Location: SignalMapperRepeaterDetailView.swift - Row kind: one of your own transmissions */
+"tools.signalMapper.detail.kind.sent" = "jij verzond";
+/* Location: SignalMapperRepeaterDetailView.swift - Row kind: a message confirmed delivered */
+"tools.signalMapper.detail.kind.delivered" = "afgeleverd";
+/* Location: SignalMapperRepeaterDetailView.swift - Row kind: an observer's sighting of one of your packets */
+"tools.signalMapper.detail.kind.observer" = "waarnemer hoorde je";
+/* Location: SignalMapperDataView.swift - Row kind: a repeater answered a probe (trace or discover) */
+"tools.signalMapper.detail.kind.probeReply" = "sondeantwoord";
+/* Location: SignalMapperDataView.swift - Row kind: a periodic position marker */
+"tools.signalMapper.detail.kind.breadcrumb" = "spoorpunt";
+/* Location: SignalMapperDataView.swift - Row kind: the link to the radio went down or came back */
+"tools.signalMapper.detail.kind.radioLink" = "radioverbinding";
+/* Location: SignalMapperSessionSummarySheet.swift - Hexagons the ride recorded rows in */
+"tools.signalMapper.survey.summary.hexagons" = "Aangedane zeshoeken";
+/* Location: SignalMapperSessionSummarySheet.swift - Distinct repeaters heard directly on the ride */
+"tools.signalMapper.survey.summary.repeatersHeard" = "Direct gehoorde repeaters";

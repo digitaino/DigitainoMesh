@@ -1,0 +1,62 @@
+/*
+  WhatsNew.strings
+  MC1
+
+  Strings for the "What's New" sheet shown once after a major update.
+  Update these every major release: edit the per-feature title/description
+  pairs (add or remove a block) and keep WhatsNewCatalog.swift in sync.
+*/
+
+/* Title of the What's New sheet shown once after an app update */
+"whatsNew.title" = "Що нового";
+
+/* Button to dismiss the What's New sheet */
+"whatsNew.continueButton" = "Продовжити";
+
+/* Link on the What's New sheet to the full GitHub release notes */
+"whatsNew.fullReleaseNotes" = "Переглянути всі нові зміни";
+
+/* What's New v1.5 - Path Details feature, title */
+"whatsNew.pathDetails.title" = "Усі шляхи повідомлення";
+/* What's New v1.5 - Path Details feature, description */
+"whatsNew.pathDetails.description" = "«Переглянути шлях» тепер показує кожен шлях, яким до вас дійшло повідомлення. Якщо воно надійшло кілька разів, вкладки над картою перемикають шляхи.";
+
+/* What's New v1.5 - Tap a reaction to see who added it, title */
+"whatsNew.whoReacted.title" = "Хто відреагував";
+/* What's New v1.5 - Tap a reaction to see who added it, description */
+"whatsNew.whoReacted.description" = "Натисніть реакцію на повідомленні, щоб побачити, хто її додав, замість того щоб надіслати реакцію.";
+
+/* What's New v1.5 - Faster chat loading, title */
+"whatsNew.fasterChatLoading.title" = "Швидше завантаження чатів";
+/* What's New v1.5 - Faster chat loading, description */
+"whatsNew.fasterChatLoading.description" = "Відкриття чату тепер до 90%% швидше.";
+
+/* What's New v1.5 (fork) - one node on several radios, title */
+"whatsNew.radioSwap.title" = "Змінюйте радіо, зберігаючи все";
+
+/* What's New v1.5 (fork) - one node on several radios, description */
+"whatsNew.radioSwap.description" = "Використовуйте свій вузол на кількох радіо. Виберіть радіо у списку, і чати, контакти та канали перейдуть разом з вами; першого разу один дотик копіює канали й налаштування.";
+
+/* What's New v1.5 (fork) - weather radar loops, title */
+"whatsNew.radarLoops.title" = "Радар у русі";
+
+/* What's New v1.5 (fork) - weather radar loops, description */
+"whatsNew.radarLoops.description" = "У розділі «Погода» запросіть радар за останню годину й відтворіть його по колу.";
+
+/* What's New v1.5 (fork) - reactions as tapbacks and who reacted, title */
+"whatsNew.reactions.title" = "Реакції знову доходять";
+
+/* What's New v1.5 (fork) - reactions as tapbacks and who reacted, description */
+"whatsNew.reactions.description" = "Ваші реакції знову показуються як tapback в актуальних застосунках MeshCore One. Торкніться реакції, щоб побачити, хто її додав.";
+
+/* What's New - heading of the credit to the app this fork is built on */
+"whatsNew.credit.title" = "Створено на основі MeshCore One";
+
+/* What's New - credit to Avi0n, who wrote MeshCore One */
+"whatsNew.credit.body" = "DigitainoMesh — неофіційний форк MeshCore One, який поширюється через TestFlight серед невеликої групи. Застосунок — робота Avi0n; цей форк лише додає кілька експериментів. Якщо він вам корисний, підтримайте Avi0n.";
+
+/* What's New - link to MeshCore One's own release notes for this version */
+"whatsNew.credit.upstreamNotes" = "Що нового в MeshCore One 1.5";
+
+/* What's New - button opening Avi0n's GitHub Sponsors page */
+"whatsNew.supportButton" = "Підтримати Avi0n";

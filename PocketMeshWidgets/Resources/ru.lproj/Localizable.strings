@@ -1,6 +1,0 @@
-/* Widget localization — Russian */
-
-"Disconnected" = "Отключено";
-"Disconnected %@ ago" = "Отключено %@ назад";
-"%lld packets per minute" = "%lld пакетов в минуту";
-"Battery %lld percent" = "Батарея %lld процентов";

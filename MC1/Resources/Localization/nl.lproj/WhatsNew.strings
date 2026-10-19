@@ -1,0 +1,62 @@
+/*
+  WhatsNew.strings
+  MC1
+
+  Strings for the "What's New" sheet shown once after a major update.
+  Update these every major release: edit the per-feature title/description
+  pairs (add or remove a block) and keep WhatsNewCatalog.swift in sync.
+*/
+
+/* Title of the What's New sheet shown once after an app update */
+"whatsNew.title" = "Nieuw";
+
+/* Button to dismiss the What's New sheet */
+"whatsNew.continueButton" = "Doorgaan";
+
+/* Link on the What's New sheet to the full GitHub release notes */
+"whatsNew.fullReleaseNotes" = "Bekijk alle nieuwe wijzigingen";
+
+/* What's New v1.5 - Path Details feature, title */
+"whatsNew.pathDetails.title" = "Elk pad van een bericht";
+/* What's New v1.5 - Path Details feature, description */
+"whatsNew.pathDetails.description" = "Pad bekijken toont nu elke route waarlangs een bericht je bereikte. Kwam het meer dan eens binnen, dan wissel je met de tabs boven de kaart tussen de paden.";
+
+/* What's New v1.5 - Tap a reaction to see who added it, title */
+"whatsNew.whoReacted.title" = "Wie heeft gereageerd";
+/* What's New v1.5 - Tap a reaction to see who added it, description */
+"whatsNew.whoReacted.description" = "Tik op een reactie bij een bericht om te zien wie die heeft toegevoegd, in plaats van de reactie te verzenden.";
+
+/* What's New v1.5 - Faster chat loading, title */
+"whatsNew.fasterChatLoading.title" = "Sneller laden van chats";
+/* What's New v1.5 - Faster chat loading, description */
+"whatsNew.fasterChatLoading.description" = "Een chat openen is tot 90%% sneller.";
+
+/* What's New v1.5 (fork) - one node on several radios, title */
+"whatsNew.radioSwap.title" = "Wissel van radio, houd alles";
+
+/* What's New v1.5 (fork) - one node on several radios, description */
+"whatsNew.radioSwap.description" = "Gebruik je node op meer dan één radio. Kies er een in de radiolijst en je chats, contacten en kanalen gaan mee; de eerste keer kopieert één tik je kanalen en instellingen.";
+
+/* What's New v1.5 (fork) - weather radar loops, title */
+"whatsNew.radarLoops.title" = "Radarlussen";
+
+/* What's New v1.5 (fork) - weather radar loops, description */
+"whatsNew.radarLoops.description" = "Vraag in Weer het laatste uur radar op en speel het af als lus.";
+
+/* What's New v1.5 (fork) - reactions as tapbacks and who reacted, title */
+"whatsNew.reactions.title" = "Reacties die aankomen";
+
+/* What's New v1.5 (fork) - reactions as tapbacks and who reacted, description */
+"whatsNew.reactions.description" = "Je reacties verschijnen weer als tapbacks in actuele MeshCore One-apps. Tik op een reactie om te zien wie hem toevoegde.";
+
+/* What's New - heading of the credit to the app this fork is built on */
+"whatsNew.credit.title" = "Gebouwd op MeshCore One";
+
+/* What's New - credit to Avi0n, who wrote MeshCore One */
+"whatsNew.credit.body" = "DigitainoMesh is een onofficiële fork van MeshCore One, via TestFlight gedeeld met een kleine groep. De app is het werk van Avi0n; deze fork voegt alleen wat experimenten toe. Heb je er iets aan, steun dan Avi0n.";
+
+/* What's New - link to MeshCore One's own release notes for this version */
+"whatsNew.credit.upstreamNotes" = "Nieuw in MeshCore One 1.5";
+
+/* What's New - button opening Avi0n's GitHub Sponsors page */
+"whatsNew.supportButton" = "Steun Avi0n";

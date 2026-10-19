@@ -1,0 +1,1367 @@
+[
+  {
+    "name": "severe_thunderstorm_warning_polygon",
+    "hex": "117a4c1003232a00c913c70183043c0630a804a80cf15a0068011affd2001affa6ffc4ffa2febe0042ff02aad10001aac50101",
+    "decoded": {
+      "seq": 17,
+      "bot": 19578,
+      "type": 1,
+      "name": "warning",
+      "flags": 0,
+      "event": 3,
+      "office": 35,
+      "etn": 42,
+      "expires_min": 29823945,
+      "tornado": 2,
+      "flood_source": 0,
+      "flood_damage": 0,
+      "hail_qin": 4,
+      "wind_mph": 60,
+      "update": false,
+      "source": 0,
+      "polygon": [
+        [
+          30.52,
+          -97.98
+        ],
+        [
+          30.61,
+          -97.62
+        ],
+        [
+          30.38,
+          -97.41
+        ],
+        [
+          30.15,
+          -97.5
+        ],
+        [
+          30.09,
+          -97.85
+        ],
+        [
+          30.28,
+          -98.04
+        ]
+      ],
+      "areas": [
+        {
+          "state": 42,
+          "county": true,
+          "start": 209,
+          "run": 1
+        },
+        {
+          "state": 42,
+          "county": true,
+          "start": 453,
+          "run": 1
+        }
+      ],
+      "issued_min": null,
+      "begins_min": null
+    },
+    "note": "SV.W.EWX.42 over Travis and Hays counties; expires 01:45 UTC"
+  },
+  {
+    "name": "severe_thunderstorm_warning_issued",
+    "hex": "1c7a4c1203232a00c913c70183043c0630a804a80cf15a0068011affd2001affa6ffc4ffa2febe0042ff02aad10001aac501011500",
+    "decoded": {
+      "seq": 28,
+      "bot": 19578,
+      "type": 1,
+      "name": "warning",
+      "flags": 2,
+      "event": 3,
+      "office": 35,
+      "etn": 42,
+      "expires_min": 29823945,
+      "tornado": 2,
+      "flood_source": 0,
+      "flood_damage": 0,
+      "hail_qin": 4,
+      "wind_mph": 60,
+      "update": false,
+      "source": 0,
+      "polygon": [
+        [
+          30.52,
+          -97.98
+        ],
+        [
+          30.61,
+          -97.62
+        ],
+        [
+          30.38,
+          -97.41
+        ],
+        [
+          30.15,
+          -97.5
+        ],
+        [
+          30.09,
+          -97.85
+        ],
+        [
+          30.28,
+          -98.04
+        ]
+      ],
+      "areas": [
+        {
+          "state": 42,
+          "county": true,
+          "start": 209,
+          "run": 1
+        },
+        {
+          "state": 42,
+          "county": true,
+          "start": 453,
+          "run": 1
+        }
+      ],
+      "issued_min": 29823924,
+      "begins_min": null
+    },
+    "note": "SV.W.EWX.42 again, with the issue time (flags bit 1): 53 bytes, the two trailing bytes hold 21 = minutes between the issuance and the expiry"
+  },
+  {
+    "name": "severe_thunderstorm_warning_from_goes",
+    "hex": "1f7a4c1603232a00c913c70183043c0630a804a80cf15a0068011affd2001affa6ffc4ffa2febe0042ff02aad10001aac501011500",
+    "decoded": {
+      "seq": 31,
+      "bot": 19578,
+      "type": 1,
+      "name": "warning",
+      "flags": 6,
+      "event": 3,
+      "office": 35,
+      "etn": 42,
+      "expires_min": 29823945,
+      "tornado": 2,
+      "flood_source": 0,
+      "flood_damage": 0,
+      "hail_qin": 4,
+      "wind_mph": 60,
+      "update": false,
+      "source": 1,
+      "polygon": [
+        [
+          30.52,
+          -97.98
+        ],
+        [
+          30.61,
+          -97.62
+        ],
+        [
+          30.38,
+          -97.41
+        ],
+        [
+          30.15,
+          -97.5
+        ],
+        [
+          30.09,
+          -97.85
+        ],
+        [
+          30.28,
+          -98.04
+        ]
+      ],
+      "areas": [
+        {
+          "state": 42,
+          "county": true,
+          "start": 209,
+          "run": 1
+        },
+        {
+          "state": 42,
+          "county": true,
+          "start": 453,
+          "run": 1
+        }
+      ],
+      "issued_min": 29823924,
+      "begins_min": null
+    },
+    "note": "type byte 0x16: warning, flags 0x6 = issued (bit 1) + source 1 GOES (bits 2-3); otherwise byte for byte the issued vector"
+  },
+  {
+    "name": "warning_upcoming_watch",
+    "hex": "217a4c160a230800bc26c701010000022abf00042acd00022013400b",
+    "decoded": {
+      "seq": 33,
+      "bot": 19578,
+      "type": 1,
+      "name": "warning",
+      "flags": 6,
+      "event": 10,
+      "office": 35,
+      "etn": 8,
+      "expires_min": 29828796,
+      "tornado": 0,
+      "flood_source": 0,
+      "flood_damage": 0,
+      "hail_qin": 0,
+      "wind_mph": 0,
+      "update": false,
+      "source": 1,
+      "polygon": null,
+      "areas": [
+        {
+          "state": 42,
+          "county": false,
+          "start": 191,
+          "run": 4
+        },
+        {
+          "state": 42,
+          "county": false,
+          "start": 205,
+          "run": 2
+        }
+      ],
+      "issued_min": 29823900,
+      "begins_min": 29825916
+    },
+    "note": "FA.A.EWX.8, not in effect until 33 h 36 min after it was issued: after the issue time (4896 = issued_before) two more bytes, 2880 = minutes from the start to the expiry, found by length. Shown from Wednesday 19:00 until Friday 19:00, not as in effect now"
+  },
+  {
+    "name": "winter_storm_warning_zones",
+    "hex": "127a4c1018230700d417c701010000022abf00042ac80001",
+    "decoded": {
+      "seq": 18,
+      "bot": 19578,
+      "type": 1,
+      "name": "warning",
+      "flags": 0,
+      "event": 24,
+      "office": 35,
+      "etn": 7,
+      "expires_min": 29824980,
+      "tornado": 0,
+      "flood_source": 0,
+      "flood_damage": 0,
+      "hail_qin": 0,
+      "wind_mph": 0,
+      "update": false,
+      "source": 0,
+      "polygon": null,
+      "areas": [
+        {
+          "state": 42,
+          "county": false,
+          "start": 191,
+          "run": 4
+        },
+        {
+          "state": 42,
+          "county": false,
+          "start": 200,
+          "run": 1
+        }
+      ],
+      "issued_min": null,
+      "begins_min": null
+    },
+    "note": "WS.W.EWX.7, two runs: zones 191-194 and zone 200"
+  },
+  {
+    "name": "cancel_expired_early",
+    "hex": "137a4c2103232a00",
+    "decoded": {
+      "seq": 19,
+      "bot": 19578,
+      "type": 2,
+      "name": "cancel",
+      "flags": 1,
+      "event": 3,
+      "office": 35,
+      "etn": 42,
+      "reason": 1
+    }
+  },
+  {
+    "name": "digest_three_entries",
+    "hex": "147a4c309c13c701070303232a002d0018230700380403232b001400",
+    "decoded": {
+      "seq": 20,
+      "bot": 19578,
+      "type": 3,
+      "name": "digest",
+      "flags": 0,
+      "now_min": 29823900,
+      "feed_health": 7,
+      "entries": [
+        {
+          "event": 3,
+          "office": 35,
+          "etn": 42,
+          "expires_rel": 45,
+          "expires_min": 29823945
+        },
+        {
+          "event": 24,
+          "office": 35,
+          "etn": 7,
+          "expires_rel": 1080,
+          "expires_min": 29824980
+        },
+        {
+          "event": 3,
+          "office": 35,
+          "etn": 43,
+          "expires_rel": 20,
+          "expires_min": 29823920
+        }
+      ],
+      "source": 0
+    }
+  },
+  {
+    "name": "observations_three_stations",
+    "hex": "157a4c409513c70103ca005848730c150a5c3b075c0354460100000a5fff00d0038080daff00ffffff00",
+    "decoded": {
+      "seq": 21,
+      "bot": 19578,
+      "type": 4,
+      "name": "observations",
+      "flags": 0,
+      "ts_min": 29823893,
+      "stations": [
+        {
+          "station": 202,
+          "temp_f": 88,
+          "dewpoint_f": 72,
+          "wind_dir_deg": 157.5,
+          "wind_dir": "SSE",
+          "sky": 3,
+          "wind_mph": 12,
+          "gust_mph": 21,
+          "visibility_mi": 10,
+          "pressure_inhg": 29.92,
+          "humidity_pct": 59,
+          "feels_delta_f": 7,
+          "age_min": null
+        },
+        {
+          "station": 860,
+          "temp_f": 84,
+          "dewpoint_f": 70,
+          "wind_dir_deg": 0.0,
+          "wind_dir": "N",
+          "sky": 1,
+          "wind_mph": 0,
+          "gust_mph": 0,
+          "visibility_mi": 10,
+          "pressure_inhg": 29.95,
+          "humidity_pct": null,
+          "feels_delta_f": 0,
+          "age_min": null
+        },
+        {
+          "station": 976,
+          "temp_f": null,
+          "dewpoint_f": null,
+          "wind_dir_deg": 292.5,
+          "wind_dir": "WNW",
+          "sky": 10,
+          "wind_mph": null,
+          "gust_mph": 0,
+          "visibility_mi": null,
+          "pressure_inhg": null,
+          "humidity_pct": null,
+          "feels_delta_f": 0,
+          "age_min": null
+        }
+      ],
+      "source": 0
+    },
+    "note": "KGTU is calm, KHYI has only wind direction and sky"
+  },
+  {
+    "name": "observations_three_stations_ages",
+    "hex": "1d7a4c419513c70103ca005848730c150a5c3b075c0354460100000a5fff00d0038080daff00ffffff00200b",
+    "decoded": {
+      "seq": 29,
+      "bot": 19578,
+      "type": 4,
+      "name": "observations",
+      "flags": 1,
+      "ts_min": 29823893,
+      "stations": [
+        {
+          "station": 202,
+          "temp_f": 88,
+          "dewpoint_f": 72,
+          "wind_dir_deg": 157.5,
+          "wind_dir": "SSE",
+          "sky": 3,
+          "wind_mph": 12,
+          "gust_mph": 21,
+          "visibility_mi": 10,
+          "pressure_inhg": 29.92,
+          "humidity_pct": 59,
+          "feels_delta_f": 7,
+          "age_min": 0
+        },
+        {
+          "station": 860,
+          "temp_f": 84,
+          "dewpoint_f": 70,
+          "wind_dir_deg": 0.0,
+          "wind_dir": "N",
+          "sky": 1,
+          "wind_mph": 0,
+          "gust_mph": 0,
+          "visibility_mi": 10,
+          "pressure_inhg": 29.95,
+          "humidity_pct": null,
+          "feels_delta_f": 0,
+          "age_min": 20
+        },
+        {
+          "station": 976,
+          "temp_f": null,
+          "dewpoint_f": null,
+          "wind_dir_deg": 292.5,
+          "wind_dir": "WNW",
+          "sky": 10,
+          "wind_mph": null,
+          "gust_mph": 0,
+          "visibility_mi": null,
+          "pressure_inhg": null,
+          "humidity_pct": null,
+          "feels_delta_f": 0,
+          "age_min": 110
+        }
+      ],
+      "source": 0
+    },
+    "note": "with per-station ages (flags bit 0): 44 bytes, ages 0 / 20 / 110 minutes packed as nibbles 0, 2 and 11 in two trailing bytes (0x20, 0x0b)"
+  },
+  {
+    "name": "forecast_seven_periods",
+    "hex": "167a4c5066002413c70101077f491482715d7f2813827f481e13815a7f3c58947f451402e2567f0a01027f41ff0000",
+    "decoded": {
+      "seq": 22,
+      "bot": 19578,
+      "type": 5,
+      "name": "forecast",
+      "flags": 0,
+      "point": 102,
+      "issued_min": 29823780,
+      "first_period": 1,
+      "periods": [
+        {
+          "high_f": null,
+          "low_f": 73,
+          "pop_pct": 20,
+          "sky": 2,
+          "thunder": false,
+          "wintry": false,
+          "windy": false,
+          "fog": true,
+          "wind_dir_deg": 157.5,
+          "wind_dir": "SSE",
+          "wind_mph": 5
+        },
+        {
+          "high_f": 93,
+          "low_f": null,
+          "pop_pct": 40,
+          "sky": 3,
+          "thunder": true,
+          "wintry": false,
+          "windy": false,
+          "fog": false,
+          "wind_dir_deg": 180.0,
+          "wind_dir": "S",
+          "wind_mph": 10
+        },
+        {
+          "high_f": null,
+          "low_f": 72,
+          "pop_pct": 30,
+          "sky": 3,
+          "thunder": true,
+          "wintry": false,
+          "windy": false,
+          "fog": false,
+          "wind_dir_deg": 180.0,
+          "wind_dir": "S",
+          "wind_mph": 5
+        },
+        {
+          "high_f": 90,
+          "low_f": null,
+          "pop_pct": 60,
+          "sky": 8,
+          "thunder": true,
+          "wintry": false,
+          "windy": true,
+          "fog": false,
+          "wind_dir_deg": 202.5,
+          "wind_dir": "SSW",
+          "wind_mph": 20
+        },
+        {
+          "high_f": null,
+          "low_f": 69,
+          "pop_pct": 20,
+          "sky": 2,
+          "thunder": false,
+          "wintry": false,
+          "windy": false,
+          "fog": false,
+          "wind_dir_deg": 315.0,
+          "wind_dir": "NW",
+          "wind_mph": 10
+        },
+        {
+          "high_f": 86,
+          "low_f": null,
+          "pop_pct": 10,
+          "sky": 1,
+          "thunder": false,
+          "wintry": false,
+          "windy": false,
+          "fog": false,
+          "wind_dir_deg": 0.0,
+          "wind_dir": "N",
+          "wind_mph": 10
+        },
+        {
+          "high_f": null,
+          "low_f": 65,
+          "pop_pct": null,
+          "sky": 0,
+          "thunder": false,
+          "wintry": false,
+          "windy": false,
+          "fog": false,
+          "wind_dir_deg": 0.0,
+          "wind_dir": "N",
+          "wind_mph": 0
+        }
+      ],
+      "source": 0
+    },
+    "note": "point 102 = Austin Bergstrom-Travis TX; the reserved half-day form, odd first_period with alternating temperatures"
+  },
+  {
+    "name": "forecast_seven_days",
+    "hex": "1a7a4c5067006013c7010007664d000082644e000182634c1e1382624a0a0271624b000161634b0a02825f4a140372",
+    "decoded": {
+      "seq": 26,
+      "bot": 19578,
+      "type": 5,
+      "name": "forecast",
+      "flags": 0,
+      "point": 103,
+      "issued_min": 29823840,
+      "first_period": 0,
+      "periods": [
+        {
+          "high_f": 102,
+          "low_f": 77,
+          "pop_pct": 0,
+          "sky": 0,
+          "thunder": false,
+          "wintry": false,
+          "windy": false,
+          "fog": false,
+          "wind_dir_deg": 180.0,
+          "wind_dir": "S",
+          "wind_mph": 10
+        },
+        {
+          "high_f": 100,
+          "low_f": 78,
+          "pop_pct": 0,
+          "sky": 1,
+          "thunder": false,
+          "wintry": false,
+          "windy": false,
+          "fog": false,
+          "wind_dir_deg": 180.0,
+          "wind_dir": "S",
+          "wind_mph": 10
+        },
+        {
+          "high_f": 99,
+          "low_f": 76,
+          "pop_pct": 30,
+          "sky": 3,
+          "thunder": true,
+          "wintry": false,
+          "windy": false,
+          "fog": false,
+          "wind_dir_deg": 180.0,
+          "wind_dir": "S",
+          "wind_mph": 10
+        },
+        {
+          "high_f": 98,
+          "low_f": 74,
+          "pop_pct": 10,
+          "sky": 2,
+          "thunder": false,
+          "wintry": false,
+          "windy": false,
+          "fog": false,
+          "wind_dir_deg": 157.5,
+          "wind_dir": "SSE",
+          "wind_mph": 5
+        },
+        {
+          "high_f": 98,
+          "low_f": 75,
+          "pop_pct": 0,
+          "sky": 1,
+          "thunder": false,
+          "wintry": false,
+          "windy": false,
+          "fog": false,
+          "wind_dir_deg": 135.0,
+          "wind_dir": "SE",
+          "wind_mph": 5
+        },
+        {
+          "high_f": 99,
+          "low_f": 75,
+          "pop_pct": 10,
+          "sky": 2,
+          "thunder": false,
+          "wintry": false,
+          "windy": false,
+          "fog": false,
+          "wind_dir_deg": 180.0,
+          "wind_dir": "S",
+          "wind_mph": 10
+        },
+        {
+          "high_f": 95,
+          "low_f": 74,
+          "pop_pct": 20,
+          "sky": 3,
+          "thunder": false,
+          "wintry": false,
+          "windy": false,
+          "fog": false,
+          "wind_dir_deg": 157.5,
+          "wind_dir": "SSE",
+          "wind_mph": 10
+        }
+      ],
+      "source": 0
+    },
+    "note": "point 103 = Austin Camp Mabry-Travis TX; the daily form this bot sends"
+  },
+  {
+    "name": "coverage_wx_aus",
+    "hex": "1b7a4c80509e04e915f178000d0423283371052a9b00062aaa00062aba000c2acd00072add0005",
+    "decoded": {
+      "seq": 27,
+      "bot": 19578,
+      "type": 8,
+      "name": "coverage",
+      "flags": 0,
+      "lat": 30.2672,
+      "lon": -97.7431,
+      "radius_km": 120,
+      "stations": 13,
+      "offices": [
+        35,
+        40,
+        51,
+        113
+      ],
+      "areas": [
+        {
+          "state": 42,
+          "county": false,
+          "start": 155,
+          "run": 6
+        },
+        {
+          "state": 42,
+          "county": false,
+          "start": 170,
+          "run": 6
+        },
+        {
+          "state": 42,
+          "county": false,
+          "start": 186,
+          "run": 12
+        },
+        {
+          "state": 42,
+          "county": false,
+          "start": 205,
+          "run": 7
+        },
+        {
+          "state": 42,
+          "county": false,
+          "start": 221,
+          "run": 5
+        }
+      ],
+      "zones_cut": false,
+      "offices_cut": false
+    },
+    "note": "WX-AUS's coverage: 36 zones as 5 runs inside 120 km of Austin, offices EWX/FWD/HGX/SJT, neither list cut, a station cap of 13"
+  },
+  {
+    "name": "text_warning_narrative_chunk0",
+    "hex": "177a4c6000170002534556455245205448554e44455253544f524d205741524e494e4720464f52204e4f5254484541535445524e204841595320414e4420534f5554485745535445524e2054524156495320434f554e5449455320554e54494c2031343520414d204344542e204174203132353720414d206120736576657265207468756e64657273746f726d20776173206e656172204472697070696e6720537072696e",
+    "decoded": {
+      "seq": 23,
+      "bot": 19578,
+      "type": 6,
+      "name": "text",
+      "flags": 0,
+      "subject": 0,
+      "group": 23,
+      "idx": 0,
+      "total": 2,
+      "text": "SEVERE THUNDERSTORM WARNING FOR NORTHEASTERN HAYS AND SOUTHWESTERN TRAVIS COUNTIES UNTIL 145 AM CDT. At 1257 AM a severe thunderstorm was near Dripping Sprin",
+      "cut": false,
+      "source": 0
+    },
+    "note": "group 23, reassemble by (bot, group) in idx order. Chunk 0 is 165 bytes, the transport maximum: past what a bot sends, and a decoder must still read it"
+  },
+  {
+    "name": "text_warning_narrative_chunk1",
+    "hex": "187a4c600017010267732c206d6f76696e672065617374206174203430206d70682e2048415a4152443a203630206d706820677573747320616e6420717561727465722073697a65206861696c2e20534f555243453a20526164617220696e646963617465642e",
+    "decoded": {
+      "seq": 24,
+      "bot": 19578,
+      "type": 6,
+      "name": "text",
+      "flags": 0,
+      "subject": 0,
+      "group": 23,
+      "idx": 1,
+      "total": 2,
+      "text": "gs, moving east at 40 mph. HAZARD: 60 mph gusts and quarter size hail. SOURCE: Radar indicated.",
+      "cut": false,
+      "source": 0
+    },
+    "note": "group 23, reassemble by (bot, group) in idx order. Chunk 0 is 165 bytes, the transport maximum: past what a bot sends, and a decoder must still read it"
+  },
+  {
+    "name": "text_afd_cut_from_goes",
+    "hex": "1e7a4c65011e000853484f5254205445524d2e2049736f6c6174656420746f207363617474657265642073686f7765727320616e642073746f726d732077696c6c20646576656c6f7020616c6f6e672074686520736561627265657a6520746869732061667465726e6f6f6e20616e6420647269667420696e6c616e64207468726f75676820746865206576656e696e672e",
+    "decoded": {
+      "seq": 30,
+      "bot": 19578,
+      "type": 6,
+      "name": "text",
+      "flags": 5,
+      "subject": 1,
+      "group": 30,
+      "idx": 0,
+      "total": 8,
+      "text": "SHORT TERM. Isolated to scattered showers and storms will develop along the seabreeze this afternoon and drift inland through the evening.",
+      "cut": true,
+      "source": 1
+    },
+    "note": "type byte 0x65: text, flags 0x5 = cut (bit 0) + source 1 GOES (bits 2-3); the tail of the discussion did not fit in eight chunks"
+  },
+  {
+    "name": "not_available_unknown_location",
+    "hex": "197a4c706601",
+    "decoded": {
+      "seq": 25,
+      "bot": 19578,
+      "type": 7,
+      "name": "not_available",
+      "flags": 0,
+      "request": "f",
+      "request_code": 102,
+      "reason": 1
+    }
+  },
+  {
+    "name": "area_sweep_national_packet0",
+    "hex": "207a4ca99c13c7012000020b060a0c0307770806079100180a211c0b1814080b1c1410031fad0803232104082347000b2c2808032f31140b301e140331bd040631fe011834010401471b040347290c064765000355d11003552b0906554b050155c5010155eb0118620c0c040146100207320c190a321404133c0c041df415041f2c2d07235a10072f500c0431901d19320a100435580e194205040247c81419500708",
+    "decoded": {
+      "seq": 32,
+      "bot": 19578,
+      "type": 10,
+      "name": "area_sweep",
+      "flags": 9,
+      "built_min": 29823900,
+      "group": 32,
+      "idx": 0,
+      "total": 2,
+      "entries": [
+        {
+          "event": 11,
+          "state": 3,
+          "county": false,
+          "start": 10,
+          "run": 4
+        },
+        {
+          "event": 3,
+          "state": 3,
+          "county": true,
+          "start": 119,
+          "run": 3
+        },
+        {
+          "event": 6,
+          "state": 3,
+          "county": true,
+          "start": 145,
+          "run": 1
+        },
+        {
+          "event": 24,
+          "state": 5,
+          "county": false,
+          "start": 33,
+          "run": 8
+        },
+        {
+          "event": 11,
+          "state": 12,
+          "county": false,
+          "start": 20,
+          "run": 3
+        },
+        {
+          "event": 11,
+          "state": 14,
+          "county": false,
+          "start": 20,
+          "run": 5
+        },
+        {
+          "event": 3,
+          "state": 15,
+          "county": true,
+          "start": 173,
+          "run": 3
+        },
+        {
+          "event": 3,
+          "state": 17,
+          "county": true,
+          "start": 33,
+          "run": 2
+        },
+        {
+          "event": 8,
+          "state": 17,
+          "county": true,
+          "start": 71,
+          "run": 1
+        },
+        {
+          "event": 11,
+          "state": 22,
+          "county": false,
+          "start": 40,
+          "run": 3
+        },
+        {
+          "event": 3,
+          "state": 23,
+          "county": true,
+          "start": 49,
+          "run": 6
+        },
+        {
+          "event": 11,
+          "state": 24,
+          "county": false,
+          "start": 30,
+          "run": 6
+        },
+        {
+          "event": 3,
+          "state": 24,
+          "county": true,
+          "start": 189,
+          "run": 2
+        },
+        {
+          "event": 6,
+          "state": 24,
+          "county": true,
+          "start": 510,
+          "run": 1
+        },
+        {
+          "event": 24,
+          "state": 26,
+          "county": false,
+          "start": 1,
+          "run": 2
+        },
+        {
+          "event": 1,
+          "state": 35,
+          "county": true,
+          "start": 27,
+          "run": 2
+        },
+        {
+          "event": 3,
+          "state": 35,
+          "county": true,
+          "start": 41,
+          "run": 4
+        },
+        {
+          "event": 6,
+          "state": 35,
+          "county": true,
+          "start": 101,
+          "run": 1
+        },
+        {
+          "event": 3,
+          "state": 42,
+          "county": true,
+          "start": 209,
+          "run": 5
+        },
+        {
+          "event": 3,
+          "state": 42,
+          "county": true,
+          "start": 299,
+          "run": 3
+        },
+        {
+          "event": 6,
+          "state": 42,
+          "county": true,
+          "start": 331,
+          "run": 2
+        },
+        {
+          "event": 1,
+          "state": 42,
+          "county": true,
+          "start": 453,
+          "run": 1
+        },
+        {
+          "event": 1,
+          "state": 42,
+          "county": true,
+          "start": 491,
+          "run": 1
+        },
+        {
+          "event": 24,
+          "state": 49,
+          "county": false,
+          "start": 12,
+          "run": 4
+        },
+        {
+          "event": 4,
+          "state": 0,
+          "county": true,
+          "start": 70,
+          "run": 5
+        },
+        {
+          "event": 2,
+          "state": 3,
+          "county": true,
+          "start": 50,
+          "run": 4
+        },
+        {
+          "event": 25,
+          "state": 5,
+          "county": false,
+          "start": 50,
+          "run": 6
+        },
+        {
+          "event": 4,
+          "state": 9,
+          "county": true,
+          "start": 60,
+          "run": 4
+        },
+        {
+          "event": 4,
+          "state": 14,
+          "county": true,
+          "start": 500,
+          "run": 6
+        },
+        {
+          "event": 4,
+          "state": 15,
+          "county": true,
+          "start": 300,
+          "run": 12
+        },
+        {
+          "event": 7,
+          "state": 17,
+          "county": true,
+          "start": 90,
+          "run": 5
+        },
+        {
+          "event": 7,
+          "state": 23,
+          "county": true,
+          "start": 80,
+          "run": 4
+        },
+        {
+          "event": 4,
+          "state": 24,
+          "county": true,
+          "start": 400,
+          "run": 8
+        },
+        {
+          "event": 25,
+          "state": 25,
+          "county": false,
+          "start": 10,
+          "run": 5
+        },
+        {
+          "event": 4,
+          "state": 26,
+          "county": true,
+          "start": 600,
+          "run": 4
+        },
+        {
+          "event": 25,
+          "state": 33,
+          "county": false,
+          "start": 5,
+          "run": 2
+        },
+        {
+          "event": 2,
+          "state": 35,
+          "county": true,
+          "start": 200,
+          "run": 6
+        },
+        {
+          "event": 25,
+          "state": 40,
+          "county": false,
+          "start": 7,
+          "run": 3
+        }
+      ],
+      "scoped": false,
+      "scope": [],
+      "cut": true,
+      "advisories": false,
+      "source": 2
+    },
+    "note": "type byte 0xA9: area sweep, flags 0x9 = cut (bit 0) + source 2 internet (bits 2-3); advisories (bit 1) clear, so this is warnings and watches only. Group 32, reassemble by (bot, group) in idx order. `total` has bit 7 clear and there are no scope entries: the country. Packet 0 carries 38 entries (163 bytes), more than a bot sends, and a decoder must still read it"
+  },
+  {
+    "name": "area_sweep_national_packet1",
+    "hex": "217a4ca99c13c7012001020255642419621e08",
+    "decoded": {
+      "seq": 33,
+      "bot": 19578,
+      "type": 10,
+      "name": "area_sweep",
+      "flags": 9,
+      "built_min": 29823900,
+      "group": 32,
+      "idx": 1,
+      "total": 2,
+      "entries": [
+        {
+          "event": 2,
+          "state": 42,
+          "county": true,
+          "start": 100,
+          "run": 10
+        },
+        {
+          "event": 25,
+          "state": 49,
+          "county": false,
+          "start": 30,
+          "run": 3
+        }
+      ],
+      "scoped": false,
+      "scope": [],
+      "cut": true,
+      "advisories": false,
+      "source": 2
+    },
+    "note": "type byte 0xA9: area sweep, flags 0x9 = cut (bit 0) + source 2 internet (bits 2-3); advisories (bit 1) clear, so this is warnings and watches only. Group 32, reassemble by (bot, group) in idx order. `total` has bit 7 clear and there are no scope entries: the country. Packet 0 carries 38 entries (163 bytes), more than a bot sends, and a decoder must still read it"
+  },
+  {
+    "name": "area_sweep_scoped_packet0",
+    "hex": "227a4ca89c13c70122008100460000005400001854bf0c0355d1100155c5010655eb05",
+    "decoded": {
+      "seq": 34,
+      "bot": 19578,
+      "type": 10,
+      "name": "area_sweep",
+      "flags": 8,
+      "built_min": 29823900,
+      "group": 34,
+      "idx": 0,
+      "total": 1,
+      "entries": [
+        {
+          "event": 24,
+          "state": 42,
+          "county": false,
+          "start": 191,
+          "run": 4
+        },
+        {
+          "event": 3,
+          "state": 42,
+          "county": true,
+          "start": 209,
+          "run": 5
+        },
+        {
+          "event": 1,
+          "state": 42,
+          "county": true,
+          "start": 453,
+          "run": 1
+        },
+        {
+          "event": 6,
+          "state": 42,
+          "county": true,
+          "start": 491,
+          "run": 2
+        }
+      ],
+      "scoped": true,
+      "scope": [
+        35,
+        42
+      ],
+      "cut": false,
+      "advisories": false,
+      "source": 2
+    },
+    "note": "type byte 0xA8: area sweep, flags 0x8 = source 2 internet, nothing cut and no advisories. `total` is 0x81: bit 7 scoped, one packet. The first two entries are the scope, Oklahoma and Texas; Oklahoma has no alert entry, which says it is clear at this level"
+  },
+  {
+    "name": "request_digest",
+    "hex": "011d0490010203040506600bac6a3e64",
+    "decoded": {
+      "seq": 1,
+      "bot": 1053,
+      "type": 9,
+      "name": "request",
+      "flags": 0,
+      "sender": "010203040506",
+      "ts": 1789660000,
+      "text": ">d"
+    },
+    "note": "app -> bot: 16 bytes, sender prefix 01..06, ts 1789660000 (2026-09-17 15:46:40 UTC); a resend keeps sender, ts and text and takes the next seq"
+  },
+  {
+    "name": "request_parts",
+    "hex": "021d04900102030405068a0bac6a3e706172742032313220312c342c36",
+    "decoded": {
+      "seq": 2,
+      "bot": 1053,
+      "type": 9,
+      "name": "request",
+      "flags": 0,
+      "sender": "010203040506",
+      "ts": 1789660042,
+      "text": ">part 212 1,4,6"
+    },
+    "note": "app -> bot: `>part <group> <idx>[,<idx>\u2026]`, decimal. The answer is those packets again, identical but for a fresh seq; the group they carry does not change"
+  },
+  {
+    "name": "request_forecast_at",
+    "hex": "031d0490010203040506c40bac6a3e662033352e3638372c2d3130352e393338",
+    "decoded": {
+      "seq": 3,
+      "bot": 1053,
+      "type": 9,
+      "name": "request",
+      "flags": 0,
+      "sender": "010203040506",
+      "ts": 1789660100,
+      "text": ">f 35.687,-105.938"
+    },
+    "note": "app -> bot: Santa Fe NM as a coordinate. The answer is an ordinary Forecast for the nearest point the bot holds one for, carrying that point's bundle index or 0xFFFF when it is not in the bundle"
+  },
+  {
+    "name": "radar_tile",
+    "hex": "287a4cb40a35c701209eff04c0110048844400c4106008163452c9ca99356ad4d43103a6fdc4341c2b10b019020350022382c049f0000182c109c068940111105060080e2a4daa2202088a8880f15ab15b525a9d6acda53559d2af058a9275aad2d4c9ca9c9354d105004d14d507a5d595cf1e499b25646a040cd149d105106a140000",
+    "decoded": {
+      "seq": 40,
+      "bot": 19578,
+      "type": 11,
+      "name": "radar",
+      "flags": 4,
+      "taken_min": 29832458,
+      "south": 32,
+      "west": -98,
+      "zoom": 0,
+      "product": 1,
+      "coarse": false,
+      "partial": false,
+      "bounds": null,
+      "size": 32,
+      "rows": [
+        "00000000000000000000001111111111",
+        "00000000000000000000001111111111",
+        "00000000000000000000001121111111",
+        "00000000000000000000001111111222",
+        "00000000000000000000011111112233",
+        "00000000000000000000221111001223",
+        "00000000000000000000222220000122",
+        "00000000000000000002222220000000",
+        "00000000000000000020022220000000",
+        "00000000000000002220002200000000",
+        "00000000000000022220000000000000",
+        "00000000000000022200000000000000",
+        "00000000000000011100000000000010",
+        "00000000000000000000110111100110",
+        "00000000000000000001111111111000",
+        "00000000000000000001111111110000",
+        "00000000000000000001111111111000",
+        "00000000000000111111111111111000",
+        "00000000000000111111111111111000",
+        "00000000000000111111111111100000",
+        "00000000000001111111111111100000",
+        "00000000000011112222111111110000",
+        "00000000000011122222211111110000",
+        "00000000000111222221111111100000",
+        "00000000011112222222211111101000",
+        "00000001111222221123321111111000",
+        "00000011112222221122301111111000",
+        "00000011112222211122211111111000",
+        "00000011111222111112111111100000",
+        "00000001221222211110001100000000",
+        "00000000221122221100000000000000",
+        "00000001111111222100000000000000"
+      ],
+      "source": 1
+    },
+    "note": "type byte 0xB4: radar, flags 0x4 = source 1 GOES, fine (32 x 32) and whole. `shape` 0x04 = product 1 (RADSTHPL) << 2 | zoom 0. The tile is 32N to 34N, 98W to 96W; the cells are a quadtree, most significant bit first"
+  },
+  {
+    "name": "radar_tile_coarse_partial",
+    "hex": "297a4cb70a35c701189cff050009000fe008940c701a00020401050316100000",
+    "decoded": {
+      "seq": 41,
+      "bot": 19578,
+      "type": 11,
+      "name": "radar",
+      "flags": 7,
+      "taken_min": 29832458,
+      "south": 24,
+      "west": -100,
+      "zoom": 1,
+      "product": 1,
+      "coarse": true,
+      "partial": true,
+      "bounds": [
+        0,
+        9,
+        0,
+        15
+      ],
+      "size": 16,
+      "rows": [
+        "0000000000000000",
+        "0000000000000000",
+        "0001200000000000",
+        "0002320000000000",
+        "0000100000000000",
+        "0000000000000000",
+        "0000000000000000",
+        "0000000000110000",
+        "0000000000120000",
+        "0000000000010000",
+        "0000000000000000",
+        "0000000000000000",
+        "0000000000000000",
+        "0000000000000000",
+        "0000000000000000",
+        "0000000000000000"
+      ],
+      "source": 1
+    },
+    "note": "type byte 0xB7: radar, flags 0x7 = coarse (bit 0) + partial (bit 1) + source 1 GOES. Four bounds bytes follow the fixed fields: rows 0-9, columns 0-15 of this 16 x 16 grid are inside the radar picture"
+  },
+  {
+    "name": "request_radar",
+    "hex": "041d04900102030405066070b06a3e72616461722033322e3738302c2d39362e383030",
+    "decoded": {
+      "seq": 4,
+      "bot": 1053,
+      "type": 9,
+      "name": "request",
+      "flags": 0,
+      "sender": "010203040506",
+      "ts": 1789948000,
+      "text": ">radar 32.780,-96.800"
+    },
+    "note": "app -> bot: the zoom 0 tile for Dallas. A wider tile is `>radar 32.780,-96.800 z2`"
+  },
+  {
+    "name": "not_available_radar",
+    "hex": "2a7a4c707804",
+    "decoded": {
+      "seq": 42,
+      "bot": 19578,
+      "type": 7,
+      "name": "not_available",
+      "flags": 0,
+      "request": "x",
+      "request_code": 120,
+      "reason": 4
+    },
+    "note": "request letter `x` (0x78) is `>radar`, the one request whose letter is not its first; reason 4, this tile of this picture went out in the last 5 minutes"
+  },
+  {
+    "name": "request_radar_loop",
+    "hex": "061d0490010203040506d870b06a3e72616461722033302e3237302c2d39372e373430206c6f6f7020323335332032333338",
+    "decoded": {
+      "seq": 6,
+      "bot": 1053,
+      "type": 9,
+      "name": "request",
+      "flags": 0,
+      "sender": "010203040506",
+      "ts": 1789948120,
+      "text": ">radar 30.270,-97.740 loop 2353 2338"
+    },
+    "note": "app -> bot: the last hour of the zoom 0 tile for Austin, leaving out the pictures taken at 23:53 and 23:38 UTC, which this app already holds (newest first)"
+  }
+]

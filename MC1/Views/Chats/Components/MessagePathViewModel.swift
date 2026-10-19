@@ -1,0 +1,121 @@
+import CoreLocation
+import MC1Services
+import OSLog
+import SwiftUI
+
+@Observable
+@MainActor
+final class MessagePathViewModel {
+  var contacts: [ContactDTO] = []
+  var repeaters: [ContactDTO] = []
+  var discoveredRepeaters: [DiscoveredNodeDTO] = []
+  var isLoading = true
+
+  private let logger = Logger(subsystem: "com.mc1", category: "MessagePathViewModel")
+
+  func loadContacts(dataStore: DataStore?, radioID: UUID) async {
+    isLoading = true
+    guard let dataStore else {
+      contacts = []
+      repeaters = []
+      discoveredRepeaters = []
+      isLoading = false
+      return
+    }
+
+    do {
+      let fetched = try await dataStore.fetchContacts(radioID: radioID)
+      contacts = fetched
+      repeaters = fetched.filter { $0.type == .repeater }
+      let nodes = try await dataStore.fetchDiscoveredNodes(radioID: radioID)
+      discoveredRepeaters = nodes.filter { $0.nodeType == .repeater }
+    } catch {
+      logger.error("Failed to load contacts: \(error.localizedDescription)")
+      contacts = []
+      repeaters = []
+      discoveredRepeaters = []
+    }
+
+    isLoading = false
+  }
+
+  func senderResolution(for message: MessageDTO, localDeviceName: String) -> NodeNameResolution {
+    if message.isOutgoing {
+      return NodeNameResolution(displayName: localDeviceName, matchKind: .exact)
+    }
+
+    if message.isChannelMessage, let nodeName = message.senderNodeName {
+      return NodeNameResolution(displayName: nodeName, matchKind: .exact)
+    }
+
+    if let keyPrefix = message.senderKeyPrefix,
+       let result = NeighborNameResolver.resolve(
+         for: keyPrefix,
+         contacts: contacts,
+         discoveredNodes: [],
+         userLocation: nil
+       ) {
+      return result
+    }
+
+    return NodeNameResolution(
+      displayName: L10n.Chats.Chats.Path.Hop.unknown,
+      matchKind: .unresolved
+    )
+  }
+
+  func senderName(for message: MessageDTO, localDeviceName: String) -> String {
+    senderResolution(for: message, localDeviceName: localDeviceName).displayName
+  }
+
+  func senderNodeID(for message: MessageDTO) -> String? {
+    guard let keyPrefix = message.senderKeyPrefix,
+          let firstByte = keyPrefix.first else { return nil }
+    return String(format: "%02X", firstByte)
+  }
+
+  /// Pin A contact from a non-empty `senderKeyPrefix`, or a unique `senderNodeName` on a channel row.
+  func locatedSender(for message: MessageDTO) -> ContactDTO? {
+    Self.locatedSender(for: message, contacts: contacts)
+  }
+
+  /// The sender-pin rule with its contact pool injected, so the static map
+  /// builder and the Reply-with-Route composer resolve pin A exactly as this
+  /// screen does — a channel row can't be pinned here and dropped there.
+  static func locatedSender(for message: MessageDTO, contacts: [ContactDTO]) -> ContactDTO? {
+    if let keyPrefix = message.senderKeyPrefix, !keyPrefix.isEmpty {
+      guard let sender = contacts.first(where: { $0.publicKeyPrefix == keyPrefix }),
+            sender.hasLocation else {
+        return nil
+      }
+      return sender
+    }
+
+    guard message.isChannelMessage,
+          let senderName = message.senderNodeName, !senderName.isEmpty else {
+      return nil
+    }
+
+    let matches = SenderContactMatcher.filter(contacts: contacts, senderName: senderName)
+    guard matches.count == 1, let sender = matches.first, sender.hasLocation else {
+      return nil
+    }
+    return sender
+  }
+
+  func repeaterResolution(for hashBytes: Data, userLocation: CLLocation?) -> NodeNameResolution {
+    NeighborNameResolver.resolve(
+      for: hashBytes,
+      contacts: repeaters,
+      discoveredNodes: discoveredRepeaters,
+      userLocation: userLocation
+    ) ?? NodeNameResolution(
+      displayName: L10n.Chats.Chats.Path.Hop.unknown,
+      matchKind: .unresolved
+    )
+  }
+
+  func repeaterName(for hashBytes: Data, userLocation: CLLocation?) -> String {
+    repeaterResolution(for: hashBytes, userLocation: userLocation).displayName
+  }
+}

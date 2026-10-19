@@ -1,0 +1,61 @@
+/*
+  WhatsNew.strings
+  MC1
+
+  European Portuguese (pt-PT) translation of strings for the "What's New" sheet shown once after a major update.
+  AI-translated - please verify with native speakers.
+*/
+
+/* Title of the What's New sheet shown once after an app update */
+"whatsNew.title" = "Novidades";
+
+/* Button to dismiss the What's New sheet */
+"whatsNew.continueButton" = "Continuar";
+
+/* Link on the What's New sheet to the full GitHub release notes */
+"whatsNew.fullReleaseNotes" = "Ver todas as novas alterações";
+
+/* What's New v1.5 - Path Details feature, title */
+"whatsNew.pathDetails.title" = "Todas as rotas de uma mensagem";
+/* What's New v1.5 - Path Details feature, description */
+"whatsNew.pathDetails.description" = "Ver rota mostra agora todos os caminhos pelos quais uma mensagem chegou até si. Se chegou mais do que uma vez, os separadores acima do mapa alternam entre as rotas.";
+
+/* What's New v1.5 - Tap a reaction to see who added it, title */
+"whatsNew.whoReacted.title" = "Quem reagiu";
+/* What's New v1.5 - Tap a reaction to see who added it, description */
+"whatsNew.whoReacted.description" = "Toque numa reação numa mensagem para ver quem a adicionou, em vez de enviar a reação.";
+
+/* What's New v1.5 - Faster chat loading, title */
+"whatsNew.fasterChatLoading.title" = "Carregamento mais rápido das conversas";
+/* What's New v1.5 - Faster chat loading, description */
+"whatsNew.fasterChatLoading.description" = "Abrir uma conversa é até 90%% mais rápido.";
+
+/* What's New v1.5 (fork) - one node on several radios, title */
+"whatsNew.radioSwap.title" = "Troque de rádio, mantenha tudo";
+
+/* What's New v1.5 (fork) - one node on several radios, description */
+"whatsNew.radioSwap.description" = "Use o seu nó em mais do que um rádio. Escolha um na lista de rádios e as conversas, contactos e canais acompanham-no; da primeira vez, um toque copia os canais e as definições.";
+
+/* What's New v1.5 (fork) - weather radar loops, title */
+"whatsNew.radarLoops.title" = "Radar em ciclo";
+
+/* What's New v1.5 (fork) - weather radar loops, description */
+"whatsNew.radarLoops.description" = "Em Meteorologia, peça a última hora de radar e reproduza-a em ciclo.";
+
+/* What's New v1.5 (fork) - reactions as tapbacks and who reacted, title */
+"whatsNew.reactions.title" = "Reações que chegam";
+
+/* What's New v1.5 (fork) - reactions as tapbacks and who reacted, description */
+"whatsNew.reactions.description" = "As suas reações voltam a aparecer como tapbacks nas apps MeshCore One atuais. Toque numa reação para ver quem a adicionou.";
+
+/* What's New - heading of the credit to the app this fork is built on */
+"whatsNew.credit.title" = "Baseada no MeshCore One";
+
+/* What's New - credit to Avi0n, who wrote MeshCore One */
+"whatsNew.credit.body" = "O DigitainoMesh é um fork não oficial do MeshCore One, partilhado pelo TestFlight com um pequeno grupo. A app é obra de Avi0n; este fork só acrescenta algumas experiências. Se lhe for útil, apoie Avi0n.";
+
+/* What's New - link to MeshCore One's own release notes for this version */
+"whatsNew.credit.upstreamNotes" = "Novidades do MeshCore One 1.5";
+
+/* What's New - button opening Avi0n's GitHub Sponsors page */
+"whatsNew.supportButton" = "Apoiar Avi0n";

@@ -1,0 +1,1594 @@
+import Foundation
+import MeshCore
+import MeshWX
+import os
+
+// MARK: - Transport
+
+/// A link a transport provides *of its own*, for a transport that is not a radio.
+///
+/// Over Bluetooth there is none: whether weather can be asked for follows the radio, which is
+/// the app's business and not the transport's. The DEBUG bridge (`RemoteBotWeatherTransport`)
+/// is the other case — an HTTP connection straight to one real bot, with no radio anywhere —
+/// and it says so here, naming the bot it speaks for: the tool then treats the radio as
+/// connected and that bot as announced, though no advert of its ever reached this phone.
+public enum WeatherTransportLink: Sendable, Hashable {
+  /// The transport has a live link to this bot.
+  case up(bot: WeatherBot)
+
+  /// The bot the link speaks for.
+  public var bot: WeatherBot {
+    switch self {
+    case let .up(bot): bot
+    }
+  }
+
+  /// `bots` with this link's bot added, unless one of them already carries its id: a real
+  /// contact for the same bot stays the one the screen uses, advert position and all.
+  public func announcing(_ bots: [WeatherBot]) -> [WeatherBot] {
+    bots.contains { $0.botID == bot.botID } ? bots : bots + [bot]
+  }
+}
+
+/// Why a request could not go out on the channel, so the service can fall back to the DM.
+///
+/// Not a failure the user is told about: a radio that cannot flood a datagram can still send
+/// the DM of spec §14, and the fallback is silent (docs/MESHWX.md, "Requests").
+public enum WeatherTransportError: Error, Sendable, Hashable {
+  /// This radio cannot put a Request datagram on `#meshwx`: firmware older than the command
+  /// (v1.15.0), no slot carrying the channel, or no public key of its own to name a sender by.
+  /// `reason` is for the log, never for the screen.
+  case channelRequestsUnavailable(String)
+}
+
+/// A Request datagram that went on the air: the bytes and the slot they went out on (spec §11).
+///
+/// Returned by ``WeatherTransport/sendChannelRequest(text:botID:timestamp:seq:)`` so the channel
+/// traffic log can show this phone's own requests beside everything it heard, in the form they
+/// were actually sent (docs/MESHWX_UI.md §12).
+public struct WeatherChannelRequestSent: Sendable, Hashable {
+  /// The slot carrying `#meshwx` on this radio — not a fixed number, and not one the service
+  /// knows on its own.
+  public var channelIndex: UInt8
+  /// The `data` field of the datagram: an encoded ``MeshWXRequest``.
+  public var payload: Data
+
+  public init(channelIndex: UInt8, payload: Data) {
+    self.channelIndex = channelIndex
+    self.payload = payload
+  }
+}
+
+/// What the weather service needs from a radio: channel datagrams in both directions, a DM going
+/// out, and a way to tell which slot is `#meshwx`. Narrow on purpose so tests can drive the
+/// service with a fake and so the requests provably never touch `MessageService`
+/// (docs/MESHWX.md).
+public protocol WeatherTransport: Sendable {
+  /// A stream of `.channelDataReceived` events. Every other event kind is ignored.
+  func datagramEvents() async -> AsyncStream<MeshEvent>
+  /// The codes of the radio's delivery confirmations (the ACK push) as they arrive: each says
+  /// the recipient's radio received a DM this radio sent.
+  func acknowledgements() async -> AsyncStream<Data>
+  /// Sends a plain-text DM to a public key with `timestamp` and `attempt` on the wire as given,
+  /// and returns the ACK code the radio expects back for this transmission. A resend passes the
+  /// first send's timestamp with the next attempt: the same message to the bot's radio, under a
+  /// new code.
+  func sendRequest(to publicKey: Data, text: String, timestamp: Date, attempt: UInt8) async throws -> Data
+  /// Sends the same `>` text as a **Request datagram**, flooded on `#meshwx` (spec §11): the
+  /// normal path since revision 6, because a flood needs no stored route.
+  ///
+  /// No *answer* comes back. A datagram has no acknowledgement — the answer on the channel is
+  /// the acknowledgement — so a send that returns says only that the radio took it.
+  ///
+  /// - Parameters:
+  ///   - botID: the bot asked, the first two bytes of its public key.
+  ///   - timestamp: the request's own time, repeated byte for byte on the one resend; it is
+  ///     what makes the resend a copy to the bot rather than a second request.
+  ///   - seq: the **sender's** counter, likewise repeated on the resend.
+  /// - Returns: the bytes that went out and the slot they went out on, for the channel traffic
+  ///   log (docs/MESHWX_UI.md §12) — so the row shows what was sent rather than a reconstruction
+  ///   of it. Nil from a transport that puts no datagram on any channel, which is the DEBUG
+  ///   bridge: there is nothing on the air to log.
+  /// - Throws: ``WeatherTransportError/channelRequestsUnavailable(_:)`` when this radio cannot
+  ///   send one at all, which is the service's cue to fall back to the DM ladder.
+  @discardableResult
+  func sendChannelRequest(
+    text: String, botID: UInt16, timestamp: Date, seq: UInt8
+  ) async throws -> WeatherChannelRequestSent?
+  /// Forgets the route the radio holds to a public key, so the next DM to it goes out by flood
+  /// — every repeater forwards it once — rather than hop by hop along a route that may be
+  /// stale. The chat rule (docs/guides/Messaging.md, D5), applied to a weather request after
+  /// its on-route sends have gone unanswered and unconfirmed.
+  func resetPath(to publicKey: Data) async throws
+  /// The 16-byte secret of a channel slot, or nil when it cannot be read.
+  func channelSecret(at index: UInt8) async -> Data?
+  /// Whether the radio's message queue — what it held while the phone was away — is being
+  /// drained right now, at connect or on resync. A datagram delivered meanwhile is backlog: it
+  /// can be hours old, and it says nothing about whether the bot is in range now.
+  func isDrainingBacklog() async -> Bool
+  /// The link this transport provides of its own, or nil when it has none — which is the
+  /// answer over a radio, and the default, so nothing else implementing this protocol changes.
+  func linkState() async -> WeatherTransportLink?
+}
+
+public extension WeatherTransport {
+  /// No link of its own: the radio's state is the app's to report.
+  func linkState() async -> WeatherTransportLink? { nil }
+}
+
+/// The production transport over a `MeshCoreSession`.
+public struct SessionWeatherTransport: WeatherTransport {
+  /// Channel slots searched for `#meshwx` when a request is about to go out and the app's own
+  /// table does not name it: the companion firmware's `MAX_GROUP_CHANNELS`, 40. The first cut
+  /// scanned 0-7 and the owner's radio keeps `#meshwx` in slot 31, so every request went out as
+  /// a DM with "no slot on this radio carries #meshwx" in the log (17 September). A radio with
+  /// fewer slots answers an error past its last one, which reads as "not here" and moves on.
+  static let channelSlots: UInt8 = 40
+
+  private let session: any MeshCoreSessionProtocol
+  private let storedChannelSecret: @Sendable (UInt8) async -> Data?
+  private let drainingBacklog: @Sendable () async -> Bool
+  private let channelDataSupported: @Sendable () async -> Bool
+  /// The slot the app's own channel table holds `#meshwx` in, by secret first and then by
+  /// name — what the radio reported at the last channel sync, so no radio round trip.
+  private let storedWeatherSlot: @Sendable () async -> UInt8?
+  /// The slot proven to carry `#meshwx`, once one has been found. Only positive answers are
+  /// kept: a slot is what the user just wrote the channel into, so "not there" must not stick.
+  private let weatherSlot = OSAllocatedUnfairLock<UInt8?>(initialState: nil)
+
+  /// - Parameters:
+  ///   - storedChannelSecret: the app's own channel table, consulted when the radio
+  ///     cannot be asked.
+  ///   - isDrainingBacklog: whether the firmware queue is being drained; the container wires it
+  ///     to the message poller. The default says never, so everything reads as live.
+  ///   - supportsChannelData: whether this radio can *send* a channel datagram
+  ///     (`CMD_SEND_CHANNEL_DATA`, 0x3E, firmware v11+). The container wires it to
+  ///     `DeviceDTO.supportsChannelDatagrams`, the same gate the screen's
+  ///     `firmwareSupportsWeather` is read from; the default assumes it can, and a radio that
+  ///     cannot refuses the command anyway.
+  ///   - storedWeatherSlot: the slot the app's channel table holds `#meshwx` in, if it holds
+  ///     it at all — asked before any slot is scanned. The container wires it to the table;
+  ///     the default knows nothing and leaves it to the scan.
+  public init(
+    session: any MeshCoreSessionProtocol,
+    storedChannelSecret: @escaping @Sendable (UInt8) async -> Data? = { _ in nil },
+    isDrainingBacklog: @escaping @Sendable () async -> Bool = { false },
+    supportsChannelData: @escaping @Sendable () async -> Bool = { true },
+    storedWeatherSlot: @escaping @Sendable () async -> UInt8? = { nil }
+  ) {
+    self.session = session
+    self.storedChannelSecret = storedChannelSecret
+    drainingBacklog = isDrainingBacklog
+    channelDataSupported = supportsChannelData
+    self.storedWeatherSlot = storedWeatherSlot
+  }
+
+  public func datagramEvents() async -> AsyncStream<MeshEvent> {
+    await session.events(filter: .anyChannelDatagram)
+  }
+
+  public func acknowledgements() async -> AsyncStream<Data> {
+    let events = await session.events(filter: .anyAcknowledgement)
+    let (codes, continuation) = AsyncStream.makeStream(of: Data.self)
+    let task = Task {
+      for await event in events {
+        if case let .acknowledgement(code, _) = event { continuation.yield(code) }
+      }
+      continuation.finish()
+    }
+    continuation.onTermination = { _ in task.cancel() }
+    return codes
+  }
+
+  public func sendRequest(to publicKey: Data, text: String, timestamp: Date, attempt: UInt8) async throws -> Data {
+    try await session.sendMessage(to: publicKey, text: text, timestamp: timestamp, attempt: attempt).expectedAck
+  }
+
+  /// The request as a datagram on the `#meshwx` slot, flooded (spec §11).
+  ///
+  /// Three things have to be true and each of them is a different "no": the firmware has the
+  /// command, some slot on this radio carries the channel, and the radio has told the app its
+  /// own public key — the six bytes the bot pairs this phone's datagrams and DMs by. Any of
+  /// them missing is `channelRequestsUnavailable`, and the service sends the DM instead.
+  @discardableResult
+  public func sendChannelRequest(
+    text: String, botID: UInt16, timestamp: Date, seq: UInt8
+  ) async throws -> WeatherChannelRequestSent? {
+    guard await channelDataSupported() else {
+      throw WeatherTransportError.channelRequestsUnavailable(
+        "the radio's firmware is older than v1.15.0 and has no send-channel-data command")
+    }
+    guard let slot = await meshWXSlot() else {
+      throw WeatherTransportError.channelRequestsUnavailable("no slot on this radio carries #meshwx")
+    }
+    guard let key = await session.currentSelfInfo?.publicKey,
+          key.count >= MeshWXWire.requestSenderPrefixSize
+    else {
+      throw WeatherTransportError.channelRequestsUnavailable("the radio has not reported its own public key")
+    }
+    let request = MeshWXRequest(
+      seq: seq,
+      botID: botID,
+      senderPrefix: Data(key.prefix(MeshWXWire.requestSenderPrefixSize)),
+      timestamp: UInt32(truncatingIfNeeded: Int64(timestamp.timeIntervalSince1970)),
+      text: text)
+    // Flooded: every repeater in reach forwards it once, and no stored route can lose it —
+    // which is the whole reason the datagram replaced the DM (spec §11).
+    let payload = try request.encode()
+    try await session.sendChannelData(
+      channelIndex: slot,
+      dataType: MeshWXWire.dataType,
+      payload: payload,
+      pathLength: PacketBuilder.floodPathSentinel,
+      pathBytes: Data())
+    return WeatherChannelRequestSent(channelIndex: slot, payload: payload)
+  }
+
+  /// The slot carrying `#meshwx`, by secret, cached for the session once found.
+  private func meshWXSlot() async -> UInt8? {
+    if let known = weatherSlot.withLock({ $0 }) { return known }
+    // The table first: it is what the radio said at the last sync, and it knows slot 31 without
+    // thirty-one round trips.
+    if let stored = await storedWeatherSlot() {
+      weatherSlot.withLock { $0 = stored }
+      return stored
+    }
+    for index in 0..<Self.channelSlots where await channelSecret(at: index) == WeatherChannel.secret {
+      weatherSlot.withLock { $0 = index }
+      return index
+    }
+    return nil
+  }
+
+  public func resetPath(to publicKey: Data) async throws {
+    try await session.resetPath(publicKey: publicKey)
+  }
+
+  /// The app's table first — no radio round trip while the firmware queue is draining — then
+  /// the radio on a miss: weather monitoring starts before the connect-time channel sync, so
+  /// a fresh table can lack a slot the radio has.
+  public func channelSecret(at index: UInt8) async -> Data? {
+    if let stored = await storedChannelSecret(index), stored == WeatherChannel.secret { return stored }
+    if let info = try? await session.getChannel(index: index) { return info.secret }
+    return await storedChannelSecret(index)
+  }
+
+  public func isDrainingBacklog() async -> Bool {
+    await drainingBacklog()
+  }
+}
+
+// MARK: - Service
+
+/// Listens to the MeshWX weather bots on `#meshwx`, keeps one `WeatherBotState` per bot, and
+/// sends the app's `>` requests with the spec's etiquette (docs/MESHWX.md, spec §19).
+///
+/// Per connection, like every service in the container — the datagram stream belongs to the
+/// session — but the *state* is not: it is loaded from and saved to a store shared across
+/// connections, because a warning belongs to a place, not to the radio that heard it.
+public actor WeatherService {
+  /// Spec §14 / §19: one request per sender every five seconds.
+  public static let requestSpacing: TimeInterval = 5
+  /// Spec §14: wait up to 15 s before retrying, once.
+  public static let answerTimeout: Duration = .seconds(15)
+  /// Spec §11 / §19: a Request datagram is waited on for 10 s, then sent once more — the same
+  /// `ts` and text under the next `seq` (spec §20) — and never a third time. Shorter than the
+  /// DM's 15 s because a flood needs no route: an answer that is coming arrives in one to three
+  /// seconds.
+  public static let channelAnswerTimeout: Duration = .seconds(10)
+  /// The attempt that goes out by flood after a route reset, and the last one: attempts 0 and 1
+  /// ride the stored route, attempt 2 rides every repeater. Three sends, 45 s, then the request
+  /// is settled as unanswered (docs/MESHWX.md, "Requests").
+  public static let floodAttempt = 2
+  /// Spec §19: do not re-request something received in the last five minutes. Airtime etiquette
+  /// only: the bot keeps no cache and rebuilds every answer (spec §14, revision 2).
+  public static let recentAnswerWindow: TimeInterval = 5 * 60
+  /// The bot answers `>f <index>` with the forecast for that point's coordinates, which may come
+  /// from a nearby point up to this far away.
+  static let forecastSubstituteKilometres = 80.0
+  /// The bot answers `>o <ICAO>` for a station with no fresh report with the nearest station within
+  /// this distance of it that has one, as a batch of one under that station's own index (spec §6,
+  /// revision 8): Dayton's nearest bundled station, Wright-Patterson AFB, never reports.
+  static let observationSubstituteKilometres = 40.0
+  /// Retention for finished text replies and forecasts per bot, newest kept.
+  static let maxTextsPerBot = 24
+  static let maxForecastsPerBot = 24
+  /// How long a text reply and a forecast are kept, whoever asked for them: the same treatment
+  /// readings get, so the channel's answers to other people cannot pile up for ever. What a
+  /// screen would still show survives it (`WeatherStateReducer.shownTextGroups`,
+  /// `shownForecastPoints`).
+  static let textRetention: TimeInterval = 48 * 60 * 60
+  static let forecastRetention: TimeInterval = 48 * 60 * 60
+  /// A station is forgotten once it has neither been in one of the bot's scheduled batches nor
+  /// been heard at all for this long: twice the footprint window (§6), so a bot quiet for a night
+  /// keeps its area, while somebody's `>o KJFK` from last week does not linger as a reading.
+  static let observationRetention: TimeInterval = 48 * 60 * 60
+  /// A ceiling whatever the times say. The spec's batch is at most 14 stations, so this is room
+  /// for a bot's own area several times over plus everything anyone asked about.
+  static let maxObservationsPerBot = 64
+  /// Expired warnings linger this long before pruning, so a screen can still say what just
+  /// ended.
+  static let expiredWarningRetention: TimeInterval = 60 * 60
+  /// Upgrade markers older than this are forgotten.
+  static let pendingUpgradeRetention: TimeInterval = 6 * 60 * 60
+  /// At most this many bots' states are kept (phase 2, 18 October 2026). A bot is two
+  /// self-asserted bytes on the wire, so every random id anyone sends under would otherwise become
+  /// a state written to storage for good. Sixteen is more weather radios than one phone will ever
+  /// hear; past it the bot heard live least recently goes, never one ``protectedBotIDs`` names.
+  public static let maxBotStates = 16
+
+  private let transport: any WeatherTransport
+  private let store: any WeatherStateStore
+  /// Where the channel traffic log persists (docs/MESHWX_UI.md §12). Nil turns the log off
+  /// entirely, which is what every test that is not about it wants.
+  private let trafficStore: (any WeatherTrafficLogStore)?
+  private let now: @Sendable () -> Date
+  private let answerTimeout: Duration
+  private let channelAnswerTimeout: Duration
+  private let stationIndex: @Sendable (String) -> UInt16?
+  private let tables: MeshWXTables
+  /// The bundle's centre of a county or zone, for what a digest speaks for (spec §5).
+  private let areaCentre: WeatherAreaCentre
+  /// The bots whose state the cap may never evict (phase 2): the bot the user picked and any
+  /// holding an active warning for a watched place. Supplied by the container, which can read
+  /// both; the service knows neither.
+  private let protectedBotIDs: @Sendable ([UInt16: WeatherBotState], Date) -> Set<UInt16>
+  /// The bots the tool's pages are asking, as the model last said (``useSources(_:)``): protected
+  /// from the cap like the rest.
+  private var sourceBotIDs: Set<UInt16> = []
+  private let logger = PersistentLogger(subsystem: "com.mc1", category: "WeatherService")
+
+  private nonisolated let eventBroadcaster = EventBroadcaster<WeatherEvent>()
+
+  private var states: [UInt16: WeatherBotState] = [:]
+  private var isLoaded = false
+  private var stampTask: Task<Void, Never>?
+  private var monitorTask: Task<Void, Never>?
+  private var acknowledgementTask: Task<Void, Never>?
+  /// Confirmations that matched no pending request, newest last. One can reach the service while
+  /// the send that expects it is still coming back from the radio, before its code is known; it
+  /// is taken once the code is. Chat DMs' confirmations pass through here too, so only the last
+  /// few are kept — the radio itself tracks only its last eight expected codes.
+  private var unmatchedAcknowledgements: [Data] = []
+  static let unmatchedAcknowledgementLimit = 8
+
+  private var session = WeatherSessionInfo()
+  /// Per session: slots proven to be `#meshwx`, by secret.
+  private var weatherSlots: Set<UInt8> = []
+  /// Slots proven *not* to be `#meshwx`, and when. Rechecked after a minute rather than
+  /// remembered for the session: the channel prompt writes `#meshwx` into a slot, and a
+  /// session-long "no" for that slot would drop every weather packet that followed.
+  private var foreignSlotsCheckedAt: [UInt8: Date] = [:]
+  static let foreignSlotRecheck: TimeInterval = 60
+
+  private struct PendingEntry {
+    var request: WeatherPendingRequest
+    var timer: Task<Void, Never>?
+  }
+
+  private var pending: [UUID: PendingEntry] = [:]
+  private var lastSendAt: Date?
+  /// This phone's own request counter (spec §11): one more for every channel datagram this phone
+  /// sends — a resend takes the next one too, so it is not the same bytes as the first send
+  /// (spec §20) — wrapping 255 to 0. Informational to the bot, which keys copies on the
+  /// timestamp and the text.
+  private var nextRequestSeq: UInt8 = 0
+
+  /// An answer anyone on the channel has already received, for the five-minute rule. Filled
+  /// on ingest — not when this phone's own request settles — so twenty phones tapping after a
+  /// siren send one request between them, not twenty.
+  ///
+  /// Only from a message the reducer applied and that was heard live. A duplicate, a list older
+  /// than the one held, a late warning the reducer set aside, or anything drained from the
+  /// radio's queue at connect says nothing about what the bot would answer now.
+  enum AnswerKey: Hashable {
+    case digest
+    case coverageObservations
+    case station(UInt16)
+    case forecast(UInt16)
+    /// `>w`: any warning or alert list from the bot.
+    case activeWarnings
+    /// `>w <county or zone>`, by the code asked, upper case: a warning that names the area, or the
+    /// one that answered this phone's own ask. The bot's list answers it too, through
+    /// ``digest``, but only for an area the list speaks for (spec §5, 17 October 2026).
+    case warningsTouching(String)
+    /// `>w <identity>`: that warning, from the bot asked.
+    case warning(MeshWXWarningIdentity)
+    /// A text request, by subject and argument: only a complete reply this phone owns.
+    case text(WeatherRequest)
+    /// `>cov`: the bot's own statement of its area.
+    case coverage
+    /// `>wmap`: an area sweep, by **what it covers** — the state codes, sorted and upper case,
+    /// and `[]` for the country.
+    ///
+    /// One slot for both breadths: an eight-packet answer that has just been broadcast is an
+    /// answer everyone on the channel has, and the narrower sweep is a subset of the wider one.
+    /// Spending eight more packets to widen it a minute later is exactly what the five-minute
+    /// rule is for.
+    ///
+    /// Not one slot for both *scopes*, though, which is what revision 10 changes: a sweep of
+    /// Texas says nothing about Oklahoma, and refusing an Oklahoma tap because somebody asked
+    /// about Texas two minutes ago would leave a map with a hole in it and no way to fill it.
+    case areaSweep(states: [String])
+    /// `>radar`: the tile for a square of earth (spec revision 11, §13). Keyed by the tile, so two
+    /// places on one square share the slot — one answer for a town, not one per phone — and the
+    /// bot's own rule is the mirror of this one: it refuses the same tile of the same picture for
+    /// five minutes, reason 4.
+    case radar(tile: MeshWXRadarTile)
+  }
+
+  /// Every slot is the sending bot's own (phase 2, 18 October 2026): an answer from one bot never
+  /// stands in for asking another. A slot any bot could fill let one forged datagram under a random
+  /// id hold off, for five minutes, the request to the bot the user is actually using. The screen
+  /// still draws the bot next door's radar picture of a square (`WeatherRadarPick`); it never stops
+  /// this phone asking its own bot.
+  struct AnswerSlot: Hashable {
+    let botID: UInt16
+    let key: AnswerKey
+  }
+
+  struct AnswerRecord: Hashable {
+    /// Phone clock: when the answer arrived, which the five minutes run from.
+    var receivedAt: Date
+    /// The answer's own time on the bot's clock, where the message carries one.
+    var contentAsOf: Date?
+  }
+
+  private var lastAnswers: [AnswerSlot: AnswerRecord] = [:]
+
+  /// The channel traffic log, oldest first (docs/MESHWX_UI.md §12). Loaded with the state and
+  /// written on every datagram; empty and never written when no store was injected.
+  private var traffic: [WeatherTrafficEntry] = []
+
+  /// - Parameters:
+  ///   - transport: The radio.
+  ///   - store: Where state persists.
+  ///   - trafficLogStore: where the channel traffic log persists. Nil — the default — keeps no
+  ///     log at all: it is a screen the user opens, not something the service needs, and a test
+  ///     driving a thousand datagrams through `ingest` should not be writing a ring of 300 to
+  ///     disk for each one.
+  ///   - now: The clock, injectable for tests.
+  ///   - answerTimeout: How long to wait for a DM's answer before the retry; tests shorten it.
+  ///   - channelAnswerTimeout: The same for a Request datagram, which is waited on for less and
+  ///     resent once; tests shorten it.
+  ///   - stationIndex: ICAO → wire station index, for matching a one-station answer to
+  ///     its request. Defaults to the bundled tables.
+  ///   - tables: For reading warning identities and text replies against requests.
+  ///   - protectedBotIDs: the bots whose state the cap on states never evicts, given every
+  ///     bot's state and the time (phase 2). None by default.
+  public init(
+    transport: any WeatherTransport,
+    store: any WeatherStateStore,
+    trafficLogStore: (any WeatherTrafficLogStore)? = nil,
+    now: @escaping @Sendable () -> Date = { Date() },
+    answerTimeout: Duration = WeatherService.answerTimeout,
+    channelAnswerTimeout: Duration = WeatherService.channelAnswerTimeout,
+    stationIndex: @escaping @Sendable (String) -> UInt16? = { MeshWXTables.shared.stationIndex(forICAO: $0) },
+    tables: MeshWXTables = .shared,
+    protectedBotIDs: @escaping @Sendable ([UInt16: WeatherBotState], Date) -> Set<UInt16> = { _, _ in [] }
+  ) {
+    self.transport = transport
+    self.store = store
+    trafficStore = trafficLogStore
+    self.now = now
+    self.answerTimeout = answerTimeout
+    self.channelAnswerTimeout = channelAnswerTimeout
+    self.stationIndex = stationIndex
+    self.tables = tables
+    self.protectedBotIDs = protectedBotIDs
+    areaCentre = Self.areaCentres(tables)
+  }
+
+  /// The bots the tool's pages are asking now, which the cap on states never evicts (phase 2).
+  /// The model says so after each build; a later call replaces the set.
+  public func useSources(_ botIDs: Set<UInt16>) {
+    sourceBotIDs = botIDs
+  }
+
+  /// The bundle's centre of one county or zone, from the fields an area run carries; nil for an
+  /// area the bundle does not know. What the reducer judges a county against a bot's stated
+  /// circle with (spec §5).
+  static func areaCentres(_ tables: MeshWXTables) -> WeatherAreaCentre {
+    { stateIndex, isCounty, number in
+      let run = MeshWXAreaRun(stateIndex: stateIndex, isCounty: isCounty, start: number, run: 1)
+      guard let ugc = run.ugcCodes(states: tables.states).first else { return nil }
+      if isCounty {
+        return tables.county(ugc).map { MeshWXCoordinate(latitude: $0.lat, longitude: $0.lon) }
+      }
+      return tables.zone(ugc).map { MeshWXCoordinate(latitude: $0.lat, longitude: $0.lon) }
+    }
+  }
+
+  // MARK: Events
+
+  /// A fresh stream of events. Registration is synchronous, so nothing yielded after this
+  /// call is dropped. Re-subscribe per connection: the container is rebuilt.
+  public nonisolated func events() -> AsyncStream<WeatherEvent> {
+    eventBroadcaster.subscribe()
+  }
+
+  /// Ends every subscriber's loop; called from `ServiceContainer.tearDown()`.
+  nonisolated func finishEvents() {
+    eventBroadcaster.finish()
+  }
+
+  // MARK: Lifecycle
+
+  private struct StampedDatagram: Sendable {
+    let datagram: ChannelDatagram
+    let isBacklog: Bool
+  }
+
+  /// Subscribes to channel datagrams. Called before the message polling service drains the
+  /// firmware queue, so datagrams queued while the phone was away are seen too — and marked as
+  /// backlog.
+  public func startEventMonitoring() async {
+    await loadIfNeeded()
+    stampTask?.cancel()
+    monitorTask?.cancel()
+    acknowledgementTask?.cancel()
+    session = WeatherSessionInfo(startedAt: now())
+    weatherSlots = []
+    foreignSlotsCheckedAt = [:]
+    unmatchedAcknowledgements = []
+    let acknowledgements = await transport.acknowledgements()
+    acknowledgementTask = Task { [weak self] in
+      for await code in acknowledgements {
+        guard !Task.isCancelled, let self else { break }
+        await self.acknowledge(code)
+      }
+    }
+    let stream = await transport.datagramEvents()
+    // Each datagram is marked live or backlog as it arrives, not when ingest reaches it: ingest
+    // can wait on a radio round trip for the slot check, and by then the drain may be over and
+    // a queued datagram would read as live. The mark costs one hop to the poller; the drain's
+    // next fetch after the last queued datagram is a radio round trip, which it beats.
+    let (stamped, continuation) = AsyncStream.makeStream(of: StampedDatagram.self)
+    stampTask = Task { [transport] in
+      for await event in stream {
+        guard !Task.isCancelled else { break }
+        if case let .channelDataReceived(datagram) = event {
+          continuation.yield(StampedDatagram(datagram: datagram, isBacklog: await transport.isDrainingBacklog()))
+        }
+      }
+      continuation.finish()
+    }
+    monitorTask = Task { [weak self] in
+      for await item in stamped {
+        guard !Task.isCancelled, let self else { break }
+        await self.ingest(item.datagram, isBacklog: item.isBacklog)
+      }
+    }
+  }
+
+  public func stopEventMonitoring() {
+    stampTask?.cancel()
+    stampTask = nil
+    monitorTask?.cancel()
+    monitorTask = nil
+    acknowledgementTask?.cancel()
+    acknowledgementTask = nil
+    session.startedAt = nil
+    for id in pending.keys {
+      settle(id: id, outcome: .failed("disconnected"))
+    }
+  }
+
+  /// Loads persisted state once. Safe to call repeatedly.
+  public func loadIfNeeded() async {
+    guard !isLoaded else { return }
+    isLoaded = true
+    do {
+      states = try await store.load()
+      let now = now()
+      for botID in states.keys {
+        WeatherStateReducer.pruneExpired(&states[botID]!, expiredBefore: now.addingTimeInterval(-Self.expiredWarningRetention))
+        WeatherStateReducer.prunePendingUpgrades(&states[botID]!, olderThan: now.addingTimeInterval(-Self.pendingUpgradeRetention))
+        // Saved before the phone turned away times from the future (spec §17.5): a digest stamped
+        // ahead of the clock would otherwise go on refusing every real one as older.
+        WeatherStateReducer.dropFutureTimes(&states[botID]!, now: now)
+      }
+      // Saved before the cap (phase 2): a store that already holds a spoofer's hundred ids is
+      // brought back under it at once.
+      capStates(now: now)
+    } catch {
+      logger.error("Weather state load failed: \(error.localizedDescription)")
+      states = [:]
+    }
+    if let trafficStore {
+      // A log that will not read is an empty log, never a load failure: the weather is what the
+      // service is for, and a window on the channel must not be able to take it down.
+      traffic = (try? await trafficStore.load()) ?? []
+    }
+    eventBroadcaster.yield(.stateLoaded)
+  }
+
+  // MARK: Channel traffic
+
+  /// Every datagram this phone heard on the weather slot and every Request it sent, oldest first
+  /// (docs/MESHWX_UI.md §12). Empty when no traffic-log store was injected.
+  public func trafficLog() async -> [WeatherTrafficEntry] {
+    await loadIfNeeded()
+    return traffic
+  }
+
+  /// Empties the log, on disk as well. The screen's "Clear": what is in it is a window on the
+  /// channel and nothing else depends on it, so there is nothing to undo.
+  public func clearTrafficLog() async {
+    await loadIfNeeded()
+    traffic = []
+    await persistTraffic()
+  }
+
+  /// Appends one datagram to the log and writes it. Nothing at all when no store was injected,
+  /// which is the default.
+  private func record(_ entry: WeatherTrafficEntry) async {
+    guard trafficStore != nil else { return }
+    traffic = WeatherTrafficLog.appending(entry, to: traffic)
+    await persistTraffic()
+  }
+
+  /// Logs a Request datagram this phone put on the air (spec §11). Nothing for a transport that
+  /// sends no datagram — the DEBUG bridge — and nothing for the DM fallback, which is not a
+  /// datagram on the channel and is not what the screen is about.
+  private func recordSent(_ sent: WeatherChannelRequestSent?, botID: UInt16) async {
+    guard let sent else { return }
+    await record(WeatherTrafficEntry.sent(
+      sent.payload, channelIndex: sent.channelIndex, botID: botID, at: now()))
+  }
+
+  private func persistTraffic() async {
+    guard let trafficStore else { return }
+    do {
+      try await trafficStore.save(traffic)
+    } catch {
+      logger.error("Weather traffic log save failed: \(error.localizedDescription)")
+    }
+  }
+
+  // MARK: State
+
+  public func allStates() async -> [UInt16: WeatherBotState] {
+    await loadIfNeeded()
+    return states
+  }
+
+  public func state(for botID: UInt16) async -> WeatherBotState? {
+    await loadIfNeeded()
+    return states[botID]
+  }
+
+  public func pendingRequests() -> [WeatherPendingRequest] {
+    pending.values.map(\.request).sorted { $0.sentAt < $1.sentAt }
+  }
+
+  public func sessionInfo() -> WeatherSessionInfo {
+    session
+  }
+
+  /// The transport's own link, for the tool (`WeatherTransport.linkState()`). Nil over a radio,
+  /// where the connection is the app's to report; the DEBUG bridge names the bot it talks to.
+  public func transportLink() async -> WeatherTransportLink? {
+    await transport.linkState()
+  }
+
+  /// Forgets everything held for one bot, with every answer it gave.
+  public func clearState(for botID: UInt16) async {
+    await loadIfNeeded()
+    states.removeValue(forKey: botID)
+    lastAnswers = lastAnswers.filter { slot, _ in slot.botID != botID }
+    await persist()
+  }
+
+  /// Keeps at most ``maxBotStates`` bots' states (phase 2): past the cap, the bots heard live
+  /// least recently go — never one ``protectedBotIDs`` or the pages' sources name — with every
+  /// answer slot they filled. Returns the ids evicted.
+  @discardableResult
+  private func capStates(now: Date) -> [UInt16] {
+    guard states.count > Self.maxBotStates else { return [] }
+    let kept = protectedBotIDs(states, now).union(sourceBotIDs)
+    var candidates = states.keys.filter { !kept.contains($0) }.sorted { lhs, rhs in
+      let leftLive = states[lhs]?.lastLiveHeardAt ?? .distantPast
+      let rightLive = states[rhs]?.lastLiveHeardAt ?? .distantPast
+      if leftLive != rightLive { return leftLive < rightLive }
+      let leftHeard = states[lhs]?.lastHeardAt ?? .distantPast
+      let rightHeard = states[rhs]?.lastHeardAt ?? .distantPast
+      if leftHeard != rightHeard { return leftHeard < rightHeard }
+      return lhs > rhs
+    }
+    var evicted: [UInt16] = []
+    while states.count > Self.maxBotStates, !candidates.isEmpty {
+      let botID = candidates.removeFirst()
+      states.removeValue(forKey: botID)
+      evicted.append(botID)
+    }
+    if !evicted.isEmpty {
+      let gone = Set(evicted)
+      lastAnswers = lastAnswers.filter { slot, _ in !gone.contains(slot.botID) }
+    }
+    return evicted
+  }
+
+  // MARK: Ingest
+
+  /// Decodes and applies one datagram. Anything that is not a v5 message on the `#meshwx` slot
+  /// is ignored (spec §2.1: "ignore any `data_type` other than 0xFF10"; `0xFF10` is in the
+  /// development range, so another application may use it on another channel).
+  ///
+  /// - Parameter isBacklog: the datagram was drained from the radio's queue (see
+  ///   `ingest(_:isBacklog:)` for the message).
+  @discardableResult
+  public func ingest(_ datagram: ChannelDatagram, isBacklog: Bool = false) async -> [WeatherStateChange]? {
+    guard datagram.dataType == MeshWXWire.dataType else { return nil }
+    guard await isWeatherSlot(datagram.channelIndex) else {
+      session.foreignDatagramsIgnored += 1
+      logger.warning("Ignored a MeshWX-typed datagram on channel slot \(datagram.channelIndex), which is not #meshwx")
+      return nil
+    }
+
+    /// The channel traffic log gets every datagram that reached the weather slot, whatever
+    /// happens to it next (docs/MESHWX_UI.md §12): undecodable bytes, somebody else's request, a
+    /// copy of a packet already applied, a backlog drained at connect. That is the whole point of
+    /// the screen — everywhere else in the app, "nothing arrived" and "eight packets arrived and
+    /// every one of them was a copy" look exactly the same.
+    func log(isDuplicate: Bool) async {
+      await record(WeatherTrafficEntry.received(
+        datagram.data,
+        channelIndex: datagram.channelIndex,
+        dataType: datagram.dataType,
+        snr: datagram.snr,
+        pathLength: datagram.pathLength,
+        at: now(),
+        isBacklog: isBacklog,
+        isDuplicate: isDuplicate))
+    }
+
+    let message: MeshWXMessage
+    do {
+      message = try MeshWXDecoder.decode(datagram.data)
+    } catch {
+      logger.warning("Undecodable MeshWX datagram (\(datagram.data.count) bytes): \(error)")
+      await log(isDuplicate: false)
+      return nil
+    }
+    if case .request = message.payload {
+      // Another phone asking the bot something, heard because requests are flooded on the
+      // channel now (spec §11). It is not from a bot, so it is not the bot's `seq` and not the
+      // bot being heard; its answer will arrive as a message of its own, for everyone. Dropped
+      // here rather than in the reducer so nothing about it can reach state — but it is traffic
+      // on the channel, and the traffic screen is where "who else is asking for things" lives.
+      await log(isDuplicate: false)
+      return nil
+    }
+    session.lastChannelDatagramAt = now()
+    let changes = await ingest(message, isBacklog: isBacklog)
+    await log(isDuplicate: changes.contains { if case .duplicate = $0 { true } else { false } })
+    return changes
+  }
+
+  private func isWeatherSlot(_ index: UInt8) async -> Bool {
+    if weatherSlots.contains(index) { return true }
+    if let checkedAt = foreignSlotsCheckedAt[index], now().timeIntervalSince(checkedAt) < Self.foreignSlotRecheck {
+      return false
+    }
+    guard let secret = await transport.channelSecret(at: index) else {
+      // Unreadable: accept, and ask again next time. Dropping a tornado warning because a
+      // channel read timed out is the worse error of the two.
+      return true
+    }
+    if secret == WeatherChannel.secret {
+      weatherSlots.insert(index)
+      foreignSlotsCheckedAt.removeValue(forKey: index)
+      return true
+    }
+    foreignSlotsCheckedAt[index] = now()
+    return false
+  }
+
+  /// Applies an already-decoded message: the reducer, then request settlement, then
+  /// persistence. Public so tests and previews can feed traffic without a radio.
+  ///
+  /// - Parameter isBacklog: the message was drained from the radio's queue rather than heard
+  ///   live. It changes state like any other — a warning is a warning — but proves nothing about
+  ///   now: it answers nothing for the five-minute rule and does not count as hearing the bot.
+  @discardableResult
+  public func ingest(_ message: MeshWXMessage, isBacklog: Bool = false) async -> [WeatherStateChange] {
+    // Somebody else's request (spec §11). Not a bot, not an answer, not a `seq` of the bot's:
+    // nothing about it is state, and the reducer must never see one.
+    if case .request = message.payload { return [] }
+    await loadIfNeeded()
+    let botID = message.header.bot
+    let receivedAt = now()
+    var state = states[botID] ?? WeatherBotState(botID: botID)
+    let changes = WeatherStateReducer.apply(
+      message, to: &state, receivedAt: receivedAt, areaCentre: areaCentre)
+    for case let .futureTimeRejected(minutes) in changes {
+      logger.warning(
+        "Refused a time from bot \(botID) stamped at Unix minute \(minutes), more than 15 minutes ahead of this phone's clock")
+    }
+
+    let isDuplicate = changes.contains { change in
+      if case .duplicate = change { return true }
+      return false
+    }
+    // A cancel heard while its bot was in range may end other bots' copies of the warning too
+    // (`WeatherCrossBot`, spec §20); judged against the bot's state *before* this message, so a
+    // cancel drained from the radio's queue does not vouch for itself.
+    if !isDuplicate, case let .cancel(cancel) = message.payload,
+      WeatherCrossBot.isLiveCancel(isBacklog: isBacklog, lastLiveHeardAt: state.lastLiveHeardAt, at: receivedAt) {
+      WeatherCrossBot.recordEnding(cancel.identity, at: receivedAt, in: &state)
+    }
+    if !isDuplicate, !isBacklog {
+      state.lastLiveHeardAt = max(state.lastLiveHeardAt ?? receivedAt, receivedAt)
+    }
+    let isNewBot = states[botID] == nil
+    states[botID] = state
+    if isNewBot { capStates(now: receivedAt) }
+    if isDuplicate {
+      // A duplicate changes nothing and settles nothing.
+      eventBroadcaster.yield(.received(botID: botID, message: message, changes: changes, isBacklog: isBacklog))
+      return changes
+    }
+
+    let settled = settlePending(with: message, from: botID)
+    if !isBacklog {
+      recordAnswer(message.payload, changes: changes, settled: settled, from: botID, at: receivedAt)
+    }
+    eventBroadcaster.yield(.received(botID: botID, message: message, changes: changes, isBacklog: isBacklog))
+    await persist()
+    return changes
+  }
+
+  /// Fills the answer slots a live message fills — keyed off the reducer's changes, so only what
+  /// it applied counts. Runs after settlement: a text reply becomes an answer only once this
+  /// phone owns it.
+  private func recordAnswer(
+    _ payload: MeshWXPayload,
+    changes: [WeatherStateChange],
+    settled: [WeatherRequest],
+    from botID: UInt16,
+    at receivedAt: Date
+  ) {
+    func fill(_ slotBotID: UInt16, _ key: AnswerKey, asOf contentAsOf: Date? = nil) {
+      lastAnswers[AnswerSlot(botID: slotBotID, key: key)] = AnswerRecord(receivedAt: receivedAt, contentAsOf: contentAsOf)
+    }
+    for change in changes {
+      switch (change, payload) {
+      case let (.digestApplied, .digest(digest)):
+        // `>w <area>` reads the list's slot itself, and only for an area the list speaks for
+        // (`answerSlots`): a list says nothing about a county outside the bot's area.
+        let builtAt = Date(unixMinutes: digest.nowMinutes)
+        fill(botID, .digest, asOf: builtAt)
+        fill(botID, .activeWarnings, asOf: builtAt)
+      case let (.warningStored(identity, _), .warning(warning)):
+        fill(botID, .activeWarnings)
+        // `>w <area>` by the area asked: a warning for one county is no answer about another.
+        // Every code the warning names, and the code this phone asked about when the warning
+        // settled its request — the bot may have cut the list that would have named it.
+        var codes = Set(tables.namedAreas(for: warning).map { $0.ugc.uppercased() })
+        for case let .warningsTouching(ugc) in settled { codes.insert(ugc.uppercased()) }
+        for ugc in codes { fill(botID, .warningsTouching(ugc)) }
+        fill(botID, .warning(identity))
+      case let (.observationsStored(stored), .observations(batch)) where !stored.isEmpty:
+        let observedAt = Date(unixMinutes: batch.timestampMinutes)
+        // A single station is usually somebody's `>o KJFK`, but the answer to this phone's own
+        // `>o` is a batch of one when only one station reported.
+        if batch.stations.count > 1 || settled.contains(.observations) {
+          fill(botID, .coverageObservations, asOf: observedAt)
+        }
+        // Each station's slot carries that station's own report time (spec §6.1): a reading two
+        // hours behind the batch must not look two hours fresher than it is.
+        for station in stored {
+          let reported = batch.stations.first { $0.stationIndex == station }
+            .map { batch.reportMinutes(for: $0) } ?? batch.timestampMinutes
+          fill(botID, .station(station), asOf: Date(unixMinutes: reported))
+        }
+      case let (.forecastStored(point), .forecast(forecast)) where !forecast.isUnbundledPoint:
+        fill(botID, .forecast(point), asOf: Date(unixMinutes: forecast.issuedMinutes))
+      case let (.areaSweepStored, .areaSweep(sweep)):
+        // Filled on the *first* packet, not on the last: the seven that follow are already on
+        // the air, and a second phone tapping between them must not add eight more.
+        //
+        // Keyed by what the sweep covers rather than by what anybody asked for — the sweep's own
+        // scope entries, which is the only evidence on the wire. A packet of a scoped sweep that
+        // is not the one carrying the scope names no states and fills nothing: the packet that
+        // did carry them already filled the slot, and guessing here would fill the national slot
+        // with a sweep of Texas.
+        if let states = sweepScopeCodes(of: sweep) {
+          fill(botID, .areaSweep(states: states), asOf: Date(unixMinutes: sweep.builtMinutes))
+        }
+      case let (.radarStored(tile, takenMinutes), .radar):
+        // The sending bot's slot (phase 2), keyed by the square. `contentAsOf` is the time printed
+        // on the radar image, which is what the screen then says the picture is from.
+        //
+        // Only by the **newest** frame held of that square (revision 13, §13.5): an older frame
+        // off somebody's loop is not "the newest picture the bot has", which is what a `>radar`
+        // asks for, and filling the slot with it would answer the next ask with an hour-old map.
+        guard isNewestRadarFrame(tile: tile, takenMinutes: takenMinutes, of: botID) else { break }
+        fill(botID, .radar(tile: tile), asOf: Date(unixMinutes: takenMinutes))
+      case (.coverageStored, .coverage):
+        // No content time: the statement describes the bot, not an hour (spec §10), so the
+        // five-minute rule runs from receipt alone and nothing claims it is "as of" anything.
+        fill(botID, .coverage)
+      case let (.textChunkStored(group, _, _), .text):
+        // Complete, so a reply still missing a part can be asked for again (spec §8).
+        if let assembly = states[botID]?.texts[group], assembly.isComplete, let request = assembly.request {
+          fill(botID, .text(request))
+        }
+      default:
+        break
+      }
+    }
+  }
+
+  /// Whether a frame is the newest the sending bot holds of its square: the one a `>radar` to
+  /// that bot for that square would be answered with. The bot's own frames only, as its slot is
+  /// its own (phase 2).
+  private func isNewestRadarFrame(tile: MeshWXRadarTile, takenMinutes: UInt32, of botID: UInt16) -> Bool {
+    let newest = (states[botID]?.radarTiles ?? []).lazy.filter { $0.tile == tile }
+      .map(\.takenMinutes).max()
+    return newest.map { takenMinutes >= $0 } ?? true
+  }
+
+  /// What a sweep packet says it covers, as the state codes an ``AnswerKey/areaSweep(states:)``
+  /// is keyed by: `[]` for the country, the codes for a scoped sweep whose scope entries are in
+  /// this packet, nil when it is scoped and they are not.
+  ///
+  /// A state index this bundle has no code for keeps its number, so an older bundle reading a
+  /// newer bot's sweep gets a key that is still unique to that selection rather than one that
+  /// silently equals the national slot.
+  private func sweepScopeCodes(of sweep: MeshWXAreaSweep) -> [String]? {
+    guard sweep.isScoped else { return [] }
+    guard !sweep.scope.isEmpty else { return nil }
+    return WeatherRequest.sweepStates(sweep.scope.map { tables.stateCode($0) ?? String($0) })
+  }
+
+  // MARK: Requests
+
+  /// Sends a request to a bot, or answers it from what the channel already delivered.
+  ///
+  /// **Channel first** (spec §11): the request goes out as a datagram flooded on `#meshwx`,
+  /// because a DM rides one stored route and fails silently once that route has gone stale. The
+  /// DM ladder of §14 is the fallback, for a radio that cannot send a datagram at all — and only
+  /// for a bot whose advert has been heard, a DM having nowhere to go without the whole key.
+  ///
+  /// - Returns: The pending request now on the air, or nil when this phone received the answer
+  ///   in the last five minutes and asking again would only spend airtime (a
+  ///   `requestSettled(_, .alreadyReceived)` event is emitted).
+  /// - Throws: `WeatherRequestError.rateLimited` inside the five-second spacing;
+  ///   `.transport` when the radio refuses the send.
+  @discardableResult
+  public func send(_ request: WeatherRequest, to bot: WeatherBot) async throws -> WeatherPendingRequest? {
+    await loadIfNeeded()
+    let sentAt = now()
+
+    // The newest of the slots that would answer this: one for everything but `>w <area>`, which
+    // the bot's list can answer as well as the area's own slot.
+    if let answer = answerSlots(for: request, botID: bot.botID).compactMap({ lastAnswers[$0] })
+      .max(by: { $0.receivedAt < $1.receivedAt }),
+       sentAt.timeIntervalSince(answer.receivedAt) < Self.recentAnswerWindow,
+       !answerLeavesSomethingOutstanding(request, answer: answer, botID: bot.botID, now: sentAt) {
+      let served = WeatherPendingRequest(
+        request: request, botID: bot.botID, botPublicKey: bot.publicKey, sentAt: sentAt
+      )
+      eventBroadcaster.yield(.requestSettled(
+        served, .alreadyReceived(receivedAt: answer.receivedAt, contentAsOf: answer.contentAsOf)))
+      return nil
+    }
+
+    if let lastSendAt {
+      let elapsed = sentAt.timeIntervalSince(lastSendAt)
+      if elapsed < Self.requestSpacing {
+        throw WeatherRequestError.rateLimited(retryAfter: Self.requestSpacing - elapsed)
+      }
+    }
+
+    // Claim the slot before the await so a second caller inside the window is refused even
+    // while this request is still going out.
+    lastSendAt = sentAt
+
+    // One wire timestamp and one text for the request's life: the resend repeats both
+    // (`handleTimeout`), which is what makes it a copy rather than a second request (the bot keys
+    // copies on sender, `ts` and text). The resend takes the next `seq` (spec §20).
+    let seq = nextRequestSeq
+    do {
+      let sent = try await transport.sendChannelRequest(
+        text: request.wireText, botID: bot.botID, timestamp: sentAt, seq: seq)
+      await recordSent(sent, botID: bot.botID)
+      nextRequestSeq &+= 1
+      let entry = WeatherPendingRequest(
+        request: request, botID: bot.botID, botPublicKey: bot.publicKey, sentAt: sentAt,
+        transportKind: .channel, timestamp: sentAt, seq: seq
+      )
+      pending[entry.id] = PendingEntry(request: entry, timer: nil)
+      armTimer(for: entry.id)
+      eventBroadcaster.yield(.requestSent(entry))
+      return pending[entry.id]?.request ?? entry
+    } catch let WeatherTransportError.channelRequestsUnavailable(reason) {
+      // This radio cannot flood a datagram: no v1.15.0 firmware, no `#meshwx` slot, or no key
+      // of its own. The DM still works, and the bot still answers it (spec §11).
+      // Unless the bot was only ever heard and never seen to advertise: a DM needs its whole
+      // key, and two bytes of it are all its packets carry.
+      guard bot.isAnnounced else {
+        throw WeatherRequestError.transport(
+          "this radio cannot send a channel request, and the weather radio has not announced itself for a direct message")
+      }
+      logger.notice("Channel requests unavailable (\(reason)); sending \(request.wireText) as a DM")
+    } catch {
+      throw WeatherRequestError.transport(error.localizedDescription)
+    }
+
+    var entry = WeatherPendingRequest(
+      request: request, botID: bot.botID, botPublicKey: bot.publicKey, sentAt: sentAt,
+      transportKind: .dm, timestamp: sentAt
+    )
+    let ackCode: Data
+    do {
+      ackCode = try await transport.sendRequest(
+        to: bot.publicKey, text: request.wireText, timestamp: entry.timestamp, attempt: 0)
+    } catch {
+      throw WeatherRequestError.transport(error.localizedDescription)
+    }
+    entry.ackCodes.insert(ackCode)
+    pending[entry.id] = PendingEntry(request: entry, timer: nil)
+    armTimer(for: entry.id)
+    eventBroadcaster.yield(.requestSent(entry))
+    takeEarlyAcknowledgement(ackCode, for: entry.id)
+    return pending[entry.id]?.request ?? entry
+  }
+
+  /// Every slot that would answer a request. `>w <area>` has the area's own and, where the bot's
+  /// list speaks for the area — no complete statement of the bot's coverage held, or an area
+  /// inside it (spec §5) — the list's.
+  private func answerSlots(for request: WeatherRequest, botID: UInt16) -> [AnswerSlot] {
+    guard let slot = answerSlot(for: request, botID: botID) else { return [] }
+    if case let .warningsTouching(ugc) = request, digestSpeaksFor(ugc: ugc, botID: botID) {
+      return [slot, AnswerSlot(botID: botID, key: .digest)]
+    }
+    return [slot]
+  }
+
+  /// Whether the bot's digest speaks for one county or zone
+  /// (`WeatherStateReducer.digestSpeaksFor`). A code the bundle cannot read is one nothing can say
+  /// it speaks for.
+  private func digestSpeaksFor(ugc: String, botID: UInt16) -> Bool {
+    guard let key = MeshWXAreaRun.key(forUGC: ugc, states: tables.states) else { return false }
+    let area = MeshWXWarning(
+      identity: MeshWXWarningIdentity(event: 0, office: 0, etn: 0), expiresMinutes: 0,
+      areas: [MeshWXAreaRun(stateIndex: key.stateIndex, isCounty: key.isCounty, start: key.number, run: 1)])
+    return WeatherStateReducer.digestSpeaksFor(
+      area, coverage: states[botID]?.coverage?.coverage, areaCentre: areaCentre)
+  }
+
+  private func answerSlot(for request: WeatherRequest, botID: UInt16) -> AnswerSlot? {
+    switch request {
+    case .digest: AnswerSlot(botID: botID, key: .digest)
+    case .observations: AnswerSlot(botID: botID, key: .coverageObservations)
+    case let .observation(station): stationIndex(station).map { AnswerSlot(botID: botID, key: .station($0)) }
+    case let .forecast(point): AnswerSlot(botID: botID, key: .forecast(point))
+    case .activeWarnings: AnswerSlot(botID: botID, key: .activeWarnings)
+    case let .warningsTouching(ugc): AnswerSlot(botID: botID, key: .warningsTouching(ugc.uppercased()))
+    case let .warning(identity):
+      WeatherAlertRequests.identity(from: identity, tables: tables).map { AnswerSlot(botID: botID, key: .warning($0)) }
+    case .warningText, .forecastDiscussion, .spaceWeather, .stormReports, .rainfall, .metar, .taf, .hazardousOutlook:
+      AnswerSlot(botID: botID, key: .text(request))
+    case .coverage: AnswerSlot(botID: botID, key: .coverage)
+    case let .areaSweep(_, states):
+      AnswerSlot(botID: botID, key: .areaSweep(states: WeatherRequest.sweepStates(states)))
+    // By the tile, from the bot asked (spec revision 11, §13; phase 2). Pictures are made about
+    // every fifteen minutes, so five minutes after one arrived there is nothing newer to fetch —
+    // and the bot would refuse the ask anyway, reason 4, spending a packet on the refusal.
+    case let .radar(latitude, longitude, zoom):
+      AnswerSlot(botID: botID, key: .radar(tile: MeshWXRadarTile.containing(
+        latitude: latitude, longitude: longitude, zoom: zoom)))
+    // A loop asks for the pictures this phone does **not** hold (spec revision 13, §13.5), so a
+    // tile received a minute ago says nothing about whether it is answered. The bot keeps its own
+    // five-minute rule per frame and leaves out what everyone listening already has.
+    case .radarLoop: nil
+    // `>part` is the repair, not the answer, and the five-minute rule must never hold it back
+    // (docs/MESHWX.md "Requests"). The case it exists for is precisely an answer received in the
+    // last five minutes that arrived with holes in it: refusing the ask on the grounds that the
+    // answer just came would leave "4 of 7 parts arrived" on screen with nothing to do about it,
+    // which is the thing the owner asked to be able to fix.
+    //
+    // It is cheap enough to be safe: three packets instead of eight, the bot resends the same
+    // `(group, idx)` at most once every 30 s whoever asks, and the app offers the ask only while
+    // the assembly is incomplete (`WeatherPartsOffer`).
+    case .parts: nil
+    // Nobody can say in advance which point the bot will pick, so there is no slot to key. A
+    // place the bot resolves for itself has never had one.
+    case .homeForecast, .forecastForPlace, .forecastAt: nil
+    }
+  }
+
+  /// Whether an alert request goes out although its answer arrived in the last five minutes,
+  /// because that answer cannot speak for what the addressed bot's state has outstanding now:
+  ///
+  /// - A gap detected after the answer arrived: what was missed came later, and only a new
+  ///   answer can say what it was.
+  /// - A gap at or before an answer built too soon after it to clear it (a list inside
+  ///   `WeatherStateReducer.digestMargin` of the gap, including the list whose own `seq`
+  ///   revealed it), once a list built now would. Before then a new list could not clear it
+  ///   either, and would carry nothing the one just received does not.
+  /// - For `>w` and `>w <area>`: a warning a list named that never arrived, or an upgrade whose
+  ///   replacement never came. Whatever arrived evidently did not carry it.
+  private func answerLeavesSomethingOutstanding(
+    _ request: WeatherRequest,
+    answer: AnswerRecord,
+    botID: UInt16,
+    now: Date
+  ) -> Bool {
+    switch request {
+    case .digest, .activeWarnings, .warningsTouching, .warning: break
+    default: return false
+    }
+    guard let state = states[botID] else { return false }
+    if state.needsDigest, let gap = state.gapDetectedAt {
+      if gap > answer.receivedAt { return true }
+      let margin = WeatherStateReducer.digestMargin
+      if let builtAt = answer.contentAsOf, gap >= builtAt.addingTimeInterval(-margin),
+         now >= gap.addingTimeInterval(margin) {
+        return true
+      }
+    }
+    switch request {
+    // `>d` is where asking for missing warnings one at a time ends, once the bot has said it has
+    // none of them, so it must not wait out the five minutes either.
+    case .digest, .activeWarnings, .warningsTouching:
+      return !state.missingFromDigest.isEmpty || !state.pendingUpgrades.isEmpty
+    default:
+      return false
+    }
+  }
+
+  private func armTimer(for id: UUID) {
+    pending[id]?.timer?.cancel()
+    // A flood is answered in one to three seconds or not at all; a DM may still be finding its
+    // way along a route (spec §19: 10 s for a datagram, 15 s for a DM).
+    let timeout = pending[id]?.request.transportKind == .channel ? channelAnswerTimeout : answerTimeout
+    pending[id]?.timer = Task { [weak self] in
+      try? await Task.sleep(for: timeout)
+      guard !Task.isCancelled else { return }
+      await self?.handleTimeout(id: id)
+    }
+  }
+
+  private func handleTimeout(id: UUID) async {
+    guard var entry = pending[id] else { return }
+    // Heard since the **first** send (the wire timestamp is the first send's time): a bot that
+    // answered somebody else while this request was on its second or third try was in range for
+    // the whole of it, and "heard but didn't answer" is the honest label for that.
+    let botWasHeard = wasHeardLive(botID: entry.request.botID, since: entry.request.timestamp)
+    if entry.request.transportKind == .channel {
+      await handleChannelTimeout(id: id, entry: entry, botWasHeard: botWasHeard)
+      return
+    }
+    let attempt = entry.request.attempt
+    // What the next send is, or nil to stop asking:
+    //
+    // - Attempt 0 unheard and unconfirmed → attempt 1, the same DM along the same route, into
+    //   silence.
+    // - Attempt 0 **confirmed** by the bot's radio but unanswered → attempt 1 too: the request
+    //   arrived, its answer may not have, and the bot answers a copy from its cache for one
+    //   packet. Never a flood for a confirmed request: the route works.
+    // - Attempt 0 unconfirmed while the bot **was** heard, or attempt 1 unconfirmed → the route
+    //   is the suspect, not the range. Forget it and send attempt 2 by flood, once (the chat
+    //   rule, D5). The field log of 16 September had seven requests in six minutes that never
+    //   reached a bot which was on the air and answering others.
+    // - Attempt 2, or a confirmed request past attempt 0 → done.
+    let next: Int?
+    switch (attempt, entry.request.botRadioReceived, botWasHeard) {
+    case (0, false, false): next = 1
+    case (0, true, false): next = 1
+    case (0, false, true), (1, false, _): next = Self.floodAttempt
+    default: next = nil
+    }
+    guard let next else {
+      settle(id: id, outcome: .timedOut(botWasHeard: botWasHeard, botRadioReceived: entry.request.botRadioReceived))
+      return
+    }
+    if next == Self.floodAttempt {
+      // A reset that fails still leaves the send worth making: on the route it has is no worse
+      // than not asking again at all.
+      try? await transport.resetPath(to: entry.request.botPublicKey)
+      guard pending[id] != nil else { return }
+    }
+    entry.request.attempt = next
+    entry.request.sentAt = now()
+    pending[id] = entry
+    let ackCode: Data
+    do {
+      lastSendAt = entry.request.sentAt
+      // The first send's timestamp and text again: to the bot's radio the same message, to the
+      // bot (the same text from one sender within two minutes is one request) the same request,
+      // which it answers again from its cache once its last answer is 12 s gone.
+      ackCode = try await transport.sendRequest(
+        to: entry.request.botPublicKey, text: entry.request.request.wireText,
+        timestamp: entry.request.timestamp, attempt: UInt8(next))
+    } catch {
+      settle(id: id, outcome: .failed(error.localizedDescription))
+      return
+    }
+    // Answered while the resend was going out. Otherwise update the entry in place: a
+    // confirmation of an earlier send may have landed meanwhile.
+    guard pending[id] != nil else { return }
+    pending[id]?.request.ackCodes.insert(ackCode)
+    if let request = pending[id]?.request {
+      eventBroadcaster.yield(.requestSent(request))
+    }
+    takeEarlyAcknowledgement(ackCode, for: id)
+    armTimer(for: id)
+  }
+
+  /// The datagram's etiquette (spec §11, §19, §20): send once, send it once more after 10 s,
+  /// never a third time.
+  ///
+  /// The resend repeats the first send's `ts` and text, so to the bot it is a copy of one request
+  /// and not a second one — the bot keys copies on sender, `ts` and text, never on `seq` — and it
+  /// is answered again only once its last answer is 12 s gone, so a resend can never double the
+  /// airtime of an answer. It goes out under the **next `seq`** (phase 2, 18 October 2026): the
+  /// same bytes again have the same packet hash, and every repeater that carried the first send
+  /// drops the second as already seen, so the retry that was meant to get through a lost hop never
+  /// left the first repeater. Nothing here waits on a confirmation: a datagram has none, which is
+  /// why `botRadioReceived` is always false for one.
+  private func handleChannelTimeout(id: UUID, entry: PendingEntry, botWasHeard: Bool) async {
+    guard entry.request.attempt == 0 else {
+      settle(id: id, outcome: .timedOut(botWasHeard: botWasHeard, botRadioReceived: false))
+      return
+    }
+    var entry = entry
+    entry.request.attempt = 1
+    entry.request.sentAt = now()
+    entry.request.seq = nextRequestSeq
+    nextRequestSeq &+= 1
+    pending[id] = entry
+    do {
+      lastSendAt = entry.request.sentAt
+      let sent = try await transport.sendChannelRequest(
+        text: entry.request.request.wireText, botID: entry.request.botID,
+        timestamp: entry.request.timestamp, seq: entry.request.seq)
+      // The resend is its own row: a second transmission went on the air, and a screen about
+      // airtime must show both.
+      await recordSent(sent, botID: entry.request.botID)
+    } catch {
+      settle(id: id, outcome: .failed(error.localizedDescription))
+      return
+    }
+    // Answered while the resend was going out.
+    guard pending[id] != nil else { return }
+    if let request = pending[id]?.request {
+      eventBroadcaster.yield(.requestSent(request))
+    }
+    armTimer(for: id)
+  }
+
+  /// Live only: a backlog drained from the radio's queue after the request went out is stamped
+  /// with the drain time, and says nothing about whether the bot can hear this phone now.
+  private func wasHeardLive(botID: UInt16, since date: Date) -> Bool {
+    guard let heard = states[botID]?.lastLiveHeardAt else { return false }
+    return heard > date
+  }
+
+  // MARK: Confirmations
+
+  /// Takes one of the radio's delivery confirmations: the pending request expecting the code,
+  /// from either transmission, was received by the bot's radio.
+  func acknowledge(_ code: Data) {
+    guard let id = pending.first(where: { $0.value.request.ackCodes.contains(code) })?.key else {
+      unmatchedAcknowledgements.append(code)
+      if unmatchedAcknowledgements.count > Self.unmatchedAcknowledgementLimit {
+        unmatchedAcknowledgements.removeFirst()
+      }
+      return
+    }
+    markReceivedByBotRadio(id: id)
+  }
+
+  /// A confirmation that reached the service before the send expecting it came back.
+  private func takeEarlyAcknowledgement(_ code: Data, for id: UUID) {
+    guard let index = unmatchedAcknowledgements.firstIndex(of: code) else { return }
+    unmatchedAcknowledgements.remove(at: index)
+    markReceivedByBotRadio(id: id)
+  }
+
+  private func markReceivedByBotRadio(id: UUID) {
+    guard let request = pending[id]?.request, !request.botRadioReceived else { return }
+    pending[id]?.request.botRadioReceived = true
+    if let updated = pending[id]?.request {
+      eventBroadcaster.yield(.requestReceivedByBotRadio(updated))
+    }
+  }
+
+  private func settle(id: UUID, outcome: WeatherRequestOutcome) {
+    guard let entry = pending.removeValue(forKey: id) else { return }
+    entry.timer?.cancel()
+    eventBroadcaster.yield(.requestSettled(entry.request, outcome))
+  }
+
+  /// Pairs an incoming message with the requests waiting on it; returns the requests it answered.
+  private func settlePending(with message: MeshWXMessage, from botID: UInt16) -> [WeatherRequest] {
+    let waiting = pending.values
+      .map(\.request)
+      .filter { $0.botID == botID || $0.request.acceptsAnswerFromAnyBot }
+      .sorted { $0.sentAt < $1.sentAt }
+    guard !waiting.isEmpty else { return [] }
+
+    if case let .notAvailable(notAvailable) = message.payload {
+      // One refusal answers the oldest request with that letter — and only a request to the
+      // bot that refused.
+      if let match = waiting.first(where: {
+        $0.botID == botID && $0.request.requestLetter == notAvailable.requestLetter
+      }) {
+        settle(id: match.id, outcome: .notAvailable(notAvailable.reason))
+      }
+      return []
+    }
+
+    var answered: [WeatherRequest] = []
+    for request in waiting where answers(message.payload, request: request, from: botID) {
+      markAnswered(request, by: message.payload, from: botID)
+      settle(id: request.id, outcome: .answered)
+      answered.append(request.request)
+    }
+    return answered
+  }
+
+  /// Whether a message answers a request: its kind and what it names, and for a text reply, its
+  /// words (`WeatherTextMatch`) read over every chunk of the reply received so far.
+  private func answers(_ payload: MeshWXPayload, request: WeatherPendingRequest, from botID: UInt16) -> Bool {
+    guard Self.reply(
+      payload, satisfies: request.request.expectedReply, fromAddressedBot: request.botID == botID,
+      stationIndex: stationIndex, tables: tables)
+    else { return false }
+    switch request.request {
+    // `>part 212 1,4,6` settles the moment **any** of the indexes asked for lands (docs/MESHWX.md
+    // "Requests"). The other two are still on the air behind it, and a request that only settled on
+    // the last of them would time out every time one of the three was lost again — which is the
+    // situation the ask exists for. A packet of group 212 the request did not name is the bot's
+    // ordinary transmission, and settles nothing.
+    case let .parts(_, indexes, _):
+      switch payload {
+      case let .areaSweep(sweep): return indexes.contains(sweep.index)
+      case let .text(chunk): return indexes.contains(chunk.index)
+      default: return false
+      }
+    // `>f <lat>,<lon>`: the bot picks the point (docs/MESHWX.md "Requests"), so the check is
+    // distance from what was asked about, not the index.
+    case let .forecastAt(latitude, longitude):
+      guard case let .forecast(forecast) = payload else { return false }
+      return Self.forecast(forecast, answersLatitude: latitude, longitude: longitude, tables: tables)
+    default:
+      break
+    }
+    guard case let .text(chunk) = payload else { return true }
+    guard let assembly = states[botID]?.texts[chunk.group] else { return false }
+    return WeatherTextMatch.matches(request.request, assembly: assembly, states: states, tables: tables)
+  }
+
+  /// Whether a forecast answers a `>f <lat>,<lon>` (docs/MESHWX.md "Requests"). Static and
+  /// table-driven so the rule is testable without a service.
+  ///
+  /// Two ways it can:
+  ///
+  /// - The bot resolved a point this bundle does not carry (`0xFFFF`). There is nothing to measure
+  ///   — that is the whole reason the ask exists — and only the bot asked can send one that
+  ///   answers this request, so any such forecast from it while the request is pending is it.
+  /// - The point is bundled, and it is within ``forecastSubstituteKilometres`` of the coordinate
+  ///   asked about. The same 80 km `>f <index>` already allows, for the same reason: the bot
+  ///   forecasts the coordinates, and what comes back may be a neighbouring point under its own
+  ///   index.
+  static func forecast(
+    _ forecast: MeshWXForecast, answersLatitude latitude: Double, longitude: Double,
+    tables: MeshWXTables
+  ) -> Bool {
+    if forecast.isUnbundledPoint { return true }
+    guard let point = tables.point(at: forecast.pointIndex) else { return false }
+    return MeshWXGeo.distanceKilometres(
+      fromLat: latitude, lon: longitude, toLat: point.lat, lon: point.lon)
+      <= forecastSubstituteKilometres
+  }
+
+  /// Records on the stored answer that this phone asked for it: the channel is shared, and a
+  /// forecast or a text reply is otherwise indistinguishable from one somebody else requested.
+  private func markAnswered(_ request: WeatherPendingRequest, by payload: MeshWXPayload, from botID: UInt16) {
+    switch payload {
+    case let .forecast(forecast):
+      guard states[botID]?.forecasts[forecast.pointIndex] != nil else { return }
+      states[botID]?.forecasts[forecast.pointIndex]?.requestedHere = true
+      if forecast.isUnbundledPoint, case let .forecastForPlace(place) = request.request {
+        // A forecast the bot resolved from a place string comes back as point 0xFFFF; the
+        // request is its only label (spec §7).
+        states[botID]?.forecasts[forecast.pointIndex]?.requestLabel = place
+      }
+      if case let .forecastAt(latitude, longitude) = request.request {
+        // The coordinate asked about is the only name this forecast has (docs/MESHWX.md
+        // "State"), so it moves out of the one slot for answers nobody here asked for and under
+        // its own key. The reducer put it there because the reducer holds no requests and could
+        // not know; this is the moment it becomes an answer to a question of this phone's.
+        let key = WeatherRequest.coordinateKey(latitude: latitude, longitude: longitude)
+        guard var stored = states[botID]?.unbundledForecasts[WeatherBotState.unbundledAskKey]
+          ?? states[botID]?.forecasts[forecast.pointIndex]
+        else { return }
+        stored.requestedHere = true
+        stored.requestLabel = key
+        states[botID]?.unbundledForecasts.removeValue(forKey: WeatherBotState.unbundledAskKey)
+        states[botID]?.unbundledForecasts[key] = stored
+        states[botID]?.forecasts[forecast.pointIndex]?.requestLabel = key
+        if var state = states[botID] {
+          WeatherStateReducer.pruneUnbundledForecasts(&state)
+          states[botID] = state
+        }
+      }
+    case let .text(chunk):
+      states[botID]?.texts[chunk.group]?.request = request.request
+    case let .areaSweep(sweep):
+      // Only if the sweep is still held as this one: the reducer may have set this packet aside
+      // as older than what it holds, and then the sweep on screen is not this request's answer.
+      guard let index = states[botID]?.areaSweeps.firstIndex(where: {
+        $0.group == sweep.group && $0.builtMinutes == sweep.builtMinutes
+      }) else { return }
+      switch request.request {
+      case .areaSweep:
+        states[botID]?.areaSweeps[index].request = request.request
+      case .parts:
+        // A `>part` repairs a sweep that may well be somebody else's; it does not make the sweep
+        // this phone's. It is recorded only where nothing else claims it, so the screen can still
+        // say this phone spent airtime on the map it is looking at.
+        if states[botID]?.areaSweeps[index].request == nil {
+          states[botID]?.areaSweeps[index].request = request.request
+        }
+      default:
+        break
+      }
+    default:
+      break
+    }
+  }
+
+  /// Whether a message is the answer a request expects. Static and injectable so the pairing
+  /// rules are testable without a service. For text this checks the subject only; the service
+  /// also reads the words (`WeatherTextMatch`) before a reply settles anything.
+  ///
+  /// - Parameter fromAddressedBot: the message came from the bot the request went to. A request
+  ///   that only its own bot can settle never reaches here with another bot's message
+  ///   (`WeatherRequest.acceptsAnswerFromAnyBot`); a forecast uses it to accept a substituted
+  ///   point only from the bot that chose it.
+  static func reply(
+    _ payload: MeshWXPayload,
+    satisfies kind: WeatherReplyKind,
+    fromAddressedBot: Bool,
+    stationIndex: (String) -> UInt16?,
+    tables: MeshWXTables
+  ) -> Bool {
+    switch (kind, payload) {
+    case (.digest, .digest):
+      return true
+    case (.warnings, .warning), (.warnings, .digest):
+      // `>w` answers with warnings then a digest. Either first message settles the request; the
+      // rest keep flowing into state regardless.
+      return true
+    case let (.warning(identity), .warning(warning)):
+      // An identity the tables cannot read matches nothing; a Not available or the timeout
+      // settles it instead.
+      return WeatherAlertRequests.identity(from: identity, tables: tables) == warning.identity
+    case let (.warningsTouching(ugc), .warning(warning)):
+      // The bot matches the code exactly against the product's own area list (spec §14), but cuts
+      // the list it sends to 30, 12 or 6 runs, or drops it, to fit one packet. From the bot asked,
+      // a warning whose list may have been cut can be the answer without naming the code.
+      if tables.namedAreas(for: warning).contains(where: { $0.ugc.caseInsensitiveCompare(ugc) == .orderedSame }) {
+        return true
+      }
+      guard fromAddressedBot else { return false }
+      return [0, 6, 12, MeshWXWire.maxAreaRuns].contains(warning.areas?.count ?? 0)
+    case let (.observations(station), .observations(batch)):
+      // `>o` is answered by the bot's batch whatever its size: one station when only one reported.
+      guard let station else { return true }
+      guard let index = stationIndex(station) else { return fromAddressedBot }
+      if batch.stations.contains(where: { $0.stationIndex == index }) { return true }
+      // The named station had nothing fresh, so the bot sent the nearest one that did (spec §6,
+      // revision 8). Only from the bot asked, only alone: somebody else's batch that happens to
+      // hold a neighbour is not this request's answer.
+      guard fromAddressedBot, batch.stations.count == 1,
+            let asked = tables.station(icao: station),
+            let answered = tables.station(at: batch.stations[0].stationIndex)
+      else { return false }
+      return MeshWXGeo.distanceKilometres(fromLat: asked.lat, lon: asked.lon, toLat: answered.lat, lon: answered.lon)
+        <= observationSubstituteKilometres
+    case let (.forecast(point), .forecast(forecast)):
+      guard let point else { return true }
+      if forecast.pointIndex == point { return true }
+      // The bot forecasts the point's coordinates: what comes back may be a nearby point within
+      // 80 km under its own index, a place with no bundled point, or — from a revision 2 bot —
+      // another index with the same coordinates.
+      guard fromAddressedBot else { return false }
+      if forecast.isUnbundledPoint { return true }
+      guard let asked = tables.point(at: point), let answered = tables.point(at: forecast.pointIndex) else {
+        return false
+      }
+      return MeshWXGeo.distanceKilometres(fromLat: asked.lat, lon: asked.lon, toLat: answered.lat, lon: answered.lon)
+        <= forecastSubstituteKilometres
+    case let (.text(subject), .text(chunk)):
+      return chunk.subject.rawValue == subject
+    case (.coverage, .coverage):
+      // Nothing to check it against: a statement is about the bot that sent it, and only the
+      // bot asked can answer this one (`acceptsAnswerFromAnyBot`).
+      return true
+    case (.areaSweep, .areaSweep):
+      // The first packet of the sweep settles the tap; the other seven keep flowing into state,
+      // exactly as `>w`'s warnings do after its first message. Only the bot asked reaches here.
+      //
+      // Neither the breadth nor the scope asked for is checked against the answer: a bot that
+      // will not widen to advisories answers the narrow sweep, and one whose feed reaches only
+      // Texas answers a two-state ask with Texas. Both are still the answer to the tap, and the
+      // sweep's own flag and scope entries are what the screen reads.
+      return true
+    case let (.parts(group), .areaSweep(sweep)):
+      // Which of the indexes asked for arrived is checked by the service against the request
+      // itself (`answers`), the way a text reply's words are: the reply kind carries the group
+      // and no more. Only the bot asked reaches here — a `group` byte is one bot's counter.
+      return fromAddressedBot && sweep.group == group
+    case let (.parts(group), .text(chunk)):
+      return fromAddressedBot && chunk.group == group
+    case let (.radar(tile), .radar(radar)):
+      // The square of earth and nothing else (spec revision 11, §13). Not the `taken`: whatever
+      // the bot has is the answer to "show me the radar here", and a phone that held out for a
+      // newer picture would time out on the only one there is. Not the bot either — the lattice
+      // is fixed so that a tile is a tile, and another bot answering somebody else's `>radar` for
+      // the same square settles this one for free.
+      return radar.tile == tile
+    default:
+      return false
+    }
+  }
+
+  // MARK: Persistence
+
+  private func persist() async {
+    let now = now()
+    for botID in states.keys {
+      WeatherStateReducer.pruneExpired(&states[botID]!, expiredBefore: now.addingTimeInterval(-Self.expiredWarningRetention))
+      WeatherStateReducer.prunePendingUpgrades(&states[botID]!, olderThan: now.addingTimeInterval(-Self.pendingUpgradeRetention))
+      trim(&states[botID]!, now: now)
+      if !states[botID]!.endings.isEmpty {
+        states[botID]!.endings = WeatherCrossBot.prunedEndings(states[botID]!.endings, now: now)
+      }
+    }
+    do {
+      try await store.save(states)
+    } catch {
+      logger.error("Weather state save failed: \(error.localizedDescription)")
+    }
+  }
+
+  /// Keeps the per-bot collections bounded: every answer the channel carries is kept, whoever
+  /// asked, so all three have both an age and a ceiling — and what a screen is showing survives
+  /// both (`WeatherStateReducer`).
+  private func trim(_ state: inout WeatherBotState, now: Date) {
+    WeatherStateReducer.pruneTexts(
+      &state, receivedBefore: now.addingTimeInterval(-Self.textRetention), limit: Self.maxTextsPerBot)
+    WeatherStateReducer.pruneForecasts(
+      &state, receivedBefore: now.addingTimeInterval(-Self.forecastRetention), limit: Self.maxForecastsPerBot)
+    // The reducer already keeps one reading per station; what grows is the number of stations,
+    // one for every `>o <ICAO>` anyone on the channel has ever asked for. A station goes once it
+    // has neither been in one of this bot's scheduled batches nor been heard at all in the
+    // window — a reading nothing on screen would use, and no evidence of the bot's area either.
+    let cutoff = now.addingTimeInterval(-Self.observationRetention)
+    state.observations = state.observations.filter { _, stored in
+      (stored.lastBatchAt ?? .distantPast) >= cutoff || stored.receivedAt >= cutoff
+    }
+    if state.observations.count > Self.maxObservationsPerBot {
+      // The bot's own area first, newest batch down: it outlives answers to one-off questions.
+      let keep = Set(state.observations
+        .sorted { lhs, rhs in
+          let lhsBatch = lhs.value.lastBatchMinutes ?? 0
+          let rhsBatch = rhs.value.lastBatchMinutes ?? 0
+          if lhsBatch != rhsBatch { return lhsBatch > rhsBatch }
+          if lhs.value.receivedAt != rhs.value.receivedAt { return lhs.value.receivedAt > rhs.value.receivedAt }
+          return lhs.key < rhs.key
+        }
+        .prefix(Self.maxObservationsPerBot)
+        .map(\.key))
+      state.observations = state.observations.filter { keep.contains($0.key) }
+    }
+  }
+}
