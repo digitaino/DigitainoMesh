@@ -16,7 +16,6 @@ import SwiftUI
 /// weighted fills, no map stack of its own, zero `import MapKit`.
 struct SignalMapperCoverageView: View {
   @Environment(\.appState) private var appState
-  @Environment(\.colorScheme) private var colorScheme
 
   @State private var model = SignalMapperCoverageModel()
   @State private var cameraBounds: MLNCoordinateBounds?
@@ -89,13 +88,6 @@ struct SignalMapperCoverageView: View {
   private var showLabels = AppStorageKey.defaultMapShowLabels
   @AppStorage(AppStorageKey.mapNorthLocked.rawValue)
   private var isNorthLocked = AppStorageKey.defaultMapNorthLocked
-  @AppStorage(AppStorageKey.mapColorSchemePreference.rawValue)
-  private var mapColorSchemeRaw = AppStorageKey.defaultMapColorSchemePreference
-
-  private var mapIsDark: Bool {
-    let preference = AppColorSchemePreference(rawValue: mapColorSchemeRaw) ?? .system
-    return resolvedMapIsDark(preference: preference, colorScheme: colorScheme)
-  }
 
   var body: some View {
     content
@@ -358,7 +350,6 @@ struct SignalMapperCoverageView: View {
         lines: breadcrumbLines,
         overlays: mapOverlays,
         mapStyle: mapStyleSelection,
-        isDarkMode: mapIsDark,
         isOffline: !appState.offlineMapService.isNetworkAvailable,
         showLabels: showLabels,
         showsUserLocation: true,
@@ -425,7 +416,7 @@ struct SignalMapperCoverageView: View {
       .animation(.snappy(duration: 0.25), value: showsFocusStrip)
       .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { noteBottomInset($0) }
     }
-    .toolbar(isSurveying ? .hidden : .visible, for: .tabBar)
+    .hidingBottomTabBar(isSurveying)
     // The map gates camera moves until its style has loaded, which usually lands after the
     // first build, so the fit is re-issued on that signal rather than left to chance.
     // Both auto-frame triggers are dead during a ride: re-framing on a mid-ride store

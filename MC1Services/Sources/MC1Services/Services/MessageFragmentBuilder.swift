@@ -90,7 +90,7 @@ public enum MessageFragmentBuilder {
     fragments.append(.mapPreview(MapPreviewFragmentState(
       latitude: latitude,
       longitude: longitude,
-      isDark: envInputs.isDark,
+      isDark: envInputs.mapBasemapIsDark,
       isOffline: envInputs.isOffline,
       isReady: inputs.isMapPreviewReady
     )))

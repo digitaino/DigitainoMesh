@@ -16,6 +16,13 @@ public actor RequestResponseSerializer {
   private var isRequestInFlight = false
   private var waiters: [CheckedContinuation<Void, Never>] = []
 
+  /// ContactService lives outside MeshCore, and the memberwise initializer is internal.
+  public init() {}
+
+  public var waiterCountForTest: Int {
+    waiters.count
+  }
+
   /// Acquires the serializer, waiting if another request/response exchange is active.
   public func acquire() async {
     if !isRequestInFlight {

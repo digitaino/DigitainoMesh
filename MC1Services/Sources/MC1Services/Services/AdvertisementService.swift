@@ -51,11 +51,15 @@ public actor AdvertisementService {
 
   let session: any AdvertisingSessionOps & SessionEventStreaming
   let dataStore: any PersistenceStoreProtocol
+  let contactService: ContactService
 
   private var eventMonitorTask: Task<Void, Never>?
   /// In-flight `flushPendingDeletedKeys`. Callers wait through
   /// `.contactDeletedCleanup`, not only `deleteContacts`.
   private var deletionFlushTask: Task<Void, Never>?
+  #if DEBUG
+    var testDeletionFlushWaiters = 0
+  #endif
   var currentRadioID: UUID?
 
   /// When true, advert delta sync is deferred (full or manual contact sync).
@@ -130,6 +134,7 @@ public actor AdvertisementService {
   public init(
     session: any AdvertisingSessionOps & SessionEventStreaming,
     dataStore: any PersistenceStoreProtocol,
+    contactService: ContactService,
     advertSyncDebounce: Duration = .seconds(5),
     advertSyncMinInterval: Duration = .seconds(30),
     advertSyncBusyBackoff: Duration = .seconds(5),
@@ -137,6 +142,7 @@ public actor AdvertisementService {
   ) {
     self.session = session
     self.dataStore = dataStore
+    self.contactService = contactService
     self.advertSyncDebounce = advertSyncDebounce
     self.advertSyncMinInterval = advertSyncMinInterval
     self.advertSyncBusyBackoff = advertSyncBusyBackoff
@@ -244,6 +250,10 @@ public actor AdvertisementService {
 
   func flushPendingDeletedKeys() async {
     if let deletionFlushTask {
+      #if DEBUG
+        testDeletionFlushWaiters += 1
+        defer { testDeletionFlushWaiters -= 1 }
+      #endif
       await deletionFlushTask.value
       return
     }
@@ -292,13 +302,13 @@ public actor AdvertisementService {
     await task.value
   }
 
-  /// The keys of queued 0x8F deletions whose contact must stay: favourites and contacts with
-  /// messages (rule of 2026-09-01, docs/guides/Sync.md).
+  /// The keys of queued 0x8F deletions whose contact must stay: favourites, pinned chats and
+  /// contacts with messages (rule of 2026-09-01, docs/guides/Sync.md).
   private func keysKeepingHistory(_ keys: Set<Data>, radioID: UUID) async throws -> Set<Data> {
     var kept: Set<Data> = []
     for key in keys {
       guard let contact = try await dataStore.fetchContact(radioID: radioID, publicKey: key) else { continue }
-      if contact.isFavorite {
+      if contact.isFavorite || contact.isPinned {
         kept.insert(key)
       } else if try await !dataStore.fetchMessages(contactID: contact.id, limit: 1, offset: 0).isEmpty {
         kept.insert(key)
@@ -388,7 +398,7 @@ public actor AdvertisementService {
         return nil
       }
       let frame = meshContact.toContactFrame()
-      let saveResult = try await dataStore.saveContact(radioID: radioID, from: frame)
+      let saveResult = try await dataStore.insertContactIfAbsent(radioID: radioID, from: frame)
       // Stamp phone recency before the returned DTO is read so a debounce-window
       // insert is not prune-eligible under a stale radio lastModified.
       let receivedAt = pendingAdvertReceiveTimes[publicKey] ?? Date()
@@ -612,8 +622,8 @@ public actor AdvertisementService {
     }
   }
 
-  /// Path discovery response: update out-path and stamp phone-clock lastHeard.
-  /// Leaves radio lastModified unchanged — it is a radio watermark, not phone time.
+  /// A decodable out path is written with `setPath` before success is reported.
+  /// The phone row changes only after the radio accepts, and a reserved length byte is not written.
   private func handlePathDiscoveryResponse(result: PathInfo, radioID: UUID) async {
     // Chunk debug output using the hash size each direction declares on
     // the wire so mode-skew between firmware and the cached device record
@@ -633,22 +643,6 @@ public actor AdvertisementService {
 
     do {
       if let contact = try await dataStore.fetchContact(radioID: radioID, publicKeyPrefix: result.publicKeyPrefix) {
-        // Prefer the response's self-describing length byte over the device's
-        // cached hashSize — the wire encoding is authoritative for this path.
-        let frame = ContactFrame(
-          publicKey: contact.publicKey,
-          type: contact.type,
-          flags: contact.flags,
-          outPathLength: result.outPathLength,
-          outPath: result.outPath,
-          name: contact.name,
-          lastAdvertTimestamp: contact.lastAdvertTimestamp,
-          latitude: contact.latitude,
-          longitude: contact.longitude,
-          lastModified: contact.lastModified
-        )
-        _ = try await dataStore.saveContact(radioID: radioID, from: frame)
-
         do {
           _ = try await dataStore.touchContactHeard(
             radioID: radioID,
@@ -660,6 +654,25 @@ public actor AdvertisementService {
             "Path response lastHeard stamp failed: \(error.localizedDescription)"
           )
         }
+
+        if result.outHopCount != nil {
+          do {
+            try await contactService.setPath(
+              radioID: radioID,
+              publicKey: contact.publicKey,
+              path: result.outPath,
+              pathLength: result.outPathLength
+            )
+          } catch {
+            logger.error("Path discovery radio write failed: \(error.localizedDescription)")
+            let serviceError = error as? ContactServiceError ?? .sendFailed
+            eventBroadcaster.yield(.pathDiscoveryWriteFailed(result, serviceError))
+            return
+          }
+        }
+      } else if result.outHopCount != nil {
+        eventBroadcaster.yield(.pathDiscoveryWriteFailed(result, .contactNotFound))
+        return
       }
 
       eventBroadcaster.yield(.pathDiscoveryResponse(result))
@@ -735,13 +748,13 @@ public actor AdvertisementService {
       let contactID = contact.id
 
       // The radio ran out of room; the user deleted nothing. Like a full-sync prune, this
-      // reconciles the cache and never history: a favorite or a contact with messages stays
+      // reconciles the cache and never history: a favorite, a pinned chat or a contact with messages stays
       // on the phone (and, for an identity on several radios, may well still be on another).
       // deleteContact would take every DM with it. Rule of 2026-09-01, docs/guides/Sync.md.
       let hasHistory = try await !dataStore.fetchMessages(contactID: contactID, limit: 1, offset: 0).isEmpty
-      if contact.isFavorite || hasHistory {
+      if contact.isFavorite || contact.isPinned || hasHistory {
         logger.notice(
-          "Overwrite oldest: keeping '\(contactName)' on the phone (favorite=\(contact.isFavorite), hasMessages=\(hasHistory))"
+          "Overwrite oldest: keeping '\(contactName)' on the phone (favorite=\(contact.isFavorite), pinned=\(contact.isPinned), hasMessages=\(hasHistory))"
         )
         eventBroadcaster.yield(.nodeStorageFullChanged(isFull: false))
         eventBroadcaster.yield(.contactUpdated)

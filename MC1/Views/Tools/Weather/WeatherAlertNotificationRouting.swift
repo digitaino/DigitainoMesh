@@ -9,13 +9,8 @@ import SwiftUI
 /// `WeatherAlertNotificationTap` holds what was tapped; this turns it into navigation, and the
 /// tool takes the alert itself when it next appears.
 ///
-/// **What it can do.** Selecting the Tools tab and naming Weather as the open tool is enough on
-/// iPad, whose Tools columns render from `NavigationCoordinator.selectedTool`. On iPhone the
-/// compact `ToolsView` seeds its stack from that selection once and is deliberately one-way
-/// afterwards, so a tap lands on the Tools list and the alert opens as soon as Weather is
-/// opened. A route that pushed it would need a `pendingTool` on `NavigationCoordinator`, the way
-/// `pendingChatContact` works, and `ToolsView` observing it to append to its path — one property
-/// and one `onChange`, in two files this change does not own.
+/// **What it does.** Selects the Tools tab and names Weather as the open tool; `ToolsView`
+/// follows a tool named from outside, so Weather opens on top of whatever tool was showing.
 @MainActor
 enum WeatherAlertNotificationRouting {
   private static var isInstalled = false

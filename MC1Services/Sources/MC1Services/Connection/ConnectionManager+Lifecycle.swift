@@ -153,6 +153,13 @@ public extension ConnectionManager {
       logger.error("repeater unread-count migration failed: \(error)")
     }
 
+    // Copy existing contact favorites into the local chat pin once.
+    do {
+      try await persistenceStore.performChatPinMigration()
+    } catch {
+      logger.error("chat pin migration failed: \(error)")
+    }
+
     // Normalize sortDate to createdAt on pre-existing messages so date-header grouping
     // keeps their current display order and any rows an interim build sorted by send time
     // are un-buried. Must run before stateMachine.activate() so no restoration-driven sync
@@ -202,111 +209,109 @@ public extension ConnectionManager {
       // Auto-reconnect to last device if available
       if let lastDeviceID = lastConnectedDeviceID {
         logger.info("Attempting auto-reconnect to last device: \(lastDeviceID)")
-
-        // Set intent before checking state
         connectionIntent = .wantsConnection()
-
-        // Check if last device was WiFi - try WiFi first
-        let dataStore = persistenceStore
-        if let device = try? await dataStore.fetchDevice(id: lastDeviceID),
-           let wifiMethod = device.connectionMethods.first(where: { $0.isWiFi }) {
-          if case let .wifi(host, port, _) = wifiMethod {
-            logger.info("Auto-reconnecting via WiFi to \(host):\(port)")
-            do {
-              try await connectViaWiFi(host: host, port: port)
-              return
-            } catch {
-              logger.warning("WiFi auto-reconnect failed: \(error.localizedDescription)")
-              // Fall through to try BLE
-            }
-          }
-        }
-
-        // Activate BLE state machine before checking BLE state restoration status.
-        // Must be after: ASK activation (line 700), explicit disconnect guard (line 709).
-        // Must be before: isAutoReconnecting check, isDeviceConnectedToSystem.
-        await stateMachine.activate()
-
-        // If state machine is already auto-reconnecting (from state restoration),
-        // let it complete rather than fighting with it
-        if await stateMachine.isAutoReconnecting {
-          let diagnostics = await stateMachine.linkDiagnostics
-          let blePhase = diagnostics.phase
-          let blePeripheralState = diagnostics.peripheralState ?? "none"
-          logger.info(
-            "State restoration in progress - blePhase: \(blePhase), blePeripheralState: \(blePeripheralState), waiting for auto-reconnect"
-          )
-          return
-        }
-
-        if await stateMachine.isConnected, await stateMachine.connectedDeviceID == lastDeviceID {
-          logger.info("State restoration complete - device already connected, waiting for session setup")
-          return
-        }
-
-        // If iOS kept the BLE link alive (common across app updates) but restoration didn't fire,
-        // adopt the system-connected peripheral rather than treating it as "connected elsewhere".
-        if await startAdoptingLastSystemConnectedPeripheralIfAvailable(
-          deviceID: lastDeviceID,
-          context: "activate"
-        ) {
-          return
-        }
-
-        // Check if device is connected to another app before auto-reconnect
-        // Silently skip per HIG: minimize interruptions on app launch
-        if await isDeviceConnectedToOtherApp(lastDeviceID) {
-          logger.info("Auto-reconnect skipped: device connected to another app")
-          let diagnostics = await stateMachine.linkDiagnostics
-          let bleState = diagnostics.centralState
-          let blePhase = diagnostics.phase
-          let blePeripheralState = diagnostics.peripheralState ?? "none"
-          persistDisconnectDiagnostic(
-            "source=activate.autoReconnectSkippedOtherApp, " +
-              "device=\(lastDeviceID.uuidString.prefix(8)), " +
-              "bleState=\(bleState), " +
-              "blePhase=\(blePhase), " +
-              "blePeripheralState=\(blePeripheralState), " +
-              "intent=\(connectionIntent)"
-          )
-
-          // Keep intent so we can retry on foreground/watchdog, but avoid
-          // fighting another app's connection on launch.
-          startReconnectionWatchdog()
-          return
-        }
-
-        do {
-          try await connect(to: lastDeviceID)
-        } catch {
-          logger.warning("Auto-reconnect failed: \(error.localizedDescription)")
-          let diagnostics = await stateMachine.linkDiagnostics
-          let bleState = diagnostics.centralState
-          let blePhase = diagnostics.phase
-          let blePeripheralState = diagnostics.peripheralState ?? "none"
-          persistDisconnectDiagnostic(
-            "source=activate.autoReconnectFailed, " +
-              "device=\(lastDeviceID.uuidString.prefix(8)), " +
-              "bleState=\(bleState), " +
-              "blePhase=\(blePhase), " +
-              "blePeripheralState=\(blePeripheralState), " +
-              "error=\(error.localizedDescription), " +
-              "intent=\(connectionIntent)"
-          )
-          // A setup-phase auth failure arrives here as a thrown error and never
-          // fires onDisconnection, so surface the guided recovery now rather than
-          // waiting for the watchdog's first tick. The latch keeps the watchdog
-          // from re-presenting it.
-          if case BLEError.authenticationFailed = error {
-            surfaceAuthenticationFailure(deviceID: lastDeviceID)
-          }
-          startReconnectionWatchdog()
-          // Don't propagate - auto-reconnect failure is not fatal
-        }
+        let device = try? await persistenceStore.fetchDevice(id: lastDeviceID)
+        await reconnectLastUsedTransport(device: device, lastDeviceID: lastDeviceID)
       } else {
         logger.info("No last connected device - skipping auto-reconnect")
       }
     #endif
+  }
+
+  /// Dials the last-used transport, then the other one when that dial throws.
+  /// A WiFi-only row stops after a WiFi failure. Restoration, an already-connected radio, adoption, and another app's link do not fall through.
+  func reconnectLastUsedTransport(device: DeviceDTO?, lastDeviceID: UUID) async {
+    if case let .wifi(host, port, _) = device?.lastUsedConnectionMethod {
+      logger.info("Auto-reconnecting via WiFi to \(host):\(port)")
+      do {
+        try await connectViaWiFi(host: host, port: port)
+        return
+      } catch {
+        logger.warning("WiFi auto-reconnect failed: \(error.localizedDescription)")
+        guard device?.bluetoothPeripheralID != nil else { return }
+      }
+    }
+    await reconnectViaBluetooth(device: device, lastDeviceID: lastDeviceID)
+  }
+
+  private func reconnectViaBluetooth(device: DeviceDTO?, lastDeviceID: UUID) async {
+    let dialID = device?.bluetoothPeripheralID ?? lastDeviceID
+
+    // Activate BLE before restoration checks. This follows ASK activation and the
+    // explicit-disconnect guard, and precedes the auto-reconnect and system-link checks.
+    await stateMachine.activate()
+
+    if await stateMachine.isAutoReconnecting {
+      let diagnostics = await stateMachine.linkDiagnostics
+      let blePhase = diagnostics.phase
+      let blePeripheralState = diagnostics.peripheralState ?? "none"
+      logger.info(
+        "State restoration in progress - blePhase: \(blePhase), blePeripheralState: \(blePeripheralState), waiting for auto-reconnect"
+      )
+      return
+    }
+
+    if await stateMachine.isConnected, await stateMachine.connectedDeviceID == dialID {
+      logger.info("State restoration complete - device already connected, waiting for session setup")
+      return
+    }
+
+    if await startAdoptingLastSystemConnectedPeripheralIfAvailable(
+      deviceID: dialID,
+      context: "activate",
+      requireLastConnected: dialID == lastDeviceID
+    ) {
+      return
+    }
+
+    if await isDeviceConnectedToOtherApp(dialID) {
+      logger.info("Auto-reconnect skipped: device connected to another app")
+      let diagnostics = await stateMachine.linkDiagnostics
+      let bleState = diagnostics.centralState
+      let blePhase = diagnostics.phase
+      let blePeripheralState = diagnostics.peripheralState ?? "none"
+      persistDisconnectDiagnostic(
+        "source=activate.autoReconnectSkippedOtherApp, " +
+          "device=\(dialID.uuidString.prefix(8)), " +
+          "bleState=\(bleState), " +
+          "blePhase=\(blePhase), " +
+          "blePeripheralState=\(blePeripheralState), " +
+          "intent=\(connectionIntent)"
+      )
+      startReconnectionWatchdog()
+      return
+    }
+
+    do {
+      try await connect(to: dialID)
+    } catch {
+      logger.warning("Auto-reconnect failed: \(error.localizedDescription)")
+      let diagnostics = await stateMachine.linkDiagnostics
+      let bleState = diagnostics.centralState
+      let blePhase = diagnostics.phase
+      let blePeripheralState = diagnostics.peripheralState ?? "none"
+      persistDisconnectDiagnostic(
+        "source=activate.autoReconnectFailed, " +
+          "device=\(dialID.uuidString.prefix(8)), " +
+          "bleState=\(bleState), " +
+          "blePhase=\(blePhase), " +
+          "blePeripheralState=\(blePeripheralState), " +
+          "error=\(error.localizedDescription), " +
+          "intent=\(connectionIntent)"
+      )
+      if case BLEError.authenticationFailed = error {
+        surfaceAuthenticationFailure(deviceID: dialID)
+      }
+      if case let .wifi(host, port, _) = device?.wifiConnectionMethod {
+        do {
+          try await connectViaWiFi(host: host, port: port)
+          return
+        } catch {
+          logger.warning("WiFi fallback after BLE auto-reconnect failed: \(error.localizedDescription)")
+        }
+      }
+      startReconnectionWatchdog()
+    }
   }
 
   // MARK: - Connection
@@ -333,10 +338,19 @@ public extension ConnectionManager {
     // cancellation would still drive a real BLE connect to completion.
     try Task.checkCancellation()
 
+    if connectionTeardownCount > 0 {
+      invalidatePowerOffForConnectionChange()
+    }
+    try await waitForConnectionTeardown()
+
     // Circuit breaker: prevent rapid reconnection loops after repeated failures
     guard shouldAllowConnection(force: forceReconnect) else {
       logger.info("[BLE] Circuit breaker open, rejecting connection to \(deviceID.uuidString.prefix(8))")
       throw BLEError.connectionFailed("Connection blocked by circuit breaker (cooling down)")
+    }
+
+    if connectedDevice?.id != deviceID || connectionState == .disconnected {
+      invalidatePowerOffForConnectionChange()
     }
 
     if activeReconnectDeviceID == deviceID {
@@ -375,9 +389,13 @@ public extension ConnectionManager {
       reconnectionCoordinator.clearReconnectingDevice()
       cancelResyncLoop()
       stopReconnectionWatchdog()
-      await cleanupResources()
-      await transport.disconnect()
-      connectionState = .disconnected
+      do {
+        beginConnectionTeardown()
+        defer { endConnectionTeardown() }
+        await cleanupResources()
+        await transport.disconnect()
+        connectionState = .disconnected
+      }
     }
 
     // Handle already-connected cases
@@ -401,22 +419,24 @@ public extension ConnectionManager {
       logger.info("Connection already claimed for \(deviceID.uuidString.prefix(8)), ignoring")
       return
     }
+    let attemptID = UUID()
+    connectingAttemptID = attemptID
     connectingDeviceID = deviceID
 
     // Handle state restoration auto-reconnect
     let transportAutoReconnecting = await stateMachine.isAutoReconnecting
-    guard connectingDeviceID == deviceID else { throw CancellationError() }
+    guard ownsConnectionAttempt(deviceID: deviceID, attemptID: attemptID) else { throw CancellationError() }
     if transportAutoReconnecting {
       let restoringDeviceID = await stateMachine.connectedDeviceID
       let diagnostics = await stateMachine.linkDiagnostics
       let blePhase = diagnostics.phase
       let blePeripheralState = diagnostics.peripheralState ?? "none"
-      guard connectingDeviceID == deviceID else { throw CancellationError() }
+      guard ownsConnectionAttempt(deviceID: deviceID, attemptID: attemptID) else { throw CancellationError() }
 
       if restoringDeviceID != deviceID {
         logger.info("Cancelling state restoration auto-reconnect to \(restoringDeviceID?.uuidString ?? "unknown") to connect to \(deviceID)")
         await transport.disconnect()
-        guard connectingDeviceID == deviceID else { throw CancellationError() }
+        guard ownsConnectionAttempt(deviceID: deviceID, attemptID: attemptID) else { throw CancellationError() }
       } else if forceReconnect, connectionState == .disconnected {
         // Reached when the coordinator's reconnect cycle was already cleared while
         // the state machine itself is still mid auto-reconnect for this device.
@@ -424,7 +444,7 @@ public extension ConnectionManager {
           deviceID: deviceID,
           detail: " - blePhase: \(blePhase), blePeripheralState: \(blePeripheralState)"
         )
-        guard connectingDeviceID == deviceID else { throw CancellationError() }
+        guard ownsConnectionAttempt(deviceID: deviceID, attemptID: attemptID) else { throw CancellationError() }
       } else {
         // Same device - let auto-reconnect complete instead of racing with it.
         // The reconnection handler will create the session when auto-reconnect succeeds.
@@ -446,7 +466,7 @@ public extension ConnectionManager {
       }
     }
 
-    if try await adoptOrRejectSystemConnectedLink(deviceID: deviceID, forceFullSync: forceFullSync) {
+    if try await adoptOrRejectSystemConnectedLink(deviceID: deviceID, attemptID: attemptID, forceFullSync: forceFullSync) {
       return
     }
 
@@ -485,9 +505,9 @@ public extension ConnectionManager {
       let maxAttempts = (forceReconnect && !pairing.hasSystemPairingRegistry)
         ? Self.unverifiedConnectAttempts
         : Self.defaultConnectAttempts
-      try await connectWithRetry(deviceID: deviceID, maxAttempts: maxAttempts)
+      try await connectWithRetry(deviceID: deviceID, attemptID: attemptID, maxAttempts: maxAttempts)
     } catch {
-      guard connectingDeviceID == deviceID else {
+      guard ownsConnectionAttempt(deviceID: deviceID, attemptID: attemptID) else {
         logger.info("Connection to \(deviceID.uuidString.prefix(8)) superseded")
         throw error
       }
@@ -500,13 +520,16 @@ public extension ConnectionManager {
       connectionState = .disconnected
       throw error
     }
-    connectingDeviceID = nil
+    if ownsConnectionAttempt(deviceID: deviceID, attemptID: attemptID) {
+      connectingDeviceID = nil
+    }
   }
 
   /// Adopts leftover GATT this app owns, or throws if another app holds the link.
   /// Settings forget clears last-connected; ASK membership or an in-flight pair still marks it ours.
   private func adoptOrRejectSystemConnectedLink(
     deviceID: UUID,
+    attemptID: UUID,
     forceFullSync: Bool
   ) async throws -> Bool {
     let ownedLink = isOwnedSystemConnectedLink(deviceID)
@@ -523,21 +546,21 @@ public extension ConnectionManager {
           do {
             try await waitForPairingAdoptionToSettle()
           } catch {
-            if connectingDeviceID == deviceID { connectingDeviceID = nil }
+            if ownsConnectionAttempt(deviceID: deviceID, attemptID: attemptID) { connectingDeviceID = nil }
             throw error
           }
         }
-        if connectingDeviceID == deviceID { connectingDeviceID = nil }
+        if ownsConnectionAttempt(deviceID: deviceID, attemptID: attemptID) { connectingDeviceID = nil }
         return true
       }
-      guard connectingDeviceID == deviceID else { throw CancellationError() }
+      guard ownsConnectionAttempt(deviceID: deviceID, attemptID: attemptID) else { throw CancellationError() }
     }
 
     if await isDeviceConnectedToOtherApp(deviceID), !ownedLink {
-      if connectingDeviceID == deviceID { connectingDeviceID = nil }
+      if ownsConnectionAttempt(deviceID: deviceID, attemptID: attemptID) { connectingDeviceID = nil }
       throw BLEError.deviceConnectedToOtherApp
     }
-    guard connectingDeviceID == deviceID else { throw CancellationError() }
+    guard ownsConnectionAttempt(deviceID: deviceID, attemptID: attemptID) else { throw CancellationError() }
     return false
   }
 
@@ -557,6 +580,11 @@ public extension ConnectionManager {
   /// Disconnects from the current device.
   /// - Parameter reason: The reason for disconnecting (for debugging)
   func disconnect(reason: DisconnectReason = .userInitiated) async {
+    if reason != .powerOff {
+      invalidatePowerOffForConnectionChange()
+    }
+    beginConnectionTeardown()
+    defer { endConnectionTeardown() }
     let initialState = String(describing: connectionState)
     let transportName = switch currentTransportType {
     case .bluetooth: "bluetooth"
@@ -598,22 +626,22 @@ public extension ConnectionManager {
     // A radio set up as another node reconnects straight away as that node: its channel sync
     // state belongs to the node it was, so it goes like a device switch's.
     case .userInitiated, .statusMenuDisconnectTap, .forgetDevice, .deviceRemovedFromSettings, .factoryReset,
-         .switchingDevice, .identityChanged:
+         .switchingDevice, .identityChanged, .powerOff:
       connectionIntent = .userDisconnected
       persistIntent()
       surfacedAuthFailureDeviceID = nil
       lastCleanChannelSync = nil
       lastAttemptedChannelSync = nil
-    case .resyncFailed, .wifiAddressChange, .wifiReconnectPrep, .pairingFailed:
+    case .resyncFailed, .wifiAddressChange, .wifiReconnectPrep, .bluetoothConnectPrep, .pairingFailed:
       // Preserve .wantsConnection so health check can retry
       break
     }
 
-    // Capture and clear synchronously, mirroring teardownSessionForReconnect:
-    // a racing connect can install a new container during the awaits below,
-    // and re-reading self.services would tear that new container down.
+    // Drop the live stack before the awaits. Callbacks during teardown must see the connection already gone.
     let oldServices = services
     let oldSession = session
+    let capturedTransportType = currentTransportType
+    let capturedWiFi = wifiTransport
     services = nil
     session = nil
     logger.info("[BLE] disconnect: state → .disconnected")
@@ -621,6 +649,10 @@ public extension ConnectionManager {
     connectingDeviceID = nil
     connectedDevice = nil
     allowedRepeatFreqRanges = []
+
+    #if DEBUG
+      await testConnectionTeardownHandler?()
+    #endif
 
     if let oldServices {
       // Mark room sessions disconnected before tearing down services
@@ -631,19 +663,22 @@ public extension ConnectionManager {
       await oldServices.syncCoordinator.onDisconnected(notificationService: oldServices.notificationService)
     }
 
-    // Stop session
-    await oldSession?.stop()
+    // The manager closes the captured transport after the old receive loop stops.
+    await oldSession?.stop(disconnectTransport: false)
 
-    // Disconnect appropriate transport based on current type
-    if let wifiTransport {
-      await wifiTransport.disconnect()
-      self.wifiTransport = nil
-    } else {
+    // Close the captured transport before releasing replacement connections.
+    if let capturedWiFi {
+      await capturedWiFi.disconnect()
+      if wifiTransport === capturedWiFi {
+        wifiTransport = nil
+      }
+    } else if session == nil, currentTransportType == capturedTransportType {
       await transport.disconnect()
     }
 
-    // Clear transport type
-    currentTransportType = nil
+    if session == nil, currentTransportType == capturedTransportType {
+      currentTransportType = nil
+    }
 
     persistDisconnectDiagnostic(
       "source=disconnect(reason), " +
@@ -672,6 +707,8 @@ public extension ConnectionManager {
   /// Connects to the simulator device with mock data.
   /// Used for simulator builds and demo mode on device.
   func simulatorConnect() async throws {
+    invalidatePowerOffForConnectionChange()
+    try await waitForConnectionTeardown()
     logger.info("Starting simulator connection")
 
     connectionIntent = .wantsConnection()
@@ -732,7 +769,8 @@ public extension ConnectionManager {
 
       connectingDeviceID = nil
       connectionState = .ready
-      await onDeviceSynced?()
+      // The seeded fixture is the simulator's whole recipient set.
+      await onDeviceSynced?(true)
       logger.info("Simulator connection complete")
     } catch {
       connectingDeviceID = nil
@@ -747,6 +785,9 @@ public extension ConnectionManager {
   ///
   /// - Parameter deviceID: UUID of the new device to connect to
   func switchDevice(to deviceID: UUID) async throws {
+    try Task.checkCancellation()
+    invalidatePowerOffForConnectionChange()
+    try await waitForConnectionTeardown()
     logger.info("Switching to device: \(deviceID)")
     lastCleanChannelSync = nil
     lastAttemptedChannelSync = nil
@@ -816,9 +857,9 @@ public extension ConnectionManager {
 
       // Notify observers before sync starts so they can wire callbacks
       await onConnectionReady?()
-      let syncSucceeded = await performInitialSync(radioID: radioID, services: newServices, context: "Device switch", forceFullSync: true)
+      let syncResult = await performInitialSync(radioID: radioID, services: newServices, context: "Device switch", forceFullSync: true)
 
-      guard await promoteToReady(syncSucceeded: syncSucceeded, expectedServices: newServices, transportType: .bluetooth) else { return }
+      guard await promoteToReady(syncResult: syncResult, expectedServices: newServices, transportType: .bluetooth) else { return }
 
       // Refill the rebuild-preserve budget so a spent counter on radio A cannot
       // force radio B's first rebuild failure to sever.
@@ -831,8 +872,12 @@ public extension ConnectionManager {
       // .connecting or .connected. pairNewDevice routes through here when
       // an old radio is still connected, so the failure alert's recovery
       // actions need clean state.
-      await cleanupConnection()
-      await transport.disconnect()
+      do {
+        beginConnectionTeardown()
+        defer { endConnectionTeardown() }
+        await cleanupConnection()
+        await transport.disconnect()
+      }
       // cleanupConnection tore down the session without firing onConnectionLost,
       // so observers (and the radio's Live Activity) would otherwise be stranded
       // on the old device's "connected" state. Route through the same callback the

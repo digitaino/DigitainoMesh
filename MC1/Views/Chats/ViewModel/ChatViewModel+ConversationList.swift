@@ -10,6 +10,11 @@ extension ChatViewModel {
   /// usable offline). Firmware alert rules catch up in `reconcileOnConnect`.
   func setNotificationLevel(_ conversation: Conversation, level: NotificationLevel) async {
     let originalLevel = conversation.notificationLevel
+    let radioID = switch conversation {
+    case let .direct(contact): contact.radioID
+    case let .channel(channel): channel.radioID
+    case let .room(session): session.radioID
+    }
 
     // Capture once so the write and the badge update target the same container.
     let dataStore = dataStore
@@ -33,6 +38,14 @@ extension ChatViewModel {
         // is neither. Nothing to push.
         try await dataStore?.setSessionNotificationLevel(session.id, level: level)
       }
+      if let dataStore {
+        #if DEBUG
+          conversationMutationPostSaveHook?()
+        #endif
+        if currentRadioIDProvider() == radioID, self.dataStore === dataStore {
+          syncCoordinator?.notifyConversationsChanged()
+        }
+      }
       await notificationService?.updateBadgeCount()
     } catch {
       // Rollback on failure
@@ -44,6 +57,8 @@ extension ChatViewModel {
   /// Live row for `id` from the fetch buffers.
   /// Swipe chrome keeps the value from first reveal, so toggles must not use that snapshot.
   func liveConversation(id: UUID) -> Conversation? {
+    // Fetch buffers are not observed; retained controls follow snapshot publication.
+    _ = snapshotGeneration
     if let contact = conversations.first(where: { $0.id == id }) {
       return .direct(contact)
     }
@@ -87,101 +102,79 @@ extension ChatViewModel {
     )
   }
 
-  // MARK: - Favorite
+  // MARK: - Pin
 
-  /// Sets favorite state for a conversation with optimistic UI update.
-  ///
-  /// The channel and room info sheets call this on the open conversation's own view model,
-  /// whose list buffers are empty. An unlisted conversation therefore writes the requested
-  /// value as-is: the sheet's copy is stale after its first flip, so it can't be diffed against.
-  func setFavorite(_ conversation: Conversation, isFavorite: Bool) async {
-    let current = liveConversation(id: conversation.id)
-    guard current?.isFavorite != isFavorite else { return }
-
-    await writeFavorite(current ?? conversation, isFavorite: isFavorite, disableAnimation: false)
+  /// Writes the local pin. Does not check the connection and does not change the radio favorite flag.
+  /// Moves a listed row first, then saves. A missing store throws before that move.
+  func setPinned(_ conversation: Conversation, isPinned: Bool) async throws {
+    try await writePin(conversation, isPinned: isPinned, disableAnimation: false)
   }
 
-  /// Toggles favorite state for a conversation.
-  ///
-  /// For direct messages (contacts), this pushes the change to the device and waits
-  /// for confirmation before updating the UI. For channels and rooms (app-only),
-  /// this uses optimistic updates.
-  ///
-  /// - Parameters:
-  ///   - conversation: The conversation to toggle
-  ///   - disableAnimation: When true, disables SwiftUI List animations to prevent
-  ///     conflicts with swipe action dismissal animations
-  func toggleFavorite(_ conversation: Conversation, disableAnimation: Bool = false) async {
+  /// Flips the live row's pin. Swipe passes `disableAnimation` so the row move does not
+  /// fight the swipe dismissal.
+  func togglePinned(_ conversation: Conversation, disableAnimation: Bool = false) async {
     guard let current = liveConversation(id: conversation.id) else { return }
-    await writeFavorite(current, isFavorite: !current.isFavorite, disableAnimation: disableAnimation)
-  }
-
-  /// Saves `newState` and mirrors it into the list buffers; a no-op there for an unlisted row.
-  private func writeFavorite(_ current: Conversation, isFavorite newState: Bool, disableAnimation: Bool) async {
-    let originalState = !newState
-
-    switch current {
-    case let .direct(contact):
-      // Contacts sync with device - wait for confirmation. The flag lives on the radio,
-      // so this one needs a connection; channels and rooms below are phone-only.
-      guard connectionStateProvider() == .ready else { return }
-      togglingFavoriteID = contact.id
-      defer { togglingFavoriteID = nil }
-
-      do {
-        try await contactService?.setContactFavorite(contact.id, isFavorite: newState)
-        // Device confirmed - update local UI
-        applyFavoriteUpdate(current, isFavorite: newState, disableAnimation: disableAnimation)
-      } catch {
-        logger.error("Failed to toggle contact favorite: \(error)")
-      }
-
-    case let .channel(channel):
-      // Channels are app-only - optimistic update
-      applyFavoriteUpdate(current, isFavorite: newState, disableAnimation: disableAnimation)
-
-      do {
-        try await dataStore?.setChannelFavorite(channel.id, isFavorite: newState)
-      } catch {
-        // Rollback on failure
-        applyFavoriteUpdate(current, isFavorite: originalState, disableAnimation: disableAnimation)
-        logger.error("Failed to toggle channel favorite: \(error)")
-      }
-
-    case let .room(session):
-      // Rooms are app-only - optimistic update
-      applyFavoriteUpdate(current, isFavorite: newState, disableAnimation: disableAnimation)
-
-      do {
-        try await dataStore?.setSessionFavorite(session.id, isFavorite: newState)
-      } catch {
-        // Rollback on failure
-        applyFavoriteUpdate(current, isFavorite: originalState, disableAnimation: disableAnimation)
-        logger.error("Failed to toggle room favorite: \(error)")
-      }
+    do {
+      try await writePin(current, isPinned: !current.isPinned, disableAnimation: disableAnimation)
+    } catch {
+      errorMessage = error.userFacingMessage
     }
   }
 
-  private func applyFavoriteUpdate(_ conversation: Conversation, isFavorite: Bool, disableAnimation: Bool) {
+  private func writePin(_ conversation: Conversation, isPinned: Bool, disableAnimation: Bool) async throws {
+    let listed = liveConversation(id: conversation.id)
+    let current = listed ?? conversation
+    let original = current.isPinned
+    // Unlisted details may hold stale pins, so explicit writes must reach the store.
+    guard listed == nil || original != isPinned else { return }
+    guard let dataStore else { throw ChatPinError.storeUnavailable }
+
+    let isListed = listed != nil
+    if isListed {
+      applyPinUpdate(current, isPinned: isPinned, disableAnimation: disableAnimation)
+    }
+
+    do {
+      switch current {
+      case let .direct(contact):
+        try await dataStore.setContactPinned(contact.id, isPinned: isPinned)
+      case let .channel(channel):
+        try await dataStore.setChannelPinned(channel.id, isPinned: isPinned)
+      case let .room(session):
+        try await dataStore.setSessionPinned(session.id, isPinned: isPinned)
+      }
+    } catch {
+      if isListed {
+        applyPinUpdate(current, isPinned: original, disableAnimation: disableAnimation)
+      }
+      logger.error("Failed to save chat pin: \(error)")
+      throw error
+    }
+  }
+
+  private func applyPinUpdate(_ conversation: Conversation, isPinned: Bool, disableAnimation: Bool) {
+    let update = {
+      self.updateConversationPinState(conversation, isPinned: isPinned)
+    }
     if disableAnimation {
       var transaction = Transaction()
       transaction.disablesAnimations = true
       withTransaction(transaction) {
-        updateConversationFavoriteState(conversation, isFavorite: isFavorite)
+        update()
       }
     } else {
-      updateConversationFavoriteState(conversation, isFavorite: isFavorite)
+      update()
     }
   }
 
-  /// Updates the favorite state in the local buffers. `recomputeSnapshot()` runs synchronously
+  /// Updates the pin in the local buffers. `recomputeSnapshot()` runs synchronously
   /// after the mutation so it stays inside any `disablesAnimations` transaction the caller opens.
-  private func updateConversationFavoriteState(_ conversation: Conversation, isFavorite: Bool) {
+  private func updateConversationPinState(_ conversation: Conversation, isPinned: Bool) {
     updateConversation(
       conversation,
-      direct: { $0.with(isFavorite: isFavorite) },
-      channel: { $0.with(isFavorite: isFavorite) },
-      room: { $0.with(isFavorite: isFavorite) }
+      direct: { $0.with(isPinned: isPinned) },
+      channel: { $0.with(isPinned: isPinned) },
+      room: { $0.with(isPinned: isPinned) }
     )
   }
 
@@ -231,6 +224,7 @@ extension ChatViewModel {
     // Invalidates in-flight indicator refreshes; the list event task is not `reloadTask`.
     failedSendRefreshGeneration &+= 1
     failedSendConversationIDs = []
+    retainingDirectContactIDs = nil
     recomputeSnapshot()
   }
 
@@ -290,6 +284,16 @@ extension ChatViewModel {
     recomputeSnapshot()
   }
 
+  private func fetchRetainingDirectContactIDs(radioID: UUID) async -> Set<UUID>? {
+    guard let dataStore else { return nil }
+    do {
+      return try await dataStore.fetchContactIDs(radioID: radioID)
+    } catch {
+      logger.error("fetchContactIDs failed: \(error.localizedDescription)")
+      return nil
+    }
+  }
+
   /// Load conversations for a device
   func loadConversations(radioID: UUID) async {
     guard let dataStore else { return }
@@ -298,7 +302,10 @@ extension ChatViewModel {
     errorBannerMessage = nil
 
     do {
-      conversations = try await dataStore.fetchConversations(radioID: radioID)
+      let fetchedConversations = try await dataStore.fetchConversations(radioID: radioID)
+      let contactIDs = await fetchRetainingDirectContactIDs(radioID: radioID)
+      conversations = fetchedConversations
+      retainingDirectContactIDs = contactIDs
       recomputeSnapshot()
     } catch {
       errorBannerMessage = L10n.Chats.Chats.Error.loadConversationsFailed
@@ -362,10 +369,13 @@ extension ChatViewModel {
     let fetchedRooms = await (try? dataStore.fetchRemoteNodeSessions(radioID: radioID))?
       .filter(\.isRoom)
     if Task.isCancelled { return }
+    let fetchedContactIDs = await fetchRetainingDirectContactIDs(radioID: radioID)
+    if Task.isCancelled { return }
 
     if let fetchedConversations { conversations = fetchedConversations }
     if let fetchedChannels { channels = fetchedChannels }
     if let fetchedRooms { roomSessions = fetchedRooms }
+    retainingDirectContactIDs = fetchedContactIDs
     errorBannerMessage = banner
     reconcilePendingRemovals()
     recomputeSnapshot()

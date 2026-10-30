@@ -119,6 +119,11 @@ public actor PersistenceStore: ModelActor, PersistenceStoreProtocol {
     /// Test-only hook at the top of `fetchDevice(id:)`. The pairing query skips that id on throw.
     var fetchDeviceByIDFaultInjection: (@Sendable () throws -> Void)?
 
+    /// Test-only hook at the top of `fetchContactIDs`. A throw leaves that fetch unfinished.
+    var fetchContactIDsFaultInjection: (@Sendable () throws -> Void)?
+
+    var updateContactLastMessageFaultInjection: (@Sendable () throws -> Void)?
+
     func setDeleteContactsFaultInjection(_ hook: (@Sendable () throws -> Void)?) {
       deleteContactsFaultInjection = hook
     }
@@ -204,6 +209,10 @@ public actor PersistenceStore: ModelActor, PersistenceStoreProtocol {
   ///          Packet Scope observer count behind the eye badge on sent bubbles.
   ///          Both optional and additive; existing rows migrate to NULL, which
   ///          reads as "never looked up" and simply re-checks on the next pass.
+  /// - v11→v12: (upstream 1.6, its v8→v9) Added Contact.isPinned (Bool, default false).
+  ///          Channel.isFavorite and RemoteNodeSession.isFavorite renamed to isPinned via
+  ///          originalName (same column). A one-time copy pins contacts that were
+  ///          favorites (`performChatPinMigration`).
   public static func createContainer(inMemory: Bool = false) throws -> ModelContainer {
     if !inMemory {
       let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!

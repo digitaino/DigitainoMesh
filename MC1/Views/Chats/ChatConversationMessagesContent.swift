@@ -162,7 +162,10 @@ struct ChatConversationMessagesContent: View {
         onResendAtNextPower: { message in
           Task { await viewModel.resendAtNextPower(message) }
         },
-        onLongPress: { message in selectedMessageForActions = message },
+        onLongPress: { message in
+          ChatKeyboardLift.resignFirstResponder()
+          selectedMessageForActions = message
+        },
         onReply: onReply,
         onImageTap: { message in
           if let data = viewModel.imageData(for: message.id) {

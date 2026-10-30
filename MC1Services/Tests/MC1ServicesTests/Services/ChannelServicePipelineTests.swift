@@ -433,6 +433,30 @@ struct ChannelServiceSwapGuardTests {
   }
 
   @Test
+  func `a retry pass never releases the guard`() async throws {
+    let radioID = UUID()
+    let dataStore = try await PersistenceStore.createTestDataStore(radioID: radioID, maxChannels: 2)
+    try await dataStore.armSwapGuard(id: radioID)
+
+    let transport = MockTransport()
+    let session = try await startedSession(transport)
+    defer { Task { await session.stop() } }
+    let service = ChannelService(session: session, dataStore: dataStore, rxLogService: nil)
+    // A retry re-reads only the slots that failed; finding nothing to delete there proves
+    // nothing about the slots it never read.
+    let retry = Task { try await service.retryFailedChannels(radioID: radioID, indices: [0]) }
+    try await waitUntil("retry read should be sent") {
+      await transport.sentData.count == 2
+    }
+    await transport.simulateReceive(
+      makeChannelInfoPacket(index: 0, name: "ch0", secret: Data(repeating: 0xAB, count: 16))
+    )
+    _ = try await retry.value
+
+    #expect(try await dataStore.fetchSwapGuard(radioID: radioID).contains(.channels))
+  }
+
+  @Test
   func `without the guard an empty slot still deletes its row`() async throws {
     let radioID = UUID()
     let dataStore = try await PersistenceStore.createTestDataStore(radioID: radioID, maxChannels: 2)

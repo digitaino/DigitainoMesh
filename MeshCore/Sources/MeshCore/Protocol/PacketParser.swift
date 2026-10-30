@@ -205,6 +205,8 @@ extension PacketParser {
         return SyncListEntry(id: payload[offset], length: payload.readUInt16LE(at: offset + 1))
       }
       return .syncList(entries)
+    case .cliReply:
+      return .cliReply(String(data: payload, encoding: .utf8) ?? "")
 
     default:
       return .parseFailure(data: payload, reason: "Unexpected code in device response: \(code)")

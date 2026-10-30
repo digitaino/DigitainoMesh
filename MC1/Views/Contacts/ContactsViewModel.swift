@@ -140,7 +140,7 @@ final class ContactsViewModel {
     do {
       let fetched = try await dataStore.fetchContacts(radioID: radioID)
       guard generation == loadGeneration else { return }
-      contacts = mergeAdmissions(into: fetched)
+      contacts = mergeAdmissions(into: fetched, radioID: radioID)
       // Self-heal the mask: once a deleted row is gone from the fetch, stop masking it.
       pendingRemovalIDs.formIntersection(Set(contacts.map(\.id)))
     } catch is CancellationError {
@@ -164,6 +164,17 @@ final class ContactsViewModel {
     inboundHopByKey = hops
     hasLoadedOnce = true
     isLoading = false
+  }
+
+  /// Holds a contact the list does not already show until a fetch includes it.
+  /// A listed row is not pinned, or the next load puts it back after a delete or a radio switch.
+  func admitIfAbsent(_ contact: ContactDTO) {
+    let alreadyListed = contacts.contains { existing in
+      existing.id == contact.id
+        || (existing.publicKey == contact.publicKey && existing.radioID == contact.radioID)
+    }
+    guard !alreadyListed else { return }
+    upsert(contact)
   }
 
   /// Inserts or replaces by `id`, then public key and `radioID`.
@@ -197,10 +208,11 @@ final class ContactsViewModel {
     contacts.append(contact)
   }
 
-  private func mergeAdmissions(into fetched: [ContactDTO]) -> [ContactDTO] {
+  private func mergeAdmissions(into fetched: [ContactDTO], radioID: UUID) -> [ContactDTO] {
     var result = fetched
     var resolved: [UUID] = []
     for (id, contact) in pendingAdmissions {
+      guard contact.radioID == radioID else { continue }
       let present = result.contains {
         $0.id == contact.id
           || ($0.publicKey == contact.publicKey && $0.radioID == contact.radioID)
@@ -387,14 +399,14 @@ final class ContactsViewModel {
     searchText: String,
     segment: NodeSegment,
     sortOrder: NodeSortOrder,
-    userLocation: CLLocation?
+    userLocation: CLLocation?,
+    referenceDate: Date = Date()
   ) -> [ContactDTO] {
     var result = contacts.filter { !pendingRemovalIDs.contains($0.id) }
 
-    // If searching, show all types (ignore segment). Gated on the trimmed text because the
-    // matcher trims too: a query of only spaces matches everything, which would drop the
-    // segment filter and show every node type under a field that looks empty.
-    guard !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+    // If searching, show all types (ignore segment). A query of only spaces finds nothing,
+    // like upstream's, since the segment picker beside it is disabled while searching.
+    guard !searchText.isEmpty else {
       // Filter by segment
       switch segment {
       case .favorites:
@@ -406,15 +418,16 @@ final class ContactsViewModel {
       case .rooms:
         result = result.filter { $0.type == .room }
       }
-      return sorted(result, by: sortOrder, userLocation: userLocation)
+      return sorted(result, by: sortOrder, userLocation: userLocation, referenceDate: referenceDate)
     }
+    guard !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return [] }
 
     // Sort before searching, not after: `.inputOrder` re-ranks stably by relevance, so the
     // user's chosen order survives inside each tier and public-key matches still float to
     // the top of the list.
     return Self.nodeSearch.matches(
       searchText: searchText,
-      among: sorted(result, by: sortOrder, userLocation: userLocation),
+      among: sorted(result, by: sortOrder, userLocation: userLocation, referenceDate: referenceDate),
       options: .default.ordering(.inputOrder)
     )
   }
@@ -428,11 +441,16 @@ final class ContactsViewModel {
   private func sorted(
     _ contacts: [ContactDTO],
     by order: NodeSortOrder,
-    userLocation: CLLocation?
+    userLocation: CLLocation?,
+    referenceDate: Date
   ) -> [ContactDTO] {
     switch order {
     case .lastHeard:
-      contacts.sorted { $0.recencyTimestamp > $1.recencyTimestamp }
+      contacts.sorted { lhs, rhs in
+        guard let lhsTimestamp = lhs.nodeListTimestamp(relativeTo: referenceDate) else { return false }
+        guard let rhsTimestamp = rhs.nodeListTimestamp(relativeTo: referenceDate) else { return true }
+        return lhsTimestamp > rhsTimestamp
+      }
     case .name:
       contacts.sorted {
         $0.displayName.localizedCompare($1.displayName) == .orderedAscending

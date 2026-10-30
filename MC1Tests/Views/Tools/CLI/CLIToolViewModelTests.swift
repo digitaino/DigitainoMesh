@@ -16,7 +16,9 @@ struct CLIToolViewModelTests {
     settingsService: @escaping @MainActor () -> SettingsService? = { nil },
     dataStore: @escaping @MainActor () -> PersistenceStoreProtocol? = { nil },
     radioID: @escaping @MainActor () -> UUID? = { nil },
-    connectedDevice: @escaping @MainActor () -> DeviceDTO? = { nil }
+    connectedDevice: @escaping @MainActor () -> DeviceDTO? = { nil },
+    powerOffRadio: @escaping @MainActor () async throws -> Void = {},
+    powerOffCancelAvailable: @escaping @MainActor () -> Bool = { true }
   ) -> CLIToolViewModel.Dependencies {
     CLIToolViewModel.Dependencies(
       repeaterAdminService: repeaterAdminService,
@@ -24,7 +26,9 @@ struct CLIToolViewModelTests {
       settingsService: settingsService,
       dataStore: dataStore,
       radioID: radioID,
-      connectedDevice: connectedDevice
+      connectedDevice: connectedDevice,
+      powerOffRadio: powerOffRadio,
+      powerOffCancelAvailable: powerOffCancelAvailable
     )
   }
 
@@ -559,6 +563,54 @@ actor ParkingContactStore: PersistenceStoreProtocol {
   }
 
   func saveContact(_ dto: ContactDTO) async throws {}
+
+  func insertContactIfAbsent(radioID: UUID, from frame: ContactFrame) async throws -> (id: UUID, isNew: Bool) {
+    (id: UUID(), isNew: false)
+  }
+
+  func updateContactLocalPreferences(
+    contactID: UUID,
+    nickname: ContactNicknameUpdate,
+    isBlocked: Bool?,
+    isFavorite: Bool?,
+    clearRemoteCLI: Bool
+  ) async throws -> ContactPreferenceCommit {
+    throw PersistenceStoreError.contactNotFound
+  }
+
+  func updateContactOCVSettings(
+    contactID: UUID,
+    preset: String,
+    customArray: String?
+  ) async throws -> ContactDTO {
+    throw PersistenceStoreError.contactNotFound
+  }
+
+  func updateContactAvatar(contactID: UUID, imageData: Data?) async throws -> ContactDTO {
+    throw PersistenceStoreError.contactNotFound
+  }
+
+  func updateContactFavorite(contactID: UUID, isFavorite: Bool) async throws -> ContactDTO {
+    throw PersistenceStoreError.contactNotFound
+  }
+
+  func updateContactTelemetryPermissions(contactID: UUID, granted: Bool) async throws -> ContactDTO {
+    throw PersistenceStoreError.contactNotFound
+  }
+
+  func updateContactRemoteCLIPermission(contactID: UUID, granted: Bool) async throws -> ContactDTO {
+    throw PersistenceStoreError.contactNotFound
+  }
+
+  func updateContactRoute(
+    radioID: UUID,
+    publicKey: Data,
+    outPathLength: UInt8,
+    outPath: Data
+  ) async throws -> ContactDTO? {
+    nil
+  }
+
   func deleteContact(id: UUID) async throws {}
   @discardableResult
   func touchContactHeard(radioID: UUID, publicKey: Data, at date: Date) async throws -> Bool {
@@ -656,6 +708,30 @@ actor ParkingContactStore: PersistenceStoreProtocol {
     false
   }
 
+  func admitIncomingPath(
+    messageID: UUID,
+    pathNodes: Data,
+    pathLength: UInt8,
+    snr: Double?,
+    rssi: Int?,
+    receivedAt: Date,
+    rxLogEntryID: UUID?
+  ) async throws -> IncomingPathAdmission {
+    .missingParent
+  }
+
+  func admitSentEcho(
+    messageID: UUID,
+    receivedAt: Date,
+    pathNodes: Data,
+    pathLength: UInt8,
+    snr: Double?,
+    rssi: Int?,
+    rxLogEntryID: UUID?
+  ) async throws -> Int? {
+    nil
+  }
+
   func deleteMessageRepeats(messageID: UUID) async throws {}
   func incrementMessageSendCount(id: UUID) async throws -> Int {
     0
@@ -742,6 +818,10 @@ actor ParkingContactStore: PersistenceStoreProtocol {
   }
 
   func saveReaction(_ dto: ReactionDTO) async throws {}
+  func admitReaction(_ dto: ReactionDTO) async throws -> ReactionAdmission? {
+    nil
+  }
+
   func reactionExists(messageID: UUID, senderName: String, emoji: String) async throws -> Bool {
     false
   }
@@ -780,6 +860,7 @@ actor ParkingContactStore: PersistenceStoreProtocol {
 
   func updateDeviceLastContactSync(radioID: UUID, timestamp: UInt32) async throws {}
   func fetchSwapGuard(radioID: UUID) async throws -> SwapGuard { [] }
+  func radioSharesIdentity(radioID: UUID) async throws -> Bool { false }
   func releaseSwapGuard(radioID: UUID, _ parts: SwapGuard) async throws {}
   func fetchSwapProfile(radioID: UUID) async throws -> IdentityProfile? { nil }
   func recordIdentityDeletion(radioID: UUID, kind: IdentityDeletionKind, key: Data) async throws {}
@@ -815,6 +896,23 @@ actor ParkingContactStore: PersistenceStoreProtocol {
   }
 
   func saveDevice(_ dto: DeviceDTO) async throws {}
+  func updateDeviceNodeName(radioID: UUID, name: String) async throws {}
+  func updateDeviceCoordinates(radioID: UUID, latitude: Double, longitude: Double) async throws {}
+  func updateDeviceRadio(
+    radioID: UUID,
+    frequency: UInt32,
+    bandwidth: UInt32,
+    spreadingFactor: UInt8,
+    codingRate: UInt8,
+    appliedRadioPresetID: String?
+  ) async throws {}
+  func updateDeviceTxPower(radioID: UUID, txPower: Int8) async throws {}
+  func updateDeviceObservation(radioID: UUID, mapped: DeviceDTO) async throws {}
+  func updateDeviceOtherParams(radioID: UUID, intent: OtherParamsIntent) async throws {}
+  func updateDeviceClientRepeat(radioID: UUID, enabled: Bool) async throws {}
+  func updateDevicePathHashMode(radioID: UUID, mode: UInt8) async throws {}
+  func updateDeviceAutoAdd(radioID: UUID, config: UInt8, maxHops: UInt8) async throws {}
+  func updateDeviceDefaultFloodScopeName(radioID: UUID, name: String?) async throws {}
   func fetchRemoteNodeSessionByPrefix(_ prefix: Data) async throws -> RemoteNodeSessionDTO? {
     nil
   }
@@ -828,6 +926,18 @@ actor ParkingContactStore: PersistenceStoreProtocol {
   }
 
   func saveRemoteNodeSessionDTO(_ dto: RemoteNodeSessionDTO) async throws {}
+  func reuseOrCreateRemoteNodeSession(_ presentation: RoomSessionPresentation) async throws -> RemoteNodeSessionDTO {
+    RemoteNodeSessionDTO(
+      radioID: presentation.radioID,
+      publicKey: presentation.publicKey,
+      name: presentation.name,
+      role: presentation.role,
+      latitude: presentation.latitude,
+      longitude: presentation.longitude,
+      isConnected: false
+    )
+  }
+
   func updateRemoteNodeSessionConnection(id: UUID, isConnected: Bool, permissionLevel: RoomPermissionLevel) async throws {}
   func cleanupDuplicateRemoteNodeSessions(publicKey: Data, keepID: UUID) async throws {}
   func deleteRemoteNodeSession(id: UUID) async throws {}

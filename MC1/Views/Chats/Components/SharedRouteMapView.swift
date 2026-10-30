@@ -626,7 +626,6 @@ struct MessagePathMapCanvas: View {
   private static let settleRefitDelay: Duration = .milliseconds(600)
 
   @Environment(\.appState) private var appState
-  @Environment(\.colorScheme) private var colorScheme
 
   let locatedNodes: [(point: MapPoint, coordinate: CLLocationCoordinate2D)]
   /// Explicit, pre-styled polylines to draw instead of the default single
@@ -732,7 +731,7 @@ struct MessagePathMapCanvas: View {
         lines: mapLines,
         overlays: overlays,
         mapStyle: mapStyle,
-        isDarkMode: colorScheme == .dark,
+        isOffline: !appState.offlineMapService.isNetworkAvailable,
         showLabels: showLabels,
         labelPlacement: labelPlacement,
         // Gated on existing authorization: MapLibre prompts for permission itself

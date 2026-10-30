@@ -12,10 +12,14 @@ extension ChatTimeline {
     reactions: ReactionIndexing?,
     populateMode: ChatPopulateMode
   ) async -> ChatTimelinePopulator.Outcome {
+    guard !Task.isCancelled else { return .cancelled }
     self.conversation = conversation
-    // Every outcome settles: a failed or unavailable open has no divider
-    // coming, so the anchor decision must stop waiting for one.
-    defer { initialLoadSettled = true }
+    // Cancelled attempts preserve readiness so an unresolved open waits
+    // for its retry to resolve the anchor.
+    var shouldSettleInitialLoad = true
+    defer {
+      if shouldSettleInitialLoad { initialLoadSettled = true }
+    }
     guard let writer else { return .unavailable }
     // Interactive opens staged with no unread have already presented at the
     // bottom; pre-latch so a fresher store unread count cannot bake a late
@@ -34,10 +38,7 @@ extension ChatTimeline {
     let context = reactions.map { indexing in
       ChatTimelinePopulator.ReactionIndexingContext(
         reactionService: indexing.service,
-        scope: indexing.scope,
-        rebakeRow: { [weak self] messageID in
-          self?.rebakeRow(messageID)
-        }
+        scope: indexing.scope
       )
     }
     guard let coordinator else { return .unavailable }
@@ -66,9 +67,13 @@ extension ChatTimeline {
         )
       }
     } catch is CancellationError {
+      shouldSettleInitialLoad = false
       return .cancelled
     } catch {
       return .failed(error)
+    }
+    if case .cancelled = outcome {
+      shouldSettleInitialLoad = false
     }
     if case .loaded = outcome,
        let context,
@@ -78,8 +83,7 @@ extension ChatTimeline {
         scope: context.scope,
         reactionService: context.reactionService,
         dataStore: dataStore,
-        writer: writer,
-        rebakeRow: context.rebakeRow
+        writer: writer
       )
     }
     return outcome
@@ -123,8 +127,7 @@ extension ChatTimeline {
   /// a later retry can still succeed.
   @discardableResult
   func loadOlder() async throws -> OlderPage {
-    guard let coordinator, let writer, let conversation else { return .unavailable }
-    guard let dataStore = dataStoreProvider() else { return .unavailable }
+    guard let coordinator, let writer, let conversation, let dataStore = dataStoreProvider() else { return .unavailable }
     do {
       return try await writer.performWindowOperation {
         try Task.checkCancellation()
@@ -316,7 +319,9 @@ extension ChatTimeline {
     let nextNext = index + 2 < messages.count ? messages[index + 2] : nil
     writer.remove(messageID: messageID)
     writer.updateRenderState { state in
-      var next = state.removingItem(id: messageID)
+      var next = state.removingItem(id: messageID).with(
+        totalFetchedCount: max(0, state.totalFetchedCount - 1)
+      )
       if let previous, previous.isChannelMessage {
         next = next.updatingItem(id: previous.id) { _ in
           makeItem(for: previous, previous: prevPrev, next: nextDTO)

@@ -10,6 +10,12 @@ public actor SettingsService {
   private let session: any ConfigurationSessionOps
   let logger = PersistentLogger(subsystem: "com.mc1", category: "SettingsService")
 
+  /// Orders radio-parameter writes, path-hash work that belongs to a preset, and publication.
+  let radioSerializer = RequestResponseSerializer()
+
+  /// Orders a coordinate read-modify-write so one axis cannot restore a stale sibling.
+  let coordinateSerializer = RequestResponseSerializer()
+
   // Event stream subscriber. The subscription ID lets a replaced subscriber's
   // onTermination distinguish itself from the subscriber that replaced it.
   var eventContinuation: AsyncStream<SettingsEvent>.Continuation?
@@ -18,6 +24,10 @@ public actor SettingsService {
   public init(session: any ConfigurationSessionOps) {
     self.session = session
   }
+
+  /// True after this connection accepts a `set wifi.` line.
+  /// A new service starts false, and nothing here clears the flag.
+  public private(set) var radioWiFiRebootPending = false
 
   /// Stream of settings change events.
   /// Only one active subscriber is supported. Subsequent calls replace the previous subscriber.
@@ -55,15 +65,18 @@ public actor SettingsService {
 
   // MARK: - Radio Settings
 
-  /// Apply a radio preset to the device
+  /// Apply a radio preset to the device.
+  /// The RF owner stays held through the optional path-hash write.
   public func applyRadioPreset(_ preset: RadioPreset) async throws {
-    try await setRadioParams(
-      frequencyKHz: preset.frequencyKHz,
-      bandwidthKHz: preset.bandwidthHz,
-      spreadingFactor: preset.spreadingFactor,
-      codingRate: preset.codingRate
-    )
-    try await applyPresetPathHashIfNeeded(preset)
+    try await radioSerializer.withSerialization { [self] in
+      try await writeRadioParams(
+        frequencyKHz: preset.frequencyKHz,
+        bandwidthKHz: preset.bandwidthHz,
+        spreadingFactor: preset.spreadingFactor,
+        codingRate: preset.codingRate
+      )
+      try await applyPresetPathHashIfNeeded(preset)
+    }
   }
 
   func applyPresetPathHashIfNeeded(_ preset: RadioPreset) async throws {
@@ -84,6 +97,25 @@ public actor SettingsService {
   /// The `bandwidthKHz` name is preserved for source compatibility despite the value
   /// actually being in Hz; do not pass `Int(62.5)` here.
   public func setRadioParams(
+    frequencyKHz: UInt32,
+    bandwidthKHz: UInt32,
+    spreadingFactor: UInt8,
+    codingRate: UInt8,
+    clientRepeat: Bool? = nil
+  ) async throws {
+    try await radioSerializer.withSerialization { [self] in
+      try await writeRadioParams(
+        frequencyKHz: frequencyKHz,
+        bandwidthKHz: bandwidthKHz,
+        spreadingFactor: spreadingFactor,
+        codingRate: codingRate,
+        clientRepeat: clientRepeat
+      )
+    }
+  }
+
+  /// Sends one radio tuple. The caller already holds `radioSerializer`.
+  func writeRadioParams(
     frequencyKHz: UInt32,
     bandwidthKHz: UInt32,
     spreadingFactor: UInt8,
@@ -203,6 +235,15 @@ public actor SettingsService {
     }
   }
 
+  /// Merges a partial other-params intent inside the session serializer.
+  func applyOtherParams(_ intent: OtherParamsIntent) async throws {
+    do {
+      try await session.applyOtherParams(intent)
+    } catch let error as MeshCoreError {
+      throw SettingsServiceError.sessionError(error)
+    }
+  }
+
   /// Compatibility overload: map boolean sharing to `prefs` policy when enabled.
   @available(*, deprecated, message: "Use advertLocationPolicy overload instead")
   public func setOtherParams(
@@ -236,6 +277,22 @@ public actor SettingsService {
       try await session.reboot()
     } catch let error as MeshCoreError {
       throw SettingsServiceError.sessionError(error)
+    }
+  }
+
+  /// Asks the paired radio to cut power.
+  /// A CLI reply means the board stayed on. Only silence after a submitted frame counts as powered off.
+  public func powerOff() async throws {
+    let poweredOff: Bool
+    do {
+      poweredOff = try await session.powerOff()
+    } catch is CancellationError {
+      throw CancellationError()
+    } catch let error as MeshCoreError {
+      throw SettingsServiceError.sessionError(error)
+    }
+    guard poweredOff else {
+      throw SettingsServiceError.powerOffUnsupported
     }
   }
 
@@ -305,11 +362,17 @@ public actor SettingsService {
     eventContinuation?.yield(.allowedRepeatFreqUpdated(ranges))
   }
 
-  /// Refresh device info from the device and notify observers.
-  /// Use this instead of `setLocationVerified` when the device already has correct coordinates (e.g. from its own GPS).
+  /// Reads self info while holding the RF owner and publishes that observation.
+  /// A failed read publishes nothing. Scoped writes keep their own events.
   public func refreshDeviceInfo() async throws {
+    try await radioSerializer.withSerialization { [self] in
+      try await publishDeviceObservation()
+    }
+  }
+
+  private func publishDeviceObservation() async throws {
     let selfInfo = try await getSelfInfo()
-    eventContinuation?.yield(.deviceUpdated(selfInfo, appliedRadioPresetID: nil))
+    eventContinuation?.yield(.deviceObserved(selfInfo))
   }
 
   /// Set auto-add configuration on device
@@ -460,6 +523,74 @@ public actor SettingsService {
       return try await session.getCustomVars()
     } catch let error as MeshCoreError {
       throw SettingsServiceError.sessionError(error)
+    }
+  }
+
+  public func runCliCommand(_ command: String) async throws -> String {
+    let reply = try await sendRadioCLI(command)
+    noteWiFiRebootPending(command: command, reply: reply)
+    return reply
+  }
+
+  /// CommonCLI prints this, then the key, for an unknown get.
+  /// An exact match means the requested key is absent.
+  private static let unknownGetPrefix = "??: "
+
+  /// Read one Radio CLI key. `nil` means this build has no such key.
+  public func getRadioCLIValue(_ key: String) async throws -> String? {
+    let reply = try await sendRadioCLI("get \(key)")
+    switch RadioCLIReply(text: reply) {
+    case let .value(value):
+      return value
+    case .unknownCommand:
+      return nil
+    case let .error(text):
+      throw SettingsServiceError.radioCLIRejected(text)
+    case let .other(text) where text == Self.unknownGetPrefix + key:
+      return nil
+    case .ok, .other:
+      throw SettingsServiceError.invalidResponse
+    }
+  }
+
+  /// Write one Radio CLI key. A nil value sends `set <key>` with no argument.
+  /// An empty string sends a trailing space, because the value is verbatim.
+  public func setRadioCLIValue(_ key: String, to value: String?) async throws {
+    let command = if let value {
+      "set \(key) \(value)"
+    } else {
+      "set \(key)"
+    }
+    let reply = try await sendRadioCLI(command)
+    noteWiFiRebootPending(command: command, reply: reply)
+    switch RadioCLIReply(text: reply) {
+    case .ok, .value:
+      return
+    case let .error(text):
+      throw SettingsServiceError.radioCLIRejected(text)
+    case .unknownCommand:
+      throw SettingsServiceError.radioCLIRejected("Unknown command")
+    case .other:
+      throw SettingsServiceError.invalidResponse
+    }
+  }
+
+  private func sendRadioCLI(_ command: String) async throws -> String {
+    do {
+      return try await session.runCliCommand(command)
+    } catch let error as MeshCoreError {
+      throw SettingsServiceError.sessionError(error)
+    }
+  }
+
+  private func noteWiFiRebootPending(command: String, reply: String) {
+    let line = command.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard line.hasPrefix("set wifi.") else { return }
+    switch RadioCLIReply(text: reply) {
+    case .ok, .value:
+      radioWiFiRebootPending = true
+    case .error, .unknownCommand, .other:
+      break
     }
   }
 

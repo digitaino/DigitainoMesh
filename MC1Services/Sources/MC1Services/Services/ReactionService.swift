@@ -35,6 +35,15 @@ public actor ReactionService {
 
   private static let maxPendingReactions = 100
 
+  #if DEBUG
+    /// Runs before the reaction row and summary are committed together.
+    var reactionAdmitHoldForTesting: (@Sendable () async -> Void)?
+
+    func setReactionAdmitHoldForTesting(_ hold: (@Sendable () async -> Void)?) {
+      reactionAdmitHoldForTesting = hold
+    }
+  #endif
+
   // Pending reactions queue: no TTL, session lifetime.
   private var pendingReactions: [PendingReactionKey: [PendingReaction]] = [:]
   private var pendingOrder: [PendingReactionKey] = []
@@ -100,7 +109,7 @@ public actor ReactionService {
     targetSender: String,
     targetText: String,
     targetTimestamp: UInt32,
-    localNodeName _: String
+    localNodeName _: String = ""
   ) -> String {
     ReactionParser.buildTapbackChannelReactionText(
       emoji: emoji,
@@ -195,30 +204,20 @@ public actor ReactionService {
     _ reaction: ReactionDTO,
     using dataStore: any PersistenceStoreProtocol
   ) async -> ReactionPersistResult? {
+    #if DEBUG
+      if let hold = reactionAdmitHoldForTesting {
+        await hold()
+      }
+    #endif
     do {
-      try await dataStore.saveReaction(reaction)
+      guard let admission = try await dataStore.admitReaction(reaction), admission.inserted else {
+        return nil
+      }
+      return ReactionPersistResult(messageID: admission.messageID, summary: admission.summary)
     } catch {
       logger.error("Failed to save reaction for message \(reaction.messageID): \(error.localizedDescription)")
       return nil
     }
-
-    let reactions: [ReactionDTO]
-    do {
-      reactions = try await dataStore.fetchReactions(for: reaction.messageID)
-    } catch {
-      logger.error("Failed to fetch reactions for message \(reaction.messageID): \(error.localizedDescription)")
-      return nil
-    }
-
-    let summary = ReactionParser.buildSummary(from: reactions)
-    do {
-      try await dataStore.updateMessageReactionSummary(messageID: reaction.messageID, summary: summary)
-    } catch {
-      logger.error("Failed to update reaction summary for message \(reaction.messageID): \(error.localizedDescription)")
-      return nil
-    }
-
-    return ReactionPersistResult(messageID: reaction.messageID, summary: summary)
   }
 
   // MARK: - DM Reactions

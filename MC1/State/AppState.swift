@@ -35,7 +35,48 @@ final class AppState {
   /// Disk-backed store for unsent chat-composer text. Recreated on
   /// before-first-unlock, but reads the same `UserDefaults` key, so the fresh
   /// instance recovers every persisted draft — no in-memory-lifetime dependency.
-  let draftStore = DraftStore()
+  private let draftStore: DraftStore
+
+  /// One live editor per conversation opened on this AppState. Repeated lookups
+  /// return the same instance until that conversation's editor is retired.
+  @ObservationIgnored private var chatDraftEditors: [ChatConversationID: ChatDraftEditor] = [:]
+
+  func chatDraftEditor(for id: ChatConversationID) -> ChatDraftEditor {
+    if let editor = chatDraftEditors[id] {
+      return editor
+    }
+    let editor = ChatDraftEditor(conversationID: id, store: draftStore)
+    chatDraftEditors[id] = editor
+    return editor
+  }
+
+  func applyPendingDirectReply(contactID: UUID, to editor: ChatDraftEditor) {
+    editor.importPendingReply {
+      services?.notificationService.consumeDraft(for: contactID)
+    }
+  }
+
+  /// Clears live and saved drafts for backup-affected channel slots. Editors stay
+  /// so a later keystroke starts a new draft.
+  func resetChannelDrafts(slotsByRadio: [UUID: Set<UInt8>]) {
+    for (radioID, indices) in slotsByRadio {
+      for index in indices {
+        let id = ChatConversationID.channel(radioID: radioID, channelIndex: index)
+        chatDraftEditors[id]?.reset()
+      }
+    }
+    draftStore.clearChannelDrafts(slotsByRadio: slotsByRadio)
+  }
+
+  func flushChatDrafts() {
+    for editor in chatDraftEditors.values {
+      editor.flush()
+    }
+  }
+
+  func retireChatDraftEditor(for id: ChatConversationID) {
+    chatDraftEditors.removeValue(forKey: id)?.retire()
+  }
 
   /// Best available location for proximity-based disambiguation.
   var bestAvailableLocation: CLLocation? {
@@ -101,14 +142,14 @@ final class AppState {
   }
 
   private func persistRegionSelection() {
-    BackupUserDefaults.persistRegionSelection(regionSelection)
+    BackupUserDefaults.persistRegionSelection(regionSelection, to: defaults)
   }
 
   private func loadPersistedRegionSelection() {
-    guard UserDefaults.standard.data(forKey: BackupUserDefaults.regionSelectionKey) != nil else { return }
-    guard let decoded = BackupUserDefaults.loadRegionSelection() else {
+    guard defaults.data(forKey: BackupUserDefaults.regionSelectionKey) != nil else { return }
+    guard let decoded = BackupUserDefaults.loadRegionSelection(from: defaults) else {
       logger.warning("Failed to decode persisted region selection — clearing key")
-      UserDefaults.standard.removeObject(forKey: BackupUserDefaults.regionSelectionKey)
+      defaults.removeObject(forKey: BackupUserDefaults.regionSelectionKey)
       return
     }
     suppressRegionPersist = true
@@ -132,6 +173,9 @@ final class AppState {
   var connectedDevice: DeviceDTO? {
     connectionManager.connectedDevice
   }
+
+  /// Checked link while a switch is running, and after a failed attempt until the next connect or an explicit disconnect.
+  var connectionLinkSwitch: ConnectionLinkSwitch?
 
   var services: ServiceContainer? {
     connectionManager.services
@@ -222,23 +266,27 @@ final class AppState {
     sessionStateChangeCount += 1
   }
 
-  /// Bumps `conversationsVersion` and drives
-  /// `liveActivityManager.handleUnreadCountChanged`. Used by both the sync
-  /// coordinator's data event stream and the session-state events
-  /// (`RemoteNodeEvent.sessionStateChanged` / `RoomServerEvent.connectionRecovered`)
-  /// to keep the conversations list and unread badge in lockstep.
-  func refreshConversations() {
+  /// Bumps `conversationsVersion` and publishes unread totals to Live Activity
+  /// only while the captured radio, services, and version remain current.
+  @discardableResult
+  func refreshConversations() -> Task<Void, Never> {
     conversationsVersion += 1
-    Task { @MainActor [weak self] in
-      guard let self, let services else { return }
-      let total = await totalUnreadCount(from: services)
-      await liveActivityManager.handleUnreadCountChanged(unreadCount: total)
+    let version = conversationsVersion
+    let capturedServices = services
+    let radioID = currentRadioID
+    return Task { @MainActor [weak self] in
+      guard let self, let capturedServices, let radioID else { return }
+      let total = await conversationUnreadOperations.read(capturedServices.dataStore, radioID)
+      guard !Task.isCancelled, services === capturedServices,
+            currentRadioID == radioID, conversationsVersion == version else { return }
+      await conversationUnreadOperations.publish(liveActivityManager, total)
     }
   }
 
-  /// Bumps observer versions after a store-direct backup import so mounted
-  /// tabs reload. Also re-reads `regionSelection`, which `init` loads once.
-  func notifyDataRestored() {
+  /// Bumps observer versions after a store-direct backup import so mounted tabs reload.
+  /// Re-reads `regionSelection`, which `init` loads once, and publishes shortcut recipients after that commit.
+  @discardableResult
+  func notifyDataRestored() -> Task<Void, Never> {
     contactsVersion += 1
     conversationsVersion += 1
     loadPersistedRegionSelection()
@@ -247,6 +295,9 @@ final class AppState {
     // Empties entries; the registry stays so later opens mint fresh coordinators.
     chatCoordinatorRegistry?.clear()
     bumpServicesVersion()
+    return Task { [weak self] in
+      await self?.publishShortcutRecipientsIfChanged(expectedServices: nil)
+    }
   }
 
   /// Bumps `servicesVersion` so observing views re-run `performInitialLoad`.
@@ -257,7 +308,7 @@ final class AppState {
   // MARK: - Connection UI State
 
   /// Connection UI state (status pills, sync activity, alerts, pairing)
-  let connectionUI = ConnectionUIState()
+  let connectionUI: ConnectionUIState
 
   /// True while `confirmSystemPairingSetup` is in flight so sheet `onDismiss` does not cancel the flow.
   var isConfirmingSystemPairingSetup = false
@@ -289,6 +340,19 @@ final class AppState {
   /// Fallback task that re-runs foreground recovery shortly after activation when the
   /// app is still disconnected. Covers edge cases where scene-phase callbacks are missed.
   var activeRecoveryFallbackTask: Task<Void, Never>?
+
+  var staleNodeCleanupTask: Task<Void, Never>?
+  var staleNodeCleanupServiceID: ObjectIdentifier?
+
+  /// Offered recipient ids last given to Shortcuts in this process.
+  /// Nil until the first publish. A new process starts nil again.
+  @ObservationIgnored var lastPublishedRecipientIDs: Set<String>?
+
+  #if DEBUG
+    @ObservationIgnored var updateShortcutParametersForTesting: (@MainActor () -> Void)?
+    @ObservationIgnored var beforeShortcutRecipientRereadForTesting: (@MainActor () -> Void)?
+    @ObservationIgnored var beforeShortcutRecipientCleanupAwaitForTesting: (@MainActor () -> Void)?
+  #endif
 
   /// Task consuming SettingsService event stream, canceled on disconnect
   var settingsEventsTask: Task<Void, Never>?
@@ -359,6 +423,8 @@ final class AppState {
     /// Optional test-only hooks for deterministic lifecycle ordering tests.
     var bleEnterBackgroundOverride: (@MainActor () async -> Void)?
     var bleBecomeActiveOverride: (@MainActor () async -> Void)?
+    /// Parks power-off cleanup at the Live Activity await. Nil uses the real activity end.
+    var powerOffEndActivityOverride: (@MainActor () async -> Void)?
   #endif
 
   // MARK: - Onboarding State
@@ -407,22 +473,34 @@ final class AppState {
   /// Persistent CLI tool view model (survives tab switches, reset on device disconnect)
   var cliToolViewModel: CLIToolViewModel?
 
+  /// Trace Path model. Created on first open. `reset()` runs only with the CLI reset.
+  var tracePathViewModel: TracePathViewModel?
+
+  /// Node Discovery model. Created on first open. `reset()` runs only with the CLI reset.
+  var nodeDiscoveryViewModel: NodeDiscoveryViewModel?
+
+  /// Repeater and room admin models. `reset()` drops them with the other radio-scoped tools.
+  let remoteAdminWorkspaces = RemoteAdminWorkspaces()
+
   /// Tracks the device ID for CLI state - reset CLI when device changes
   private var lastConnectedDeviceIDForCLI: UUID?
 
   // MARK: - Status Pill
 
-  /// The current status pill state, computed from all relevant conditions
-  /// Priority: failed > syncing > ready > connecting > disconnected > hidden
+  /// Setup phases stay visible until the connection is usable; live reception stays quiet.
   var statusPillState: StatusPillState {
     if connectionUI.syncFailedPillVisible {
       return .failed(message: L10n.Localizable.StatusPill.syncFailed)
     }
-    if connectionUI.syncActivityCount > 0 || connectionState == .syncing {
-      return .syncing
+    if connectionState == .connected || connectionState == .syncing,
+       connectionUI.currentSyncPhase == .messages, connectionUI.showMessageSyncPill {
+      return .syncingMessages
     }
-    if connectionUI.showReadyToast {
+    if connectionUI.showReadyToast, connectionState == .ready {
       return .ready
+    }
+    if connectionUI.syncActivityCount > 0 || connectionState == .connected || connectionState == .syncing {
+      return .syncing
     }
     if connectionState == .connecting {
       return .connecting
@@ -439,21 +517,31 @@ final class AppState {
     return connectionState == .connected && connectionUI.currentSyncPhase == .messages
   }
 
+  @ObservationIgnored let defaults: UserDefaults
+  @ObservationIgnored let conversationUnreadOperations: ConversationUnreadOperations
+
   // MARK: - Initialization
 
   init(
     modelContainer: ModelContainer,
     isPlaceholder: Bool = false,
     defaults: UserDefaults = .standard,
-    injectedConnectionManager: ConnectionManager? = nil
+    injectedConnectionManager: ConnectionManager? = nil,
+    injectedConnectionUI: ConnectionUIState? = nil,
+    conversationUnreadOperations: ConversationUnreadOperations = .live
   ) {
+    self.defaults = defaults
+    self.conversationUnreadOperations = conversationUnreadOperations
+    draftStore = DraftStore(defaults: defaults)
+
     let store = StoreService()
-    let theme = ThemeService(store: store)
+    let theme = ThemeService(store: store, defaults: defaults)
     storeState = StoreState(service: store)
     themeService = theme
 
     connectionManager = injectedConnectionManager
       ?? ConnectionManager(modelContainer: modelContainer, defaults: defaults)
+    connectionUI = injectedConnectionUI ?? ConnectionUIState()
     connectionUI.hasSystemPairingRegistry = connectionManager.hasSystemPairingRegistry
 
     let bootstrapBuffer = DebugLogBuffer(dataStore: connectionManager.persistenceStore)
@@ -495,6 +583,10 @@ final class AppState {
       await self?.wireServicesIfConnected()
     }
 
+    connectionManager.onConnectionBecameUsable = { [weak self] in
+      self?.connectionUI.showReadyToastBriefly()
+    }
+
     // Wire connection lost callback - updates UI when connection is lost
     connectionManager.onConnectionLost = { [weak self] in
       await self?.wireServicesIfConnected()
@@ -524,8 +616,7 @@ final class AppState {
     }
 
     // Wire device synced callback - runs after sync completes and state is .ready
-    connectionManager.onDeviceSynced = { [weak self] in
-      self?.performStaleNodeCleanup()
+    connectionManager.onDeviceSynced = { [weak self] hasCleanRecipientData in
       // Ready is the first moment the Device row carries the radio's configured location,
       // so it is the earliest the staleness check can mean anything.
       self?.evaluateNodeLocationStaleness()
@@ -539,6 +630,8 @@ final class AppState {
       // A blank radio, with the user's own node keys on this iPhone: ask whether to set it up
       // as one of them. A radio that took on a node is never blank, so the two never overlap.
       Task { [weak self] in await self?.evaluateRadioSetUp() }
+      // Last: it returns early once stale-node cleanup starts, so nothing above may follow it.
+      await self?.handleDeviceSynced(hasCleanRecipientData: hasCleanRecipientData)
     }
 
     loadPersistedRegionSelection()
@@ -559,12 +652,16 @@ final class AppState {
     }
   }
 
-  /// Releases process-scoped resources held by this `AppState` instance so the caller can
-  /// drop it. Currently only cancels `StoreService`'s `Transaction.updates` listener Task,
-  /// which otherwise self-retains via the `for await` loop and leaks across an `MC1App` BFU
-  /// reassignment of `appState`. Connection-layer teardown stays on `ConnectionManager`'s own
-  /// disconnect path and is intentionally not chained here.
+  /// Flushes and retires chat drafts, then cancels `StoreService`'s `Transaction.updates`
+  /// listener, which otherwise leaks across a before-first-unlock `AppState` swap.
+  /// Connection teardown stays on `ConnectionManager`.
   func shutdown() {
+    cancelStaleNodeCleanup()
+    flushChatDrafts()
+    for editor in chatDraftEditors.values {
+      editor.retire()
+    }
+    chatDraftEditors.removeAll()
     storeState.service.shutdown()
   }
 
@@ -607,6 +704,7 @@ final class AppState {
   /// Cancels event tasks; the coordinator registry stays so an open chat
   /// keeps its timeline.
   func tearDownAppStateSessionState() {
+    cancelStaleNodeCleanup()
     settingsEventsTask?.cancel()
     settingsEventsTask = nil
     syncDataEventsTask?.cancel()
@@ -622,6 +720,7 @@ final class AppState {
     nodeLocationPrompt.endSession()
     radioSwapPrompt.endSession()
     radioSetUpPrompt.endSession()
+    resetRadioScopedToolWorkspaces()
   }
 
   /// Presents the guided pairing-failure recovery for an invalidated bond, only
@@ -635,6 +734,10 @@ final class AppState {
   /// Drops per-slot drafts, cached `ChatCoordinator`s, and the selected route.
   /// Coordinators outlive the connection, so without eviction the next occupant renders the prior timeline.
   func handleChannelSlotOccupantChanged(radioID: UUID, indices: Set<UInt8>) {
+    for channelIndex in indices {
+      let id = ChatConversationID.channel(radioID: radioID, channelIndex: channelIndex)
+      retireChatDraftEditor(for: id)
+    }
     draftStore.clearChannelDrafts(radioID: radioID, indices: indices)
     for channelIndex in indices {
       let id = ChatConversationID.channel(radioID: radioID, channelIndex: channelIndex)
@@ -644,13 +747,24 @@ final class AppState {
     if case let .channel(selected) = navigation.chatsSelectedRoute,
        selected.radioID == radioID,
        indices.contains(selected.index) {
-      navigation.chatsSelectedRoute = nil
+      if navigation.pendingScrollTarget?.conversationID == selected.id {
+        navigation.clearPendingScrollToMessage()
+      }
+      navigation.setChatsRoute(nil)
     }
     refreshConversations()
   }
 
+  private func resetRadioScopedToolWorkspaces() {
+    cliToolViewModel?.reset()
+    tracePathViewModel?.reset()
+    nodeDiscoveryViewModel?.reset()
+    remoteAdminWorkspaces.reset()
+  }
+
   /// Wire services-dependent callbacks after a successful connection.
   func wireServicesIfConnected() async {
+    reconcileConnectionLinkSwitch()
     guard let services else {
       tearDownAppStateSessionState()
       syncCoordinator = nil
@@ -659,12 +773,18 @@ final class AppState {
         lastConnectedDeviceID: connectionManager.lastConnectedDeviceID,
         shouldSuppressDisconnectedPill: connectionManager.shouldSuppressDisconnectedPill
       )
-      cliToolViewModel?.reset()
       batteryMonitor.stop()
       batteryMonitor.clearThresholds()
       await liveActivityManager.handleConnectionLost()
       lastBumpedServicesID = nil
       return
+    }
+
+    // Reset transient sync UI before wiring awaits so a replacement connection
+    // cannot inherit activity, phase, or a Ready timer.
+    if syncCoordinator !== services.syncCoordinator {
+      connectionUI.resetSyncState()
+      syncCoordinator = services.syncCoordinator
     }
 
     // The link is up, so drop any pairing-failure alert latched while
@@ -686,13 +806,22 @@ final class AppState {
     if let newDeviceID = connectedDevice?.id,
        let oldDeviceID = lastConnectedDeviceIDForCLI,
        newDeviceID != oldDeviceID {
-      cliToolViewModel?.reset()
-      navigation.clearPerRadioSelection(signalMapperRideActive: signalMapperRideSession != nil)
+      resetRadioScopedToolWorkspaces()
+      navigation.clearPerRadioSelection(
+        preservingConnection: connectionLinkSwitch?.target != nil,
+        signalMapperRideActive: signalMapperRideSession != nil
+      )
     }
     lastConnectedDeviceIDForCLI = connectedDevice?.id
-
-    // Store syncCoordinator reference
-    syncCoordinator = services.syncCoordinator
+    tracePathViewModel?.reattachIfWaiting()
+    nodeDiscoveryViewModel?.reattachIfWaiting()
+    await remoteAdminWorkspaces.rebind(
+      repeaterAdminService: { services.repeaterAdminService },
+      roomAdminService: { services.roomAdminService },
+      contactService: { services.contactService },
+      nodeSnapshotService: { services.nodeSnapshotService },
+      deviceHashSize: { [weak self] in self?.connectedDevice?.hashSize }
+    )
 
     // Process-wide inline image cache learns where to persist probed dims.
     await InlineImageCache.shared.attachDimensionsStore(services.inlineImageDimensionsStore)
@@ -726,12 +855,6 @@ final class AppState {
     if lastBumpedServicesID != servicesID {
       lastBumpedServicesID = servicesID
       servicesVersion += 1
-
-      // A real services change is the one moment the addressable contact/channel
-      // set can differ from what saved shortcuts were resolved against, so re-resolve
-      // the App Intents parameter queries here (debounced by this same guard, and past
-      // the connection-lost early return so it never fires on disconnect).
-      refreshAppShortcutParameters()
     }
 
     // Set up notification center delegate, wire localized strings, then register categories
@@ -765,34 +888,72 @@ final class AppState {
 
   // MARK: - Stale Node Cleanup
 
+  private static let staleNodeCleanupCooldown: TimeInterval = 3 * 60 * 60
+
+  func cancelStaleNodeCleanup() {
+    staleNodeCleanupTask?.cancel()
+    staleNodeCleanupTask = nil
+    staleNodeCleanupServiceID = nil
+  }
+
   /// Runs automatic cleanup of stale non-favorite nodes if the threshold is configured.
-  /// - Parameter force: When `true`, skips the 6-hour cooldown (used when the user changes the setting).
-  func performStaleNodeCleanup(force: Bool = false) {
-    let threshold = UserDefaults.standard.integer(forKey: AppStorageKey.autoDeleteStaleNodesDays.rawValue)
-    guard threshold > 0 else { return }
+  /// - Parameters:
+  ///   - force: When `true`, skips the cooldown and replaces a running cleanup.
+  ///   - publishRecipients: When `true`, publish shortcut recipients after `removeStaleNodes` returns.
+  /// - Returns: Whether this call stored a new cleanup task.
+  @discardableResult
+  func performStaleNodeCleanup(force: Bool = false, publishRecipients: Bool = false) -> Bool {
+    let threshold = defaults.integer(forKey: AppStorageKey.autoDeleteStaleNodesDays.rawValue)
+    guard threshold > 0 else {
+      cancelStaleNodeCleanup()
+      return false
+    }
+    guard let services = connectionManager.services else { return false }
+    let serviceID = ObjectIdentifier(services)
+    guard force || staleNodeCleanupTask == nil || staleNodeCleanupServiceID != serviceID else { return false }
 
     if !force {
-      let lastRunTimestamp = UserDefaults.standard.double(forKey: AppStorageKey.lastStaleCleanupDate.rawValue)
+      let lastRunTimestamp = defaults.double(forKey: AppStorageKey.lastStaleCleanupDate.rawValue)
       let lastRun = lastRunTimestamp > 0 ? Date(timeIntervalSinceReferenceDate: lastRunTimestamp) : Date.distantPast
-      guard Date().timeIntervalSince(lastRun) >= 3 * 3600 else {
+      guard Date().timeIntervalSince(lastRun) >= Self.staleNodeCleanupCooldown else {
         logger.debug("Stale node cleanup skipped — cooldown not expired")
-        return
+        return false
       }
     }
 
-    Task {
+    let previousTask = staleNodeCleanupTask
+    previousTask?.cancel()
+    staleNodeCleanupServiceID = serviceID
+    staleNodeCleanupTask = Task {
+      await previousTask?.value
+      defer {
+        // A replacement cancels this run before storing its task, so only an
+        // uncancelled finish clears the handle.
+        if !Task.isCancelled {
+          staleNodeCleanupTask = nil
+          staleNodeCleanupServiceID = nil
+        }
+      }
+      guard !Task.isCancelled, connectionManager.services === services else { return }
       do {
         let result = try await connectionManager.removeStaleNodes(olderThanDays: threshold)
-        UserDefaults.standard.set(Date().timeIntervalSinceReferenceDate, forKey: AppStorageKey.lastStaleCleanupDate.rawValue)
+        guard !Task.isCancelled, connectionManager.services === services else { return }
+        defaults.set(Date().timeIntervalSinceReferenceDate, forKey: AppStorageKey.lastStaleCleanupDate.rawValue)
         if result.total > 0 {
           logger.info("Stale node cleanup: removed \(result.removed) of \(result.total) nodes older than \(threshold) days")
         } else {
           logger.debug("Stale node cleanup: no stale nodes found")
         }
+        if publishRecipients {
+          await publishShortcutRecipientsIfChanged(expectedServices: services)
+        }
+      } catch is CancellationError {
+        return
       } catch {
         logger.warning("Stale node cleanup failed: \(error.localizedDescription)")
       }
     }
+    return true
   }
 
   // MARK: - Onboarding
@@ -814,13 +975,6 @@ final class AppState {
     } else {
       navigation.pendingDeviceMenuTipDonation = true
     }
-  }
-
-  /// Donates the tip unconditionally. Used on iPad where the radio is always
-  /// visible in the sidebar regardless of which section is selected.
-  func donateDeviceMenuTip() async {
-    navigation.pendingDeviceMenuTipDonation = false
-    await DeviceMenuTip.hasCompletedOnboarding.donate()
   }
 
   #if DEBUG

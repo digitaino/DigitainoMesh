@@ -42,6 +42,10 @@ final class ChatViewModel {
   /// All contacts for mention autocomplete (includes contacts without messages)
   var allContacts: [ContactDTO] = []
 
+  /// Contact ids committed with `conversations`. Nil when contacts were not
+  /// fetched, so a messageless direct stays open until a successful fetch.
+  var retainingDirectContactIDs: Set<UUID>?
+
   /// `loweredName -> nickname` for channel sender matching, rebuilt whenever
   /// `allContacts` changes so per-message resolution stays O(1).
   var nicknamesByLoweredName: [String: String] = [:]
@@ -99,6 +103,14 @@ final class ChatViewModel {
     /// Test-only fault injection fired immediately before the failed-send keys
     /// fetch so tests can exercise the keep-last-known catch path.
     @ObservationIgnored var failedSendRefreshFaultInjection: (@MainActor () throws -> Void)?
+
+    /// Test-only hook after offline unread totals are fetched, before badge publication.
+    @ObservationIgnored var readStateBadgeFetchInterleaveHook: (@MainActor () async -> Void)?
+
+    /// Test-only hook before a queued command waits for its predecessor.
+    @ObservationIgnored var readStateBeforePredecessorInterleaveHook: (@MainActor () async -> Void)?
+
+    @ObservationIgnored var conversationMutationPostSaveHook: (@MainActor () -> Void)?
   #endif
 
   // MARK: - Conversation Cache Storage
@@ -230,9 +242,6 @@ final class ChatViewModel {
   /// "Unable to Send" alert).
   var errorBannerMessage: String?
 
-  /// Message text being composed
-  var composingText = ""
-
   /// Reentry guard for retry actions. A single `ChatViewModel` is bound to one
   /// conversation at a time (`currentChannel` xor `currentContact`), so this
   /// flag covers both DM and channel retry paths — they can never overlap.
@@ -316,7 +325,7 @@ final class ChatViewModel {
     var roomServerService: @MainActor () -> RoomServerService?
     var contactService: @MainActor () -> ContactService?
     var syncCoordinator: @MainActor () -> SyncCoordinator?
-    var notifSyncService: @MainActor () -> NotifSyncService?
+    var notifSyncService: @MainActor () -> NotifSyncService? = { nil }
     var connectionState: @MainActor () -> DeviceConnectionState
     var connectedDevice: @MainActor () -> DeviceDTO?
     var currentRadioID: @MainActor () -> UUID?
@@ -326,10 +335,10 @@ final class ChatViewModel {
     var inlineImageDimensionsStore: @MainActor () -> InlineImageDimensionsStore?
     var prefetchDataStore: @MainActor () -> (any PersistenceStoreProtocol)?
     /// Live TX-power state for the escalated resend on the no-repeats retry card.
-    var adaptivePowerService: @MainActor () -> AdaptivePowerService?
+    var adaptivePowerService: @MainActor () -> AdaptivePowerService? = { nil }
     /// Whether repeater signal tracking is up for this connection. Gates no-repeats
     /// detection entirely: see `ChatViewModel+NoRepeatsRetry`.
-    var signalDataAvailable: @MainActor () -> Bool
+    var signalDataAvailable: @MainActor () -> Bool = { false }
   }
 
   @ObservationIgnored private var dataStoreProvider: @MainActor () -> DataStore? = { nil }
@@ -400,10 +409,8 @@ final class ChatViewModel {
   /// (the always-present text link remains the baseline).
   @ObservationIgnored var onNavigateToMap: ((CLLocationCoordinate2D) -> Void)?
 
-  /// Drives receive-time prefetch of inline image dimensions and link
-  /// preview metadata so message bubbles render at final size on first
-  /// paint. Constructed in `configure(...)` when services are available;
-  /// nil while disconnected (offline browse never receives new messages).
+  /// Resolves image dimensions and preview metadata after message insertion.
+  /// Constructed in `configure(...)` when services are available; nil while disconnected.
   @ObservationIgnored var prefetcher: InlineImagePrefetcher?
 
   /// Long-running subscription to `InlineImageDimensionsStore.resolutionUpdates()`.
@@ -431,11 +438,6 @@ final class ChatViewModel {
   /// request. Not `@Observable` state: it drives a task, never a view.
   @ObservationIgnored var observerCountNudge: Int = 0
 
-  /// Per-instance override of the receive-time prefetch timeout. Production
-  /// callers leave this at `defaultPrefetchTimeout` (3s); tests can shorten
-  /// it to bound their wall-clock budget.
-  @ObservationIgnored var prefetchTimeout: Duration = ChatViewModel.defaultPrefetchTimeout
-
   /// Write capability for the bound coordinator, minted when `timeline`
   /// binds. Every timeline mutation goes through this; when a newer owner
   /// binds the same coordinator (live open superseding a prime, BFU scene
@@ -446,12 +448,17 @@ final class ChatViewModel {
     timeline.writer
   }
 
-  /// Contact ID currently having its favorite status toggled (for loading UI)
-  var togglingFavoriteID: UUID?
-
   // MARK: - Initialization
 
-  init() {
+  @ObservationIgnored let notificationDefaults: UserDefaults
+  @ObservationIgnored let notificationSystemOperations: NotificationService.SystemOperations
+
+  init(
+    notificationDefaults: UserDefaults = .standard,
+    notificationSystemOperations: NotificationService.SystemOperations = .live
+  ) {
+    self.notificationDefaults = notificationDefaults
+    self.notificationSystemOperations = notificationSystemOperations
     noRepeatsDetector.onPromptChange = { [weak self] messageID in
       self?.applyNoRepeatsPrompt(messageID)
     }
@@ -523,8 +530,7 @@ final class ChatViewModel {
   }
 
   private func bindCoordinator(registry: ChatCoordinatorRegistry?, conversation: ChatConversationType?) {
-    guard let conversation else { return }
-    guard let registry else { return }
+    guard let conversation, let registry else { return }
     let resolved = registry.coordinator(for: conversation.coordinatorID)
     // The timeline owns both the rebuild hooks and the write capability,
     // installed as one atomic act. An `.interactive` bind always succeeds

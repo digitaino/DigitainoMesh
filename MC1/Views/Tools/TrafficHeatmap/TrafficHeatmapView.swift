@@ -12,7 +12,6 @@ import SwiftUI
 /// geometry is contributed.
 struct TrafficHeatmapView: View {
   @Environment(\.appState) private var appState
-  @Environment(\.colorScheme) private var colorScheme
 
   @State private var model = TrafficHeatmapModel()
   @State private var cameraBounds: MLNCoordinateBounds?
@@ -30,13 +29,6 @@ struct TrafficHeatmapView: View {
   private var showLabels = AppStorageKey.defaultMapShowLabels
   @AppStorage(AppStorageKey.mapNorthLocked.rawValue)
   private var isNorthLocked = AppStorageKey.defaultMapNorthLocked
-  @AppStorage(AppStorageKey.mapColorSchemePreference.rawValue)
-  private var mapColorSchemeRaw = AppStorageKey.defaultMapColorSchemePreference
-
-  private var mapIsDark: Bool {
-    let preference = AppColorSchemePreference(rawValue: mapColorSchemeRaw) ?? .system
-    return resolvedMapIsDark(preference: preference, colorScheme: colorScheme)
-  }
 
   var body: some View {
     content
@@ -94,7 +86,6 @@ struct TrafficHeatmapView: View {
         lines: [],
         overlays: TrafficHeatmapRenderer.overlays(for: model.snapshot),
         mapStyle: mapStyleSelection,
-        isDarkMode: mapIsDark,
         isOffline: !appState.offlineMapService.isNetworkAvailable,
         showLabels: showLabels,
         showsUserLocation: true,

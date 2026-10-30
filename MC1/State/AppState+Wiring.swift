@@ -9,8 +9,19 @@ extension AppState {
   /// Message events are ignored here; `MessageEventDispatcher` owns them.
   /// Re-subscribes per connection because `ServiceContainer` is rebuilt.
   func wireSyncDataEvents(services: ServiceContainer) {
+    let store = connectionManager.persistenceStore
+    wireSyncDataEvents(services: services, nodesContactExists: { id in
+      try await store.fetchContact(id: id) != nil
+    })
+  }
+
+  func wireSyncDataEvents(
+    services: ServiceContainer,
+    nodesContactExists: @escaping @MainActor (UUID) async throws -> Bool
+  ) {
     syncDataEventsTask?.cancel()
     let events = services.syncCoordinator.dataEvents()
+    let serviceID = ObjectIdentifier(services)
     syncDataEventsTask = Task { [weak self] in
       for await event in events {
         guard let self else { return }
@@ -23,6 +34,7 @@ extension AppState {
           // And already-named rows must re-resolve too — a rename or deletion
           // otherwise leaves the old name beside the hex for the whole session.
           await services.signalBarsEngine.nodePoolDidChange()
+          await invalidateMissingNodesContact(from: serviceID, contactExists: nodesContactExists)
         case .conversationsChanged:
           refreshConversations()
         case .directMessageReceived, .channelMessageReceived, .roomMessageReceived, .reactionReceived:
@@ -66,19 +78,28 @@ extension AppState {
     await services.notifSyncService.reconcileOnConnect(radioID: radioID)
   }
 
-  /// Consume settings service event stream.
-  /// Updates connectedDevice when settings are changed via SettingsService.
+  /// Updates connectedDevice from the settings stream of this container.
+  /// Events are ignored once `services` no longer points at that container.
   func wireSettingsEventStream(services: ServiceContainer) async {
     settingsEventsTask?.cancel()
     let events = await services.settingsService.events()
+    let producer = services
     settingsEventsTask = Task { [weak self] in
       for await event in events {
-        guard let self else { return }
+        guard let self, self.connectionManager.services === producer else { return }
         switch event {
-        case let .deviceUpdated(selfInfo, appliedRadioPresetID):
-          await MainActor.run {
-            self.connectionManager.updateDevice(from: selfInfo, appliedRadioPresetID: appliedRadioPresetID)
-          }
+        case let .nameUpdated(name):
+          await self.connectionManager.applyNodeName(name)
+        case let .coordinatesUpdated(latitude, longitude):
+          await self.connectionManager.applyCoordinates(latitude: latitude, longitude: longitude)
+        case let .deviceObserved(info):
+          await self.connectionManager.applyDeviceObservation(info, from: producer)
+        case let .radioUpdated(change):
+          await self.connectionManager.applyRadio(change)
+        case let .txPowerUpdated(power):
+          await self.connectionManager.applyTxPower(power)
+        case let .otherParamsUpdated(intent):
+          await self.connectionManager.applyOtherParams(intent)
         case let .autoAddConfigUpdated(config):
           await MainActor.run {
             self.connectionManager.updateAutoAddConfig(config)
@@ -141,6 +162,9 @@ extension AppState {
         case .conversationsChanged:
           refreshConversations()
         case let .contactDeletedCleanup(contactIDs):
+          if let selected = navigation.selectedContact, contactIDs.contains(selected.id) {
+            navigation.clearSelectedContact(matching: selected.id)
+          }
           await notificationService.removeDeliveredNotifications(
             forContactIDs: Set(contactIDs)
           )
@@ -148,8 +172,8 @@ extension AppState {
             await notificationService.updateBadgeCount()
           }
         case .newContactDiscovered, .nodeStorageFullChanged,
-             .pathDiscoveryResponse, .traceResponse, .traceSnrObserved,
-             .orphanDirectMessagesAdopted:
+             .pathDiscoveryResponse, .pathDiscoveryWriteFailed, .traceResponse,
+             .traceSnrObserved, .orphanDirectMessagesAdopted:
           // The paired .conversationsChanged already refreshes the list; the
           // banner and badge are handled by the SyncCoordinator consumer.
           break
@@ -228,8 +252,6 @@ extension AppState {
 
   func totalUnreadCount(from services: ServiceContainer) async -> Int {
     guard let radioID = currentRadioID else { return 0 }
-    let counts = await (try? services.dataStore.getTotalUnreadCounts(radioID: radioID))
-      ?? (contacts: 0, channels: 0, rooms: 0)
-    return counts.contacts + counts.channels + counts.rooms
+    return await conversationUnreadOperations.read(services.dataStore, radioID)
   }
 }

@@ -10,6 +10,9 @@ public struct MeshCoreNodeConfig: Codable, Sendable, Equatable {
   public var otherSettings: OtherSettings?
   public var channels: [ChannelConfig]?
   public var contacts: [ContactConfig]?
+  /// The node a config built from this phone's records belongs to. Never encoded: an export
+  /// file says which node it is through `publicKey`, and only when it carries the identity.
+  public var recordsPublicKey: Data?
 
   public init(
     name: String? = nil,

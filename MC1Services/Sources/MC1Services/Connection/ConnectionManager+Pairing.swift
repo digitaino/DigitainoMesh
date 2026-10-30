@@ -112,7 +112,7 @@ public extension ConnectionManager {
   }
 
   /// Pairing leftover-GATT wait. `.syncing` already has a session
-  /// (`promoteToReady(syncSucceeded: false)`); `.connected` is still rebuilding.
+  /// (`promoteToReady` with a non-usable result); `.connected` is still rebuilding.
   func waitForPairingAdoptionToSettle() async throws {
     #if DEBUG
       if let strategy = pairingAdoptionSettleStrategyOverride {
@@ -198,11 +198,35 @@ public extension ConnectionManager {
       logger.warning("Failed to remove from pairing registry: \(error.localizedDescription)")
     }
 
+    if await retainedWiFiRowAfterBluetoothRemoval(peripheralID: deviceID) != nil {
+      return
+    }
+
     let dataStore = persistenceStore
     try? await dataStore.forgetRadio(id: deviceID)
 
     // Always clear this device's bond verification; store keys are holder-matched.
     await clearPersistedConnection(for: deviceID)
+  }
+
+  /// Clears bond verification, then strips Bluetooth when the row also has WiFi.
+  /// Nil means the caller should ghost or delete and clear the last-connection slot.
+  private func retainedWiFiRowAfterBluetoothRemoval(peripheralID: UUID) async -> DeviceDTO? {
+    await clearBondVerification(for: peripheralID)
+    do {
+      guard let kept = try await persistenceStore.removeBluetoothMethod(peripheralID: peripheralID) else {
+        return nil
+      }
+      if connectedDevice?.id == kept.id {
+        connectedDevice = kept
+      }
+      return kept
+    } catch {
+      logger.warning(
+        "Failed to remove Bluetooth method for \(peripheralID.uuidString.prefix(8)): \(error.localizedDescription)"
+      )
+      return nil
+    }
   }
 
   // MARK: - Other-App Detection
@@ -329,14 +353,15 @@ public extension ConnectionManager {
 
     let dataStore = persistenceStore
     let allContacts = try await dataStore.fetchContacts(radioID: radioID)
-    return allContacts.count(where: { !$0.isFavorite })
+    return allContacts.count(where: { !$0.isFavorite && !$0.isPinned })
   }
 
   /// Removes all non-favorite contacts from the device and app, along with their messages.
+  /// A pinned chat stays too: since pins split from favorites, the pin is how the user keeps one.
   /// - Returns: Count of removed vs total non-favorite contacts
   /// - Throws: `ConnectionError.notConnected` if no device is connected
   func removeUnfavoritedNodes() async throws -> RemoveUnfavoritedResult {
-    try await removeContacts(matching: { !$0.isFavorite })
+    try await removeContacts(matching: { !$0.isFavorite && !$0.isPinned })
   }
 
   /// Removes non-favorite contacts whose recency timestamp is older than the given threshold.
@@ -361,18 +386,18 @@ public extension ConnectionManager {
     matching predicate: (ContactDTO) -> Bool,
     onRemove: ((_ contact: ContactDTO) -> Void)? = nil
   ) async throws -> RemoveUnfavoritedResult {
-    guard let radioID = connectedDevice?.radioID else {
+    guard let radioID = connectedDevice?.radioID, let services else {
       throw ConnectionError.notConnected
     }
 
-    guard let services else {
-      throw ConnectionError.notConnected
-    }
-
+    let selfPublicKey = connectedDevice?.publicKey
     let dataStore = persistenceStore
     let allContacts = try await dataStore.fetchContacts(radioID: radioID)
+    try Task.checkCancellation()
+    guard self.services === services, connectedDevice?.radioID == radioID else {
+      throw ConnectionError.notConnected
+    }
     // Never bulk-remove the ZephCore V-contact: CMD_REMOVE turns firmware v.contact off.
-    let selfPublicKey = connectedDevice?.publicKey
     let targets = allContacts.filter { contact in
       guard predicate(contact) else { return false }
       if let selfPublicKey,
@@ -387,39 +412,63 @@ public extension ConnectionManager {
     }
 
     var removedCount = 0
+    var totalCount = targets.count
+    var deletedIDs: Set<UUID> = []
 
-    for contact in targets {
-      try Task.checkCancellation()
-
-      do {
-        try await services.contactService.removeContact(
-          radioID: radioID,
-          publicKey: contact.publicKey
-        )
-        removedCount += 1
-        onRemove?(contact)
-      } catch ContactServiceError.contactNotFound {
-        do {
-          try await services.contactService.removeLocalContact(
-            contactID: contact.id,
-            publicKey: contact.publicKey
-          )
-          removedCount += 1
-          logger.info("Contact not found on device, cleaned up locally: \(contact.name)")
-        } catch is CancellationError {
-          throw CancellationError()
-        } catch {
-          logger.warning("Failed to clean up local data for \(contact.name): \(error.localizedDescription)")
+    do {
+      for target in targets {
+        try Task.checkCancellation()
+        guard self.services === services, connectedDevice?.radioID == radioID else {
+          break
         }
-      } catch is CancellationError {
-        throw CancellationError()
-      } catch {
-        logger.warning("Failed to remove contact \(contact.name): \(error.localizedDescription)")
-        return RemoveUnfavoritedResult(removed: removedCount, total: targets.count)
-      }
-    }
+        guard let contact = try await dataStore.fetchContact(id: target.id), predicate(contact) else {
+          totalCount -= 1
+          continue
+        }
+        try Task.checkCancellation()
+        guard self.services === services, connectedDevice?.radioID == radioID else {
+          break
+        }
 
-    return RemoveUnfavoritedResult(removed: removedCount, total: targets.count)
+        do {
+          if let id = try await services.contactService.removeContact(
+            radioID: radioID, publicKey: contact.publicKey, deferDeletionUpdates: true
+          ) {
+            deletedIDs.insert(id)
+          }
+          removedCount += 1
+          onRemove?(contact)
+        } catch ContactServiceError.contactNotFound {
+          do {
+            if let id = try await services.contactService.removeLocalContact(
+              contactID: contact.id, publicKey: contact.publicKey, deferDeletionUpdates: true
+            ) {
+              deletedIDs.insert(id)
+            }
+            removedCount += 1
+            logger.info("Contact not found on device, cleaned up locally: \(contact.name)")
+          } catch is CancellationError {
+            try Task.checkCancellation()
+            break
+          } catch {
+            logger.warning("Failed to clean up local data for \(contact.name): \(error.localizedDescription)")
+          }
+        } catch is CancellationError {
+          try Task.checkCancellation()
+          break
+        } catch {
+          logger.warning("Failed to remove contact \(contact.name): \(error.localizedDescription)")
+          break
+        }
+        await services.contactService.flushDeletionUpdatesIfNeeded(contactIDs: &deletedIDs, force: false)
+      }
+    } catch {
+      await services.contactService.flushDeletionUpdatesIfNeeded(contactIDs: &deletedIDs, force: true)
+      throw error
+    }
+    await services.contactService.flushDeletionUpdatesIfNeeded(contactIDs: &deletedIDs, force: true)
+    try Task.checkCancellation()
+    return RemoveUnfavoritedResult(removed: removedCount, total: totalCount)
   }
 
   // MARK: - Stale Pairings
@@ -457,8 +506,159 @@ public extension ConnectionManager {
       }
     }
     connectedDevice = updated
+    let radioID = updated.radioID
     Task {
-      try? await services?.dataStore.saveDevice(updated)
+      let store = services?.dataStore
+      try? await store?.updateDeviceNodeName(radioID: radioID, name: updated.nodeName)
+      try? await store?.updateDeviceCoordinates(
+        radioID: radioID,
+        latitude: updated.latitude,
+        longitude: updated.longitude
+      )
+      try? await store?.updateDeviceRadio(
+        radioID: radioID,
+        frequency: updated.frequency,
+        bandwidth: updated.bandwidth,
+        spreadingFactor: updated.spreadingFactor,
+        codingRate: updated.codingRate,
+        appliedRadioPresetID: updated.appliedRadioPresetID
+      )
+      try? await store?.updateDeviceTxPower(radioID: radioID, txPower: updated.txPower)
+      try? await store?.updateDeviceOtherParams(
+        radioID: radioID,
+        intent: OtherParamsIntent(
+          manualAddContacts: updated.manualAddContacts,
+          telemetryModeBase: updated.telemetryModeBase,
+          telemetryModeLocation: updated.telemetryModeLoc,
+          telemetryModeEnvironment: updated.telemetryModeEnv,
+          advertisementLocationPolicy: updated.advertLocationPolicy,
+          multiAcks: updated.multiAcks
+        )
+      )
+    }
+  }
+
+  /// Persists one refresh onto the existing row, then publishes it on the live device.
+  /// A missing row is left missing. A replaced producer does not update a successor.
+  func applyDeviceObservation(_ info: MeshCore.SelfInfo, from producer: ServiceContainer) async {
+    guard services === producer, let device = connectedDevice else { return }
+    let radio = NodeConfigService.buildRadioSettings(from: info)
+    var mapped = device.updating(from: info)
+    mapped.frequency = radio.frequency
+    mapped.bandwidth = radio.bandwidth
+    mapped.spreadingFactor = radio.spreadingFactor
+    mapped.codingRate = radio.codingRate
+    mapped.txPower = radio.txPower
+    mapped.appliedRadioPresetID = catalogID(
+      for: SettingsEvent.RadioChange(
+        frequencyKHz: radio.frequency,
+        bandwidthHz: radio.bandwidth,
+        spreadingFactor: radio.spreadingFactor,
+        codingRate: radio.codingRate,
+        catalogStamp: .reconcile
+      ),
+      on: device
+    )
+    let snapshotID = device.id
+    let radioID = device.radioID
+    let store = producer.dataStore
+    do {
+      try await store.updateDeviceObservation(radioID: radioID, mapped: mapped)
+    } catch {
+      logger.error("Failed to persist device observation: \(error.localizedDescription)")
+      return
+    }
+    // The row write used the captured radio. Live state updates only if that device is still current.
+    guard services === producer, let current = connectedDevice, current.id == snapshotID else { return }
+    connectedDevice = current.applyingRefresh(mapped)
+  }
+
+  func applyNodeName(_ name: String) async {
+    guard let device = connectedDevice else { return }
+    connectedDevice = device.copy { $0.nodeName = name }
+    try? await services?.dataStore.updateDeviceNodeName(radioID: device.radioID, name: name)
+  }
+
+  func applyCoordinates(latitude: Double, longitude: Double) async {
+    guard let device = connectedDevice else { return }
+    connectedDevice = device.copy {
+      $0.latitude = latitude
+      $0.longitude = longitude
+    }
+    try? await services?.dataStore.updateDeviceCoordinates(
+      radioID: device.radioID,
+      latitude: latitude,
+      longitude: longitude
+    )
+  }
+
+  func applyRadio(_ change: SettingsEvent.RadioChange) async {
+    guard let device = connectedDevice else { return }
+    let presetID = catalogID(for: change, on: device)
+    connectedDevice = device.copy {
+      $0.frequency = change.frequencyKHz
+      $0.bandwidth = change.bandwidthHz
+      $0.spreadingFactor = change.spreadingFactor
+      $0.codingRate = change.codingRate
+      $0.appliedRadioPresetID = presetID
+    }
+    try? await services?.dataStore.updateDeviceRadio(
+      radioID: device.radioID,
+      frequency: change.frequencyKHz,
+      bandwidth: change.bandwidthHz,
+      spreadingFactor: change.spreadingFactor,
+      codingRate: change.codingRate,
+      appliedRadioPresetID: presetID
+    )
+  }
+
+  func applyTxPower(_ power: Int8) async {
+    guard let device = connectedDevice else { return }
+    connectedDevice = device.copy { $0.txPower = power }
+    try? await services?.dataStore.updateDeviceTxPower(radioID: device.radioID, txPower: power)
+  }
+
+  func applyOtherParams(_ intent: OtherParamsIntent) async {
+    guard let device = connectedDevice else { return }
+    connectedDevice = device.copy {
+      if let manualAddContacts = intent.manualAddContacts {
+        $0.manualAddContacts = manualAddContacts
+      }
+      if let telemetryModeBase = intent.telemetryModeBase {
+        $0.telemetryModeBase = telemetryModeBase
+      }
+      if let telemetryModeLocation = intent.telemetryModeLocation {
+        $0.telemetryModeLoc = telemetryModeLocation
+      }
+      if let telemetryModeEnvironment = intent.telemetryModeEnvironment {
+        $0.telemetryModeEnv = telemetryModeEnvironment
+      }
+      if let advertisementLocationPolicy = intent.advertisementLocationPolicy {
+        $0.advertLocationPolicy = advertisementLocationPolicy
+      }
+      if let multiAcks = intent.multiAcks {
+        $0.multiAcks = multiAcks
+      }
+    }
+    try? await services?.dataStore.updateDeviceOtherParams(radioID: device.radioID, intent: intent)
+  }
+
+  private func catalogID(for change: SettingsEvent.RadioChange, on device: DeviceDTO) -> String? {
+    switch change.catalogStamp {
+    case let .set(id):
+      return id
+    case .reconcile:
+      if device.clientRepeat { return device.appliedRadioPresetID }
+      let matches = RadioPresets.matchingPresets(
+        frequencyKHz: change.frequencyKHz,
+        bandwidthKHz: change.bandwidthHz,
+        spreadingFactor: change.spreadingFactor,
+        codingRate: change.codingRate
+      )
+      if let current = device.appliedRadioPresetID, matches.contains(where: { $0.id == current }) {
+        return current
+      }
+      return nil
     }
   }
 
@@ -479,7 +679,15 @@ public extension ConnectionManager {
     connectedDevice = updated
 
     Task {
-      do { try await services?.dataStore.saveDevice(updated) } catch { logger.error("Failed to persist auto-add config: \(error)") }
+      do {
+        try await services?.dataStore.updateDeviceAutoAdd(
+          radioID: updated.radioID,
+          config: config.bitmask,
+          maxHops: config.maxHops
+        )
+      } catch {
+        logger.error("Failed to persist auto-add config: \(error)")
+      }
     }
   }
 
@@ -491,7 +699,11 @@ public extension ConnectionManager {
     connectedDevice = updated
 
     Task {
-      do { try await services?.dataStore.saveDevice(updated) } catch { logger.error("Failed to persist client repeat state: \(error)") }
+      do {
+        try await services?.dataStore.updateDeviceClientRepeat(radioID: updated.radioID, enabled: enabled)
+      } catch {
+        logger.error("Failed to persist client repeat state: \(error)")
+      }
     }
   }
 
@@ -503,7 +715,11 @@ public extension ConnectionManager {
     connectedDevice = updated
 
     Task {
-      do { try await services?.dataStore.saveDevice(updated) } catch { logger.error("Failed to persist path hash mode: \(error)") }
+      do {
+        try await services?.dataStore.updateDevicePathHashMode(radioID: updated.radioID, mode: mode)
+      } catch {
+        logger.error("Failed to persist path hash mode: \(error)")
+      }
     }
   }
 
@@ -515,7 +731,11 @@ public extension ConnectionManager {
     connectedDevice = updated
 
     Task {
-      do { try await services?.dataStore.saveDevice(updated) } catch { logger.error("Failed to persist default flood scope: \(error)") }
+      do {
+        try await services?.dataStore.updateDeviceDefaultFloodScopeName(radioID: updated.radioID, name: name)
+      } catch {
+        logger.error("Failed to persist default flood scope: \(error)")
+      }
     }
   }
 
@@ -682,22 +902,31 @@ extension ConnectionManager: DevicePairingDelegate {
     // callback signature. Ordered first in the Task so it runs before reconnect-
     // adjacent work; residual race with concurrent classify is accepted here.
     Task {
-      await clearPersistedConnection(for: bluetoothID)
-
-      if connectedDevice?.id == bluetoothID {
-        await disconnect(reason: .deviceRemovedFromSettings)
-      }
+      let disconnectBluetoothSession = connectedDevice?.id == bluetoothID && wifiTransport == nil
 
       // iOS can fire accessoryRemoved while session.accessories still lists the
       // id. Ghosting then turns a still-authorized radio into a Set Up leftover
       // that blocks Scan. Keep the Device row so Connect still works.
       if pairing.isDeviceConnectable(bluetoothID) {
+        await clearPersistedConnection(for: bluetoothID)
+        if disconnectBluetoothSession {
+          await disconnect(reason: .deviceRemovedFromSettings)
+        }
         logger.info(
           "ASK still lists \(bluetoothID.uuidString.prefix(8)) after removal; keeping Device row"
         )
         return
       }
 
+      let keptWiFi = await retainedWiFiRowAfterBluetoothRemoval(peripheralID: bluetoothID) != nil
+      if disconnectBluetoothSession {
+        await disconnect(reason: .deviceRemovedFromSettings)
+      }
+      if keptWiFi {
+        return
+      }
+
+      await clearPersistedConnection(for: bluetoothID)
       // Keep the history: with another radio carrying the identity the row just goes,
       // otherwise it becomes a ghost that preserves the publicKey ↔ radioID bridge.
       let dataStore = persistenceStore
@@ -719,11 +948,16 @@ extension ConnectionManager: DevicePairingDelegate {
 
     // DevicePairingDelegate is non-async; bond clear is ordered first in the Task.
     Task {
-      await clearPersistedConnection(for: bluetoothID)
-
-      if connectedDevice?.id == bluetoothID {
+      let disconnectBluetoothSession = connectedDevice?.id == bluetoothID && wifiTransport == nil
+      let keptWiFi = await retainedWiFiRowAfterBluetoothRemoval(peripheralID: bluetoothID) != nil
+      if disconnectBluetoothSession {
         await disconnect(reason: .pairingFailed)
       }
+      if keptWiFi {
+        return
+      }
+
+      await clearPersistedConnection(for: bluetoothID)
 
       // Delete device record only — no data exists for a failed pairing
       let dataStore = persistenceStore

@@ -292,7 +292,6 @@ struct WeatherAreaMapDrawing: @unchecked Sendable, Equatable {
 /// The shared map showing a prepared drawing, framed on it.
 struct WeatherAlertMapView: View {
   @Environment(\.appState) private var appState
-  @Environment(\.colorScheme) private var colorScheme
 
   let drawing: WeatherMapDrawing
   let isInteractive: Bool
@@ -310,8 +309,6 @@ struct WeatherAlertMapView: View {
   private var showLabels = AppStorageKey.defaultMapShowLabels
   @AppStorage(AppStorageKey.mapNorthLocked.rawValue)
   private var isNorthLocked = AppStorageKey.defaultMapNorthLocked
-  @AppStorage(AppStorageKey.mapColorSchemePreference.rawValue)
-  private var mapColorSchemeRaw = AppStorageKey.defaultMapColorSchemePreference
 
   var body: some View {
     MC1MapView(
@@ -319,8 +316,6 @@ struct WeatherAlertMapView: View {
       lines: [],
       overlays: drawing.overlays,
       mapStyle: mapStyleSelection,
-      isDarkMode: resolvedMapIsDark(
-        preference: AppColorSchemePreference(rawValue: mapColorSchemeRaw) ?? .system, colorScheme: colorScheme),
       isOffline: !appState.offlineMapService.isNetworkAvailable,
       showLabels: showLabels,
       // The map asks for permission by itself when this is true while undetermined.

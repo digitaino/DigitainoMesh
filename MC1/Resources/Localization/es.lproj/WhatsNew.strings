@@ -56,7 +56,52 @@
 "whatsNew.credit.body" = "DigitainoMesh es un fork no oficial de MeshCore One que se comparte por TestFlight con un grupo pequeño. La app es obra de Avi0n; este fork solo añade algunos experimentos. Si te resulta útil, apoya a Avi0n.";
 
 /* What's New - link to MeshCore One's own release notes for this version */
-"whatsNew.credit.upstreamNotes" = "Novedades de MeshCore One 1.5";
+"whatsNew.credit.upstreamNotes" = "Novedades de MeshCore One 1.6";
 
 /* What's New - button opening Avi0n's GitHub Sponsors page */
 "whatsNew.supportButton" = "Apoyar a Avi0n";
+
+/* What's New v1.6 - Pinned chats, title */
+"whatsNew.pinnedChats.title" = "Chats fijados";
+/* What's New v1.6 - Pinned chats, description */
+"whatsNew.pinnedChats.description" = "Los chats fijados ahora están separados de los favoritos. Los chats fijados aparecen en la sección Fijado, y los contactos que ya habías añadido a favoritos se fijan la primera vez que abres la app.";
+
+/* What's New v1.6 - Read and unread, title */
+"whatsNew.readAndUnread.title" = "Leído y no leído";
+/* What's New v1.6 - Read and unread, description */
+"whatsNew.readAndUnread.description" = "Mantén pulsado un chat para marcarlo como leído o no leído.";
+
+/* What's New v1.6 - iPhone Duo, title */
+"whatsNew.iPhoneDuo.title" = "iPhone Duo";
+/* What's New v1.6 - iPhone Duo, description */
+"whatsNew.iPhoneDuo.description" = "MC1 está listo para iPhone Duo con diseños redimensionables.";
+
+/* What's New v1.6 - iPad tab bar, title */
+"whatsNew.iPadTabBar.title" = "Barra de pestañas del iPad";
+/* What's New v1.6 - iPad tab bar, description */
+"whatsNew.iPadTabBar.description" = "En iPad, los iconos de las pestañas pasan de la izquierda a la parte superior. Esto nos ayuda a mejorar la compatibilidad con todos los dispositivos, incluido el iPhone Duo.";
+
+/* What's New v1.6 - Advanced map filters, title */
+"whatsNew.advancedMapFilters.title" = "Filtros avanzados del mapa";
+/* What's New v1.6 - Advanced map filters, description */
+"whatsNew.advancedMapFilters.description" = "Filtra el mapa por última escucha y por cantidad de saltos. Puedes elegir un preajuste o establecer un rango personalizado, y eliminar un filtro donde se muestra.";
+
+/* What's New v1.6 - Bluetooth and Wi-Fi, title */
+"whatsNew.bluetoothAndWiFi.title" = "Bluetooth y WiFi";
+/* What's New v1.6 - Bluetooth and Wi-Fi, description */
+"whatsNew.bluetoothAndWiFi.description" = "Si una radio con firmware 1.18 o posterior está emparejada tanto vía Bluetooth como vía WiFi, puedes cambiar entre ellos en Conectar dispositivo y en Ajustes > Conexión.";
+
+/* What's New v1.6 - More changes, title */
+"whatsNew.moreChanges.title" = "Más cambios";
+/* What's New v1.6 - More changes, description */
+"whatsNew.moreChanges.description" = "Toca \"Ver todos los cambios nuevos\" abajo para ver la lista completa de correcciones de errores y otras funciones.";
+
+/* What's New v1.6 (fork) - several weather radios on one channel, title */
+"whatsNew.weatherBots.title" = "Tiempo desde varias radios";
+/* What's New v1.6 (fork) - several weather radios on one channel, description */
+"whatsNew.weatherBots.description" = "Si hay más de una radio meteorológica en #meshwx, Tiempo pregunta a la que cubre tu ubicación y muestra cada una con su ID, como WX-AUS 1D04.";
+
+/* What's New v1.6 (fork) - favorites written to every radio carrying the node, title */
+"whatsNew.favoritesEveryRadio.title" = "Favoritos en cada radio";
+/* What's New v1.6 (fork) - favorites written to every radio carrying the node, description */
+"whatsNew.favoritesEveryRadio.description" = "Si tu nodo funciona en más de una radio, la app escribe tus favoritos en la radio que conectes, así todas tienen los mismos.";

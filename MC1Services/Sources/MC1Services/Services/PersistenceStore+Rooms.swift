@@ -64,6 +64,42 @@ public extension PersistenceStore {
     _ = try saveRemoteNodeSession(dto)
   }
 
+  func reuseOrCreateRemoteNodeSession(_ presentation: RoomSessionPresentation) throws -> RemoteNodeSessionDTO {
+    let targetKey = presentation.publicKey
+    let targetRadioID = presentation.radioID
+    let predicate = #Predicate<RemoteNodeSession> { session in
+      session.publicKey == targetKey && session.radioID == targetRadioID
+    }
+    let descriptor = FetchDescriptor(
+      predicate: predicate,
+      sortBy: [SortDescriptor(\.name)]
+    )
+    let session: RemoteNodeSession
+    if let existing = try modelContext.fetch(descriptor).first {
+      session = existing
+    } else {
+      session = RemoteNodeSession(
+        radioID: presentation.radioID,
+        publicKey: presentation.publicKey,
+        name: presentation.name,
+        role: presentation.role,
+        latitude: presentation.latitude,
+        longitude: presentation.longitude,
+        isConnected: false
+      )
+      modelContext.insert(session)
+    }
+    session.name = presentation.name
+    session.publicKey = presentation.publicKey
+    session.roleRawValue = presentation.role.rawValue
+    session.latitude = presentation.latitude
+    session.longitude = presentation.longitude
+    session.isConnected = false
+    try modelContext.save()
+    try cleanupDuplicateRemoteNodeSessions(publicKey: presentation.publicKey, keepID: session.id)
+    return RemoteNodeSessionDTO(from: session)
+  }
+
   /// Save or update a remote node session
   @discardableResult
   private func saveRemoteNodeSession(_ dto: RemoteNodeSessionDTO) throws -> RemoteNodeSession {
@@ -197,8 +233,7 @@ public extension PersistenceStore {
     var descriptor = FetchDescriptor(predicate: predicate)
     descriptor.fetchLimit = 1
 
-    guard let session = try modelContext.fetch(descriptor).first else { return false }
-    guard !session.isConnected else { return false }
+    guard let session = try modelContext.fetch(descriptor).first, !session.isConnected else { return false }
 
     session.isConnected = true
     try modelContext.save()
@@ -397,8 +432,8 @@ public extension PersistenceStore {
     try modelContext.save()
   }
 
-  /// Sets the favorite state for a remote node session
-  func setSessionFavorite(_ sessionID: UUID, isFavorite: Bool) throws {
+  /// Sets the local pin for a room server session.
+  func setSessionPinned(_ sessionID: UUID, isPinned: Bool) throws {
     let targetID = sessionID
     let predicate = #Predicate<RemoteNodeSession> { $0.id == targetID }
     var descriptor = FetchDescriptor<RemoteNodeSession>(predicate: predicate)
@@ -408,7 +443,7 @@ public extension PersistenceStore {
       throw PersistenceStoreError.remoteNodeSessionNotFound
     }
 
-    session.isFavorite = isFavorite
+    session.isPinned = isPinned
     try modelContext.save()
   }
 
