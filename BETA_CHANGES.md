@@ -1,3 +1,27 @@
+Beta Changes -- v1.6.2
+
+MeshCore One 1.6, Favorites That Follow You Across Radios, and Weather From Several Radios
+
+What is different from the second 1.5.2 build of 17 October.
+
+Pinned chats. From MeshCore One 1.6: pinning a chat is now separate from the radio's favorite star, and pinned chats sit in their own Pinned section. Contacts that were favorites are pinned the first time this build opens. A pinned chat is never deleted by a full radio, by stale-node cleanup or by Remove Non-Favorite Nodes, the same as a favorite.
+
+Favorites on every radio. If your node runs on more than one radio, the stars you set in the app are now written to whichever radio you connect, so every radio keeps the same favorites (and protects them when its contact list fills up). MeshCore One 1.6 would otherwise copy each radio's own stars onto the phone, so switching radios lost them. A star changed outside this app on one of those radios is put back at the next connect. With one radio, the radio's star still reaches the phone.
+
+Weather from several radios. When more than one weather radio is on #meshwx, Weather asks the one that covers where you are, and names each with its ID, such as WX-AUS 1D04.
+
+Info sheets without the radio. A chat's notification level, pin, a contact's nickname, avatar and block, and deleting a message all save with the radio off. Known regions wait for the radio, since the list belongs to it.
+
+From MeshCore One 1.6. Mark a chat read or unread (long press, or a full swipe). On iPad the sidebar is now a tab bar at the top, and the open chat, page and tool survive tab switches and rotation. Map filters for last heard and hop count. Bluetooth and Wi-Fi on the same radio, switchable in Connect Device and Settings › Connection (firmware 1.18, radio paired both ways). A command line for your own radio and remote commands for contacts' radios. Offline maps choose a detail level. Many fixes to the keyboard, scrolling, link previews and connections. What's New shows the 1.6 notes.
+
+Weather alerts. A tapped alert notification now opens Weather on iPhone too, not the Tools list.
+
+What to try. Switch between two radios that carry your node and check your stars stay put on both. Pin a channel and a DM, then check the Pinned section. On an iPad, use the tab bar and open Weather and the Signal Mapper. Tap a weather alert notification.
+
+Unchanged: everything in the 1.5.2 builds below.
+
+---
+
 Beta Changes -- v1.5.2 (second build)
 
 Weather Alerts You Can Trust a Little More

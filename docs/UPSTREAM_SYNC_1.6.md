@@ -365,3 +365,73 @@ fork build loses channel and room pins.
    favourites, pins and per-slot channel counts against the backup before and after;
    disconnect with a radio tool open.
 8. Fast-forward `main`, update the beta notes, then `fastlane beta`.
+
+## 8. As built (2026-10-30)
+
+Branch `upstream-sync-1.6`, cut from `main` 27db4e4e, rerere on. Nothing pushed.
+
+| Commit | What |
+|---|---|
+| 7c82202e, d60e5058 | Decision 3: the 10-18 work, tested (15 + 138 tests) and committed first. |
+| 305efc21 | This plan. |
+| c48e796c | The merge (78 conflicted files), with §3 A–C, E, F, H–K and decisions 1, 2, 4. |
+| 77dd8030 | §3 D and H6: a radio's own Wi-Fi-only or legacy row is adopted, not a sibling; a Wi-Fi connect picks the row at its address. |
+| 552561d7 | Stale-node cleanup reaches the radio before the fork's post-sync prompts. |
+| 72ab4c2f | Test fixtures (fork prune rule, flood-scope-first send order, Support page). |
+
+**Where the build differs from the plan:**
+- **§3 B:** every refresh and settings write goes to the most recently connected row (the
+  connected radio). Name and flood scope are not copied to sibling rows: each row says what
+  its radio actually has, and the swap profile is captured from the outgoing radio's row.
+- **§3 E:** upstream's `handleDeviceSynced` runs first and the fork's prompts after it. It
+  only returns early (it does not end the closure), and cleanup-first is the pre-merge order.
+  The notification-rule sync waits for a cleanup that just started.
+- **§3 G:** kept the fork's one-way Tools stack (a clear from outside never pops the open
+  tool, so no popover teardown) and made it follow a tool *named* from outside. That fixes
+  §3 H on iPhone and iPad without the deferred-clear timer.
+- **§3 I:** upstream's `ChatScrollRequestDelivery` now expands a collapsed duplicate run when
+  the target is a hidden copy; a delivered jump flashes the bubble like a search jump.
+- **§3 A:** the dead `ContactService.migrateAppFavoritesToDevice` stays (upstream code, unused
+  upstream too). The write uses the synced frames after blocked-contact CLI revocation, so it
+  cannot restore a revoked grant.
+- **Decision 4:** records-built configs carry the node's key in `recordsPublicKey`, which is
+  never encoded, so exports are unchanged.
+- **Keep rules (§3 F)** also cover Remove Non-Favorite Nodes and the import planner's
+  protected contacts.
+- **§3 J:** Weather and the mapper ride use `hidingBottomTabBar`, which leaves an iPad's top
+  tab bar alone. Wheel zoom reports a user camera move. `SharedRouteMapView` passes
+  `isOffline`. Contact detail saves nickname and avatar through the offline store and deletes a
+  contact the radio no longer holds.
+- **Not done:** `insertContactIfAbsent` still leaves IdentityDeletion records (low; a re-added
+  contact has a newer `lastModified`, so it is not treated as stale). The room info sheet's
+  stale pin display is upstream's bug. Quick replies were checked: upstream compares
+  `radioID`, which siblings share, so they still work after a switch.
+
+**Tests (this Mac, Xcode 27.1, iPhone 18 Pro Max / iOS 27 simulator):**
+- MeshCore: 583 passed.
+- MC1ServicesTests in chunks of 20 suites: all pass except six CoreBluetooth suites
+  (BLEStateMachine ×3, BondLossPairingRecovery, BondShieldRefresh, ConnectionManagerBLEHealth)
+  that abort `swift test` on the Bluetooth TCC check, the known pre-existing abort. Weather
+  and remote-CLI suites time out only under parallel load and pass alone.
+- MC1Tests (StoreKit suites skipped; they hang on iOS 27 and belong on iOS 18 per
+  `make test-store`): 3,813 tests, 3,795 passed. The 18 failures are in nine suites. Seven fail
+  the same way on pristine `upstream/dev` built in a clean worktree (ChatChannelInfoPresentation,
+  ChatPinInfoSheet, ChatKeyboardLift, ChatsSearchFilter, CompactComposerKeyboardGap,
+  GlassFilterBar, SearchFilterSpacing): this simulator's keyboard and accessibility tree. Settings
+  tab navigation fails Connection upstream too, and Support the same way on the fork's page.
+  NeighborSNRMapBuilder is the known fork fixture conflict (merge memory).
+- New tests: shared-identity favourites (5), pinned contacts kept (2), remote-CLI grant (4),
+  retry keeps the channel guard (1), stale room and channel pin sheets (2).
+- Migration rehearsal: the 2026-10-04 phone store opened in the simulator under this build.
+  Devices 5, contacts 682, channels 91, messages 111,699, repeats 71,040, reactions 923 and
+  per-slot message counts (57 groups) identical before and after; 86 favourite contacts and
+  16 favourite channels came through as pins.
+
+**Still open (needs the phone or the owner):**
+- §7 step 1: back up the phone store over the cable (Wi-Fi copy aborts on the 390 MB store).
+- iPad layout pass: only checked that the build launches on an iPad simulator.
+- §7 step 7: on the phone, pair and scan from both entry points; switch Wio Tracker ↔ RAK 3401
+  and check stars on both radios, pins and per-slot channel counts against the backup;
+  disconnect with a radio tool open.
+- Push the branch, fast-forward `main`, then `fastlane beta` (a new App Store Connect version:
+  Beta App Review for external testers). Beta notes are in BETA_CHANGES.md.
