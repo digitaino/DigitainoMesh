@@ -1085,8 +1085,9 @@ so the text ends where a sentence does.
 ## 15. Not in this cut
 
 A stations map; request jitter; a phone-to-bot clock-offset estimator; forecast points' own time
-zones (day labels use the phone's); widgets. Radar: scheduled radar of any kind (it is request
-only), a loop longer than an hour or more than five frames, and difference frames. Alert
+zones (day labels use the phone's); widgets. Radar: a loop longer than an hour or more than five
+frames, and difference frames. A bot can broadcast its area's tile while there is precipitation
+(bot spec §15); the app files it like an answer and asks nothing because of it. Alert
 notifications were on this list until 2026-09-16 (§16).
 
 ## 16. Alert notifications
