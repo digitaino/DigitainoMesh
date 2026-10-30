@@ -257,7 +257,7 @@ extension ConnectionManager {
       throw ConnectionError.initializationFailed("No self info")
     }
 
-    let deviceID = await wifiDeviceID(publicKey: selfInfo.publicKey)
+    let deviceID = await wifiDeviceID(publicKey: selfInfo.publicKey, host: host, port: port)
     try Task.checkCancellation()
     try await completeWiFiReconnection(
       session: newSession,
@@ -416,7 +416,7 @@ extension ConnectionManager {
       let (meshCoreSelfInfo, deviceCapabilities) = try await initializeSession(newSession)
       detectAndStorePlatform(model: deviceCapabilities.model, transportType: .wifi)
 
-      let deviceID = await wifiDeviceID(publicKey: meshCoreSelfInfo.publicKey)
+      let deviceID = await wifiDeviceID(publicKey: meshCoreSelfInfo.publicKey, host: host, port: port)
 
       let wifiMethod = ConnectionMethod.wifi(host: host, port: port, displayName: nil)
       let (newServices, radioID) = try await buildServicesAndSaveDevice(
@@ -470,8 +470,23 @@ extension ConnectionManager {
 
   /// Saved id for a WiFi connect: the row's Bluetooth peripheral UUID, else its id.
   /// Derives from the public key when no row exists or the fetch fails.
-  func wifiDeviceID(publicKey: Data) async -> UUID {
+  func wifiDeviceID(publicKey: Data, host: String? = nil, port: UInt16? = nil) async -> UUID {
     let rows = await (try? persistenceStore.fetchDevices(publicKey: publicKey)) ?? []
+    // Several radios can carry one key (docs/RADIO_SWAP.md). A radio reached at this address
+    // before is that radio; with more than one Bluetooth radio on the key and no address match,
+    // which one this is cannot be known, so it gets a row of its own and joins the identity
+    // as a sibling, with the swap guard armed, instead of borrowing another radio's row.
+    if let host, let port, let row = rows.first(where: { row in
+      row.connectionMethods.contains { method in
+        guard case let .wifi(rowHost, rowPort, _) = method else { return false }
+        return rowHost == host && rowPort == port
+      }
+    }) {
+      return row.bluetoothPeripheralID ?? row.id
+    }
+    if rows.count(where: { $0.bluetoothPeripheralID != nil }) > 1 {
+      return UUID()
+    }
     if let row = rows.first(where: { $0.bluetoothPeripheralID != nil }) ?? rows.first {
       return row.bluetoothPeripheralID ?? row.id
     }

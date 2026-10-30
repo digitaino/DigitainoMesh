@@ -984,12 +984,18 @@ public final class ConnectionManager {
     } else {
       nil
     }
-    // A row found by key that still has a way to connect is another radio carrying this
-    // identity, not a leftover: this radio gets its own row beside it, sharing the history
+    // A row found by key with a Bluetooth link to another peripheral is another radio carrying
+    // this identity, not a leftover: this radio gets its own row beside it, sharing the history
     // (docs/RADIO_SWAP.md, R1). It lends the new row only what belongs to the identity, never
-    // its connection methods or its battery curve. A ghost or backup shadow (no methods) is
-    // still adopted and removed below.
-    let siblingRadio = deviceByPublicKey.flatMap { $0.connectionMethods.isEmpty ? nil : $0 }
+    // its connection methods or its battery curve. Anything else is this radio's own earlier
+    // row and is adopted and removed below: a ghost or backup shadow (no links), a Wi-Fi-only
+    // row, or a legacy row whose Bluetooth link is this very peripheral.
+    let siblingRadio = deviceByPublicKey.flatMap { row in
+      row.connectionMethods.contains { method in
+        guard case let .bluetooth(peripheralUUID, _) = method else { return false }
+        return peripheralUUID != deviceID
+      } ? row : nil
+    }
     let effectiveExisting = existingDevice ?? siblingRadio.map(Self.identityTemplate(from:)) ?? deviceByPublicKey
     var resolvedRadioID = effectiveExisting?.radioID ?? UUID()
 
@@ -1088,9 +1094,9 @@ public final class ConnectionManager {
       logger.notice("Radio swap guard armed: radio \(deviceID.uuidString.prefix(8)) took on radioID \(resolvedRadioID)")
     }
 
-    // Clean up a ghost or backup shadow this radio adopted. Another radio carrying the
-    // identity keeps its row.
-    if let oldDevice = deviceByPublicKey, oldDevice.id != deviceID, oldDevice.connectionMethods.isEmpty {
+    // Clean up the earlier row this radio adopted. Another radio carrying the identity keeps
+    // its row.
+    if let oldDevice = deviceByPublicKey, oldDevice.id != deviceID, siblingRadio == nil {
       try? await newServices.dataStore.deleteDevice(id: oldDevice.id)
     }
 
