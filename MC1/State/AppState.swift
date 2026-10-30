@@ -617,12 +617,19 @@ final class AppState {
 
     // Wire device synced callback - runs after sync completes and state is .ready
     connectionManager.onDeviceSynced = { [weak self] hasCleanRecipientData in
+      // Stale-node cleanup starts first, as it always has. This returns as soon as it starts
+      // one, and waits only on a cleanup already running for this connection.
+      await self?.handleDeviceSynced(hasCleanRecipientData: hasCleanRecipientData)
       // Ready is the first moment the Device row carries the radio's configured location,
       // so it is the earliest the staleness check can mean anything.
       self?.evaluateNodeLocationStaleness()
       // Reconcile the firmware's notification rules with current iOS state on every
-      // post-sync ready transition — covers fresh boot, reconnect, and reflash.
-      Task { [weak self] in await self?.reconcileNotifSync() }
+      // post-sync ready transition — covers fresh boot, reconnect, and reflash. A stale-node
+      // cleanup that just started talks to the radio first.
+      Task { [weak self] in
+        await self?.staleNodeCleanupTask?.value
+        await self?.reconcileNotifSync()
+      }
       // After the first sync on a radio that took on an identity, offer to copy this phone's
       // records of it onto the radio. The sync has run, so a radio that already matched has
       // released its guard and is not asked.
@@ -630,8 +637,6 @@ final class AppState {
       // A blank radio, with the user's own node keys on this iPhone: ask whether to set it up
       // as one of them. A radio that took on a node is never blank, so the two never overlap.
       Task { [weak self] in await self?.evaluateRadioSetUp() }
-      // Last: it returns early once stale-node cleanup starts, so nothing above may follow it.
-      await self?.handleDeviceSynced(hasCleanRecipientData: hasCleanRecipientData)
     }
 
     loadPersistedRegionSelection()
