@@ -2212,17 +2212,15 @@ struct SyncCoordinatorTests {
 
   @Test
   @MainActor
-  func `complete empty snapshot removes an ordinary favourite and keeps the V-contact`() async throws {
+  func `complete empty snapshot removes an ordinary contact and keeps the V-contact`() async throws {
     let testDeviceID = UUID()
     let selfPublicKey = Data(repeating: 0x01, count: 32)
     let dataStore = try await createTestDataStore(radioID: testDeviceID, maxContacts: 4)
     let vContactKey = try #require(VContactIdentity.publicKey(forSelfPublicKey: selfPublicKey))
     let ordinaryKey = Data(repeating: 0x99, count: 32)
     _ = try await dataStore.saveContact(radioID: testDeviceID, from: contactFrame(key: vContactKey, name: "V-Contact"))
-    _ = try await dataStore.saveContact(
-      radioID: testDeviceID,
-      from: contactFrame(key: ordinaryKey, name: "Favourite", flags: ContactFlags.favorite.rawValue)
-    )
+    // Not a favourite: the fork's prune keeps favourites and contacts with messages.
+    _ = try await dataStore.saveContact(radioID: testDeviceID, from: contactFrame(key: ordinaryKey, name: "Ordinary"))
 
     let session = MockMeshCoreSession()
     await session.setStubbedContacts([])

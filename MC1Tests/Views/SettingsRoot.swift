@@ -81,7 +81,8 @@ enum SettingsRoot: CaseIterable, Sendable, CustomTestStringConvertible {
     case .backup:
       [L10n.Settings.Settings.Backup.FileBackup.header]
     case .support:
-      [L10n.Settings.Support.Restore.button]
+      // The fork's Support page credits Avi0n; it has no tip jar and no Restore button.
+      [L10n.Settings.Support.Fork.body]
     case .feedback:
       [L10n.Settings.Feedback.GitHub.link]
     }

@@ -489,8 +489,13 @@ struct MessageServiceSendTests {
     try await dataStore.setMessageObserverCount(id: messageID, count: 7, checkedAt: Date())
 
     let resendTask = Task { try await service.resendChannelMessage(messageID: messageID) }
-    try await waitUntil("resend should send CMD_SEND_CHANNEL_MSG") {
+    // The channel's flood scope goes first, then the message (upstream ae5fa6ec).
+    try await waitUntil("resend should set the channel flood scope") {
       await transport.sentData.count == 2
+    }
+    await transport.simulateOK()
+    try await waitUntil("resend should send CMD_SEND_CHANNEL_MSG") {
+      await transport.sentData.count == 3
     }
     await transport.simulateOK()
     _ = try await resendTask.value

@@ -214,7 +214,8 @@ struct ContactServiceFavoriteOrderingTests {
       from: ContactFrame(
         publicKey: orphanKey,
         type: .chat,
-        flags: ContactFlags.favorite.rawValue,
+        // Not a favourite: the fork's prune keeps favourites.
+        flags: 0,
         outPathLength: 0,
         outPath: Data(),
         name: "Orphan",
