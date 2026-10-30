@@ -118,9 +118,9 @@ extension ChatViewModel {
     }
   }
 
-  /// Delete a single message
+  /// Delete a single message. A phone-only delete, so it works with the radio off: the
+  /// action stays offered offline, and requiring a connection made it silently do nothing.
   func deleteMessage(_ message: MessageDTO) async {
-    guard connectionStateProvider() == .ready else { return }
     guard let dataStore else { return }
 
     do {

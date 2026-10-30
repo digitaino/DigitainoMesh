@@ -280,6 +280,76 @@ struct ChatViewModelConversationTests {
     #expect(try await dataStore.fetchChannel(id: channel.id)?.isFavorite == false)
   }
 
+  /// Favorite and notification level are phone-only, and the info sheet stays open with the
+  /// radio off (or still syncing), so both must save without a connection.
+  @Test
+  func `info sheet settings save with the radio off`() async throws {
+    let container = try PersistenceStore.createContainer(inMemory: true)
+    let dataStore = PersistenceStore(modelContainer: container)
+    let channel = makeChannel(name: "General")
+    try await dataStore.saveChannel(channel)
+
+    let viewModel = ChatViewModel()
+    viewModel.configureForTesting(dependencies: .testDefaults(
+      dataStore: { dataStore },
+      connectionState: { .disconnected }
+    ))
+
+    await viewModel.setFavorite(.channel(channel), isFavorite: true)
+    await viewModel.setNotificationLevel(.channel(channel), level: .muted)
+
+    let saved = try await dataStore.fetchChannel(id: channel.id)
+    #expect(saved?.isFavorite == true)
+    #expect(saved?.notificationLevel == .muted)
+  }
+
+  /// Delete stays offered offline and only touches the phone's store.
+  @Test
+  func `deleteMessage removes the message with the radio off`() async throws {
+    let container = try PersistenceStore.createContainer(inMemory: true)
+    let dataStore = PersistenceStore(modelContainer: container)
+    let contact = makeContact(name: "Alice")
+    try await dataStore.saveContact(contact)
+    let message = makeMessage(radioID: contact.radioID, contactID: contact.id)
+    try await dataStore.saveMessage(message)
+
+    let viewModel = ChatViewModel()
+    viewModel.configureForTesting(dependencies: .testDefaults(
+      dataStore: { dataStore },
+      connectionState: { .disconnected }
+    ))
+
+    await viewModel.deleteMessage(message)
+
+    #expect(try await dataStore.fetchMessage(id: message.id) == nil)
+  }
+
+  private func makeMessage(radioID: UUID, contactID: UUID) -> MessageDTO {
+    MessageDTO(
+      id: UUID(),
+      radioID: radioID,
+      contactID: contactID,
+      channelIndex: nil,
+      text: "hello",
+      timestamp: 1000,
+      createdAt: Date(timeIntervalSince1970: 1000),
+      direction: .incoming,
+      status: .delivered,
+      textType: .plain,
+      ackCode: nil,
+      pathLength: 0,
+      snr: nil,
+      senderKeyPrefix: nil,
+      senderNodeName: nil,
+      isRead: false,
+      replyToID: nil,
+      roundTripTime: nil,
+      heardRepeats: 0,
+      retryAttempt: 0,
+      maxRetryAttempts: 0
+    )
+  }
+
   // MARK: - errorBannerMessage Tests
 
   @Test

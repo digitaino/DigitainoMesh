@@ -4,9 +4,11 @@ import SwiftUI
 extension ChatViewModel {
   // MARK: - Notification Level
 
-  /// Sets notification level for a conversation with optimistic UI update
+  /// Sets notification level for a conversation with optimistic UI update.
+  ///
+  /// Levels live on the phone, so this saves with the radio off too (the info sheets stay
+  /// usable offline). Firmware alert rules catch up in `reconcileOnConnect`.
   func setNotificationLevel(_ conversation: Conversation, level: NotificationLevel) async {
-    guard connectionStateProvider() == .ready else { return }
     let originalLevel = conversation.notificationLevel
 
     // Capture once so the write and the badge update target the same container.
@@ -93,7 +95,6 @@ extension ChatViewModel {
   /// whose list buffers are empty. An unlisted conversation therefore writes the requested
   /// value as-is: the sheet's copy is stale after its first flip, so it can't be diffed against.
   func setFavorite(_ conversation: Conversation, isFavorite: Bool) async {
-    guard connectionStateProvider() == .ready else { return }
     let current = liveConversation(id: conversation.id)
     guard current?.isFavorite != isFavorite else { return }
 
@@ -111,7 +112,6 @@ extension ChatViewModel {
   ///   - disableAnimation: When true, disables SwiftUI List animations to prevent
   ///     conflicts with swipe action dismissal animations
   func toggleFavorite(_ conversation: Conversation, disableAnimation: Bool = false) async {
-    guard connectionStateProvider() == .ready else { return }
     guard let current = liveConversation(id: conversation.id) else { return }
     await writeFavorite(current, isFavorite: !current.isFavorite, disableAnimation: disableAnimation)
   }
@@ -122,7 +122,9 @@ extension ChatViewModel {
 
     switch current {
     case let .direct(contact):
-      // Contacts sync with device - wait for confirmation
+      // Contacts sync with device - wait for confirmation. The flag lives on the radio,
+      // so this one needs a connection; channels and rooms below are phone-only.
+      guard connectionStateProvider() == .ready else { return }
       togglingFavoriteID = contact.id
       defer { togglingFavoriteID = nil }
 

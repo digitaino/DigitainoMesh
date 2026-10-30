@@ -555,6 +555,58 @@ public extension PersistenceStore {
     try modelContext.save()
   }
 
+  /// Sets a contact's local nickname. Empty or whitespace-only text clears it, matching
+  /// `ContactService.updateContactPreferences`; this one needs no radio, so it works offline.
+  func setContactNickname(_ contactID: UUID, nickname: String) throws {
+    let targetID = contactID
+    let predicate = #Predicate<Contact> { $0.id == targetID }
+    var descriptor = FetchDescriptor<Contact>(predicate: predicate)
+    descriptor.fetchLimit = 1
+
+    guard let contact = try modelContext.fetch(descriptor).first else {
+      throw PersistenceStoreError.contactNotFound
+    }
+
+    let trimmed = nickname.trimmingCharacters(in: .whitespacesAndNewlines)
+    contact.nickname = trimmed.isEmpty ? nil : trimmed
+    try modelContext.save()
+  }
+
+  /// Sets or clears (`nil`) a contact's locally stored profile picture. Needs no radio.
+  func setContactAvatar(_ contactID: UUID, imageData: Data?) throws {
+    let targetID = contactID
+    let predicate = #Predicate<Contact> { $0.id == targetID }
+    var descriptor = FetchDescriptor<Contact>(predicate: predicate)
+    descriptor.fetchLimit = 1
+
+    guard let contact = try modelContext.fetch(descriptor).first else {
+      throw PersistenceStoreError.contactNotFound
+    }
+
+    contact.avatarImageData = imageData
+    try modelContext.save()
+  }
+
+  /// Blocks a contact on the phone, clearing its unread count as
+  /// `ContactService.updateContactPreferences` does. For use with the radio off: the
+  /// blocked-names cache is rebuilt from the store on the next connect.
+  func setContactBlocked(_ contactID: UUID) throws {
+    let targetID = contactID
+    let predicate = #Predicate<Contact> { $0.id == targetID }
+    var descriptor = FetchDescriptor<Contact>(predicate: predicate)
+    descriptor.fetchLimit = 1
+
+    guard let contact = try modelContext.fetch(descriptor).first else {
+      throw PersistenceStoreError.contactNotFound
+    }
+
+    if !contact.isBlocked {
+      contact.isBlocked = true
+      contact.unreadCount = 0
+    }
+    try modelContext.save()
+  }
+
   /// Delete all messages, reactions, message repeats, and pending sends for a contact
   /// in a single transactional save. Leaves the Contact row in place.
   func deleteMessagesForContact(contactID: UUID) throws {

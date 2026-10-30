@@ -3687,6 +3687,53 @@ struct PersistenceStoreTests {
     #expect(contact?.isMuted == false)
   }
 
+  // MARK: - Offline Contact Edits
+
+  @Test
+  func `Set contact nickname trims and clears on blank`() async throws {
+    let store = try await createTestStore()
+    let device = createTestDevice()
+    try await store.saveDevice(device)
+    let contactID = try await store.saveContact(radioID: device.id, from: createTestContactFrame(name: "Alice")).id
+
+    try await store.setContactNickname(contactID, nickname: "  Ali \n")
+    #expect(try await store.fetchContact(id: contactID)?.nickname == "Ali")
+
+    try await store.setContactNickname(contactID, nickname: "   ")
+    #expect(try await store.fetchContact(id: contactID)?.nickname == nil)
+  }
+
+  @Test
+  func `Set contact avatar stores and clears the image`() async throws {
+    let store = try await createTestStore()
+    let device = createTestDevice()
+    try await store.saveDevice(device)
+    let contactID = try await store.saveContact(radioID: device.id, from: createTestContactFrame(name: "Alice")).id
+    let image = Data([0xFF, 0xD8, 0xFF, 0xE0])
+
+    try await store.setContactAvatar(contactID, imageData: image)
+    #expect(try await store.fetchContact(id: contactID)?.avatarImageData == image)
+
+    try await store.setContactAvatar(contactID, imageData: nil)
+    #expect(try await store.fetchContact(id: contactID)?.avatarImageData == nil)
+  }
+
+  @Test
+  func `Set contact blocked clears unread like the service`() async throws {
+    let store = try await createTestStore()
+    let device = createTestDevice()
+    try await store.saveDevice(device)
+    let contactID = try await store.saveContact(radioID: device.id, from: createTestContactFrame(name: "Alice")).id
+    try await store.incrementUnreadCount(contactID: contactID)
+
+    try await store.setContactBlocked(contactID)
+
+    let contact = try await store.fetchContact(id: contactID)
+    #expect(contact?.isBlocked == true)
+    #expect(contact?.unreadCount == 0)
+    #expect(try await store.fetchBlockedContacts(radioID: device.id).map(\.id) == [contactID])
+  }
+
   @Test
   func `Muted contacts excluded from badge count`() async throws {
     let store = try await createTestStore()

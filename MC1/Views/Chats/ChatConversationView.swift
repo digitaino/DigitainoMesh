@@ -945,44 +945,55 @@ struct ChatConversationView: View {
 
   // MARK: - Blocking (Channel only)
 
+  /// Blocking is phone-only, so it works with the radio off: `services` is nil then and the
+  /// offline store (the same store) takes the writes. The blocked-names cache is rebuilt
+  /// from the store on the next connect, so incoming messages are filtered from then on.
   private func performBlock(senderName: String, radioID: UUID, contactIDs: Set<UUID>) async {
-    guard let services = appState.services else { return }
+    let services = appState.services
+    guard let dataStore = services?.dataStore ?? appState.offlineDataStore else { return }
 
     let dto = BlockedChannelSenderDTO(name: senderName, radioID: radioID)
     do {
-      try await services.dataStore.saveBlockedChannelSender(dto)
+      try await dataStore.saveBlockedChannelSender(dto)
     } catch {
       logger.error("Failed to save blocked channel sender: \(error)")
+      chatViewModel.errorMessage = error.userFacingMessage
       return
     }
 
     // Delete existing channel messages from the blocked sender
-    try? await services.dataStore.deleteChannelMessages(fromSender: senderName, radioID: radioID)
+    try? await dataStore.deleteChannelMessages(fromSender: senderName, radioID: radioID)
 
     for contactID in contactIDs {
       do {
-        try await services.contactService.updateContactPreferences(
-          contactID: contactID,
-          isBlocked: true
-        )
+        if let contactService = services?.contactService {
+          try await contactService.updateContactPreferences(
+            contactID: contactID,
+            isBlocked: true
+          )
+        } else {
+          try await dataStore.setContactBlocked(contactID)
+        }
       } catch {
         logger.error("Failed to block contact \(contactID): \(error)")
       }
     }
 
-    await services.syncCoordinator.refreshBlockedContactsCache(
-      radioID: radioID,
-      dataStore: services.dataStore
-    )
+    if let services {
+      await services.syncCoordinator.refreshBlockedContactsCache(
+        radioID: radioID,
+        dataStore: services.dataStore
+      )
 
-    if !contactIDs.isEmpty {
-      services.syncCoordinator.notifyContactsChanged()
+      if !contactIDs.isEmpty {
+        services.syncCoordinator.notifyContactsChanged()
+      }
     }
 
     if case let .channel(channel) = conversationType {
       await chatViewModel.loadChannelMessages(for: channel, populateMode: .replace)
     }
-    services.syncCoordinator.notifyConversationsChanged()
+    services?.syncCoordinator.notifyConversationsChanged()
   }
 }
 

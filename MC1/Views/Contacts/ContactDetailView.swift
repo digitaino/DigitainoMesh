@@ -89,6 +89,7 @@ struct ContactDetailView: View {
   @State private var isSaving = false
   @State private var isFavorite: Bool
   @State private var favoriteTask: Task<Void, Never>?
+  @State private var ignoreFavoriteChange = false
   @State private var errorMessage: String?
   @State private var pathViewModel = PathManagementViewModel()
   @State private var showRoomJoinSheet = false
@@ -170,9 +171,13 @@ struct ContactDetailView: View {
         showShareSuccess: showShareSuccess
       )
       .themedRowBackground(theme)
-      .onChange(of: isFavorite) { _, newValue in
+      .onChange(of: isFavorite) { oldValue, newValue in
+        if ignoreFavoriteChange {
+          ignoreFavoriteChange = false
+          return
+        }
         favoriteTask?.cancel()
-        favoriteTask = Task { await setFavorite(newValue) }
+        favoriteTask = Task { await setFavorite(newValue, revertingTo: oldValue) }
       }
 
       // Info section
@@ -456,15 +461,28 @@ struct ContactDetailView: View {
 
   // MARK: - Actions
 
-  private func setFavorite(_ isFavorite: Bool) async {
-    do {
-      try await appState.services?.contactService.setContactFavorite(
-        currentContact.id,
-        isFavorite: isFavorite
-      )
-    } catch {
-      errorMessage = error.userFacingMessage
+  /// The favorite is the radio's contact flag, so the toggle is radio-disabled and a write
+  /// that fails or finds no radio puts the switch back instead of showing a state never saved.
+  private func setFavorite(_ isFavorite: Bool, revertingTo previous: Bool) async {
+    guard let contactService = appState.services?.contactService else {
+      revertFavorite(to: previous, message: L10n.Contacts.Contacts.Detail.Error.servicesUnavailable)
+      return
     }
+    do {
+      try await contactService.setContactFavorite(currentContact.id, isFavorite: isFavorite)
+      await refreshContact()
+    } catch {
+      revertFavorite(to: previous, message: error.userFacingMessage)
+    }
+  }
+
+  /// Skipped once a newer flip has cancelled this one, so it never undoes the user's latest choice.
+  private func revertFavorite(to previous: Bool, message: String) {
+    guard !Task.isCancelled else { return }
+    errorMessage = message
+    guard isFavorite != previous else { return }
+    ignoreFavoriteChange = true
+    isFavorite = previous
   }
 
   private func toggleBlocked() async {
@@ -548,7 +566,8 @@ struct ContactDetailView: View {
   }
 
   private func refreshContact() async {
-    if let updated = try? await appState.services?.dataStore.fetchContact(id: currentContact.id) {
+    // The offline store is the same store the services use, and it is there with the radio off.
+    if let updated = try? await appState.offlineDataStore?.fetchContact(id: currentContact.id) {
       currentContact = updated
     }
   }
@@ -620,27 +639,30 @@ struct ContactDetailView: View {
       isSavingAvatar = false
       return
     }
-    do {
-      try await appState.services?.contactService.updateContactAvatar(
-        contactID: currentContact.id,
-        imageData: processed
-      )
-      await refreshContact()
-    } catch {
-      errorMessage = error.userFacingMessage
-    }
-    isSavingAvatar = false
+    await writeAvatar(processed)
   }
 
   private func removeAvatar() async {
     isSavingAvatar = true
+    await writeAvatar(nil)
+  }
+
+  /// Avatars and nicknames live only on the phone, so they write straight to the store.
+  /// `ContactService` exists only while the radio is connected, and going through it
+  /// silently dropped edits made offline.
+  private func writeAvatar(_ imageData: Data?) async {
+    defer { isSavingAvatar = false }
+    guard let store = appState.offlineDataStore else {
+      errorMessage = L10n.Contacts.Contacts.Detail.Error.servicesUnavailable
+      return
+    }
     do {
-      try await appState.services?.contactService.updateContactAvatar(contactID: currentContact.id, imageData: nil)
+      try await store.setContactAvatar(currentContact.id, imageData: imageData)
+      appState.syncCoordinator?.notifyContactsChanged()
       await refreshContact()
     } catch {
       errorMessage = error.userFacingMessage
     }
-    isSavingAvatar = false
   }
 
   private nonisolated static let avatarMaxDimension: CGFloat = 512
@@ -670,16 +692,19 @@ struct ContactDetailView: View {
     currentContact.type.localizedName
   }
 
+  /// Phone-only like the avatar, so it skips `ContactService` and works with the radio off.
   private func saveNickname() async {
     isSaving = true
-    do {
-      try await appState.services?.contactService.updateContactPreferences(
-        contactID: currentContact.id,
-        nickname: nickname
-      )
-      await refreshContact()
-    } catch {
-      errorMessage = error.userFacingMessage
+    if let store = appState.offlineDataStore {
+      do {
+        try await store.setContactNickname(currentContact.id, nickname: nickname)
+        appState.syncCoordinator?.notifyContactsChanged()
+        await refreshContact()
+      } catch {
+        errorMessage = error.userFacingMessage
+      }
+    } else {
+      errorMessage = L10n.Contacts.Contacts.Detail.Error.servicesUnavailable
     }
     isEditingNickname = false
     isSaving = false
@@ -919,6 +944,7 @@ private struct ContactActionsSection: View {
       Toggle(isOn: $isFavorite) {
         Label(L10n.Contacts.Contacts.Detail.favorite, systemImage: "star")
       }
+      .radioDisabled(for: appState.connectionState)
     }
   }
 }

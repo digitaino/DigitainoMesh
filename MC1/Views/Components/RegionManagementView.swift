@@ -1,3 +1,4 @@
+import MC1Services
 import SwiftUI
 
 /// Form-based view for managing known regions with add/delete functionality
@@ -10,6 +11,7 @@ struct RegionManagementView: View {
   let onAddRegion: (String) -> Void
   let onDiscoverTapped: () -> Void
 
+  @Environment(\.appState) private var appState
   @Environment(\.appTheme) private var theme
   @State private var searchText = ""
   @State private var showingAddAlert = false
@@ -29,11 +31,13 @@ struct RegionManagementView: View {
       } else {
         KnownRegionsSection(
           regions: filteredRegions,
+          isEditable: appState.connectionState == .ready,
           onDelete: removeRegions
         )
       }
 
       ActionsSection(
+        connectionState: appState.connectionState,
         isDiscovering: isDiscovering,
         discoveryMessage: discoveryMessage,
         onDiscoverTapped: onDiscoverTapped,
@@ -102,6 +106,9 @@ private struct RegionManagementEmptyState: View {
 private struct KnownRegionsSection: View {
   @Environment(\.appTheme) private var theme
   let regions: [String]
+  /// The list belongs to the connected radio's record, so edits wait for it: without the
+  /// radio a delete was dropped, or came back once the radio reconnected.
+  let isEditable: Bool
   let onDelete: (IndexSet) -> Void
 
   var body: some View {
@@ -109,7 +116,7 @@ private struct KnownRegionsSection: View {
       ForEach(regions, id: \.self) { region in
         RegionRow(name: region)
       }
-      .onDelete(perform: onDelete)
+      .onDelete(perform: isEditable ? onDelete : nil)
     }
     .themedRowBackground(theme)
   }
@@ -137,6 +144,7 @@ private struct RegionRow: View {
 
 private struct ActionsSection: View {
   @Environment(\.appTheme) private var theme
+  let connectionState: DeviceConnectionState
   let isDiscovering: Bool
   let discoveryMessage: String?
   let onDiscoverTapped: () -> Void
@@ -159,11 +167,12 @@ private struct ActionsSection: View {
       Button(L10n.Chats.Chats.ChannelInfo.Region.discover, systemImage: "antenna.radiowaves.left.and.right") {
         onDiscoverTapped()
       }
-      .disabled(isDiscovering)
+      .radioDisabled(for: connectionState, or: isDiscovering)
 
       Button(L10n.Chats.Chats.ChannelInfo.Region.addManually, systemImage: "plus") {
         onAddTapped()
       }
+      .radioDisabled(for: connectionState)
     } footer: {
       Text(L10n.Chats.Chats.ChannelInfo.Region.invalidName)
     }
