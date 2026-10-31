@@ -427,11 +427,20 @@ Branch `upstream-sync-1.6`, cut from `main` 27db4e4e, rerere on. Nothing pushed.
   per-slot message counts (57 groups) identical before and after; 86 favourite contacts and
   16 favourite channels came through as pins.
 
+**Installed on the phone 2026-10-30 12:07** (6df94dc5, Debug). Backup taken first over Wi-Fi
+(it worked this time): `phone-backups/2026-10-30-before-upstream-sync-1.6-install/`, integrity ok.
+After the first connect (Wio):
+- Store integrity ok. All 61 per-radio/per-slot message groups present; three grew by 9 new
+  channel messages in total, none shrank. Reactions 1,036 = 1,036; repeats grew.
+- Pins: 79 contacts (= the 79 favourites, which keep their star), 20 channels (= the 20
+  channel favourites), rooms 0 (none were favourites).
+- Contacts 689 → 679: the full-sync prune's swap guard kept all 29 contacts the Wio doesn't
+  list; then the owner's 7-day stale-node cleanup removed 10 of those (none favourite, pinned or
+  with messages). Intended behaviour, same rule as before the merge.
+
 **Still open (needs the phone or the owner):**
-- §7 step 1: back up the phone store over the cable (Wi-Fi copy aborts on the 390 MB store).
 - iPad layout pass: only checked that the build launches on an iPad simulator.
-- §7 step 7: on the phone, pair and scan from both entry points; switch Wio Tracker ↔ RAK 3401
-  and check stars on both radios, pins and per-slot channel counts against the backup;
-  disconnect with a radio tool open.
+- §7 step 7, rest: switch Wio Tracker ↔ RAK 3401 and check stars on both radios (the RAK
+  isn't at hand); pair and scan from both entry points; disconnect with a radio tool open.
 - Push the branch, fast-forward `main`, then `fastlane beta` (a new App Store Connect version:
   Beta App Review for external testers). Beta notes are in BETA_CHANGES.md.
