@@ -123,3 +123,8 @@
 "whatsNew.liveActivity.title" = "실시간 현황";
 /* What's New v1.7 - Live Activity, description */
 "whatsNew.liveActivity.description" = "읽지 않은 메시지가 더 눈에 띄며, 분당 패킷 수가 더 이해하기 쉽습니다.";
+
+/* What's New v1.7 (fork) - forget or reset one radio of several, title */
+"whatsNew.forgetOneRadio.title" = "무선 기기 하나만 지우기";
+/* What's New v1.7 (fork) - forget or reset one radio of several, description */
+"whatsNew.forgetOneRadio.description" = "노드를 여러 무선 기기에서 사용하면 기기를 지우거나 공장 초기화할 때 이제 그 기기만 제거됩니다. 채팅과 다른 무선 기기는 그대로 남습니다.";

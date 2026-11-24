@@ -124,3 +124,8 @@
 "whatsNew.liveActivity.title" = "Онлайн-активність";
 /* What's New v1.7 - Live Activity, description */
 "whatsNew.liveActivity.description" = "Непрочитані повідомлення тепер помітніші, а показник пакетів за хвилину легше зрозуміти.";
+
+/* What's New v1.7 (fork) - forget or reset one radio of several, title */
+"whatsNew.forgetOneRadio.title" = "Забудьте одне радіо, збережіть решту";
+/* What's New v1.7 (fork) - forget or reset one radio of several, description */
+"whatsNew.forgetOneRadio.description" = "Якщо ваш вузол працює на кількох радіо, забування або скидання одного з них до заводських налаштувань тепер видаляє лише це радіо. Ваші чати та інші радіо залишаються.";

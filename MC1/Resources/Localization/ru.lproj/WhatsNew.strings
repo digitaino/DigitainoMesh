@@ -124,3 +124,8 @@
 "whatsNew.liveActivity.title" = "Live Activity";
 /* What's New v1.7 - Live Activity, description */
 "whatsNew.liveActivity.description" = "Непрочитанные сообщения заметнее, а частота пакетов в минуту понятнее.";
+
+/* What's New v1.7 (fork) - forget or reset one radio of several, title */
+"whatsNew.forgetOneRadio.title" = "Забудьте одно радио, сохраните остальное";
+/* What's New v1.7 (fork) - forget or reset one radio of several, description */
+"whatsNew.forgetOneRadio.description" = "Если ваш узел работает на нескольких радио, при забывании или сбросе одного из них к заводским настройкам теперь удаляется только это радио. Ваши чаты и остальные радио остаются.";

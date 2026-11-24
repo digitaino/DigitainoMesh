@@ -10,6 +10,11 @@ enum WhatsNewCatalog {
       version: WhatsNewVersion(major: 1, minor: 7),
       items: [
         WhatsNewItem(
+          symbol: "antenna.radiowaves.left.and.right.slash",
+          title: L10n.WhatsNew.WhatsNew.ForgetOneRadio.title,
+          description: L10n.WhatsNew.WhatsNew.ForgetOneRadio.description
+        ),
+        WhatsNewItem(
           symbol: "line.3.horizontal.decrease",
           title: L10n.WhatsNew.WhatsNew.BlocksAndFilters.title,
           description: L10n.WhatsNew.WhatsNew.BlocksAndFilters.description

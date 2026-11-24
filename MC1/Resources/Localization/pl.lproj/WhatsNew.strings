@@ -124,3 +124,8 @@
 "whatsNew.liveActivity.title" = "Aktywność na żywo";
 /* What's New v1.7 - Live Activity, description */
 "whatsNew.liveActivity.description" = "Nieprzeczytane wiadomości są bardziej widoczne, a tempo pakietów na minutę jest łatwiejsze do zrozumienia.";
+
+/* What's New v1.7 (fork) - forget or reset one radio of several, title */
+"whatsNew.forgetOneRadio.title" = "Zapomnij jedno radio, zachowaj resztę";
+/* What's New v1.7 (fork) - forget or reset one radio of several, description */
+"whatsNew.forgetOneRadio.description" = "Jeśli Twój węzeł działa na kilku radiach, zapomnienie jednego lub przywrócenie go do ustawień fabrycznych usuwa teraz tylko to radio. Twoje czaty i pozostałe radia zostają.";

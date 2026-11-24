@@ -10238,6 +10238,12 @@ public enum L10n {
         /// What's New v1.6 (fork) - favorites written to every radio carrying the node, title
         public static let title = L10n.tr("WhatsNew", "whatsNew.favoritesEveryRadio.title", fallback: "Favorites on every radio")
       }
+      public enum ForgetOneRadio {
+        /// What's New v1.7 (fork) - forget or reset one radio of several, description
+        public static let description = L10n.tr("WhatsNew", "whatsNew.forgetOneRadio.description", fallback: "If your node runs on more than one radio, forgetting or factory resetting one now removes only that radio. Your chats and your other radios stay.")
+        /// What's New v1.7 (fork) - forget or reset one radio of several, title
+        public static let title = L10n.tr("WhatsNew", "whatsNew.forgetOneRadio.title", fallback: "Forget one radio, keep the rest")
+      }
       public enum IPadTabBar {
         /// What's New v1.6 - iPad tab bar, description
         public static let description = L10n.tr("WhatsNew", "whatsNew.iPadTabBar.description", fallback: "iPad is moving the tab icons from the left to the top. This helps us better support all devices including the iPhone Duo.")

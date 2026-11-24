@@ -124,3 +124,8 @@
 "whatsNew.liveActivity.title" = "Live-Aktivität";
 /* What's New v1.7 - Live Activity, description */
 "whatsNew.liveActivity.description" = "Ungelesene Nachrichten sind auffälliger, und die Rate in Paketen pro Minute ist leichter zu verstehen.";
+
+/* What's New v1.7 (fork) - forget or reset one radio of several, title */
+"whatsNew.forgetOneRadio.title" = "Ein Funkgerät vergessen, den Rest behalten";
+/* What's New v1.7 (fork) - forget or reset one radio of several, description */
+"whatsNew.forgetOneRadio.description" = "Läuft dein Knoten auf mehr als einem Funkgerät, entfernt Vergessen oder Zurücksetzen auf Werkseinstellungen jetzt nur dieses Funkgerät. Deine Chats und deine anderen Funkgeräte bleiben.";

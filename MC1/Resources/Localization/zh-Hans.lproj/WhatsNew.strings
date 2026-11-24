@@ -124,3 +124,8 @@
 "whatsNew.liveActivity.title" = "实时活动";
 /* What's New v1.7 - Live Activity, description */
 "whatsNew.liveActivity.description" = "未读消息更醒目，每分钟的数据包速率更容易理解。";
+
+/* What's New v1.7 (fork) - forget or reset one radio of several, title */
+"whatsNew.forgetOneRadio.title" = "忘记一台电台，保留其余";
+/* What's New v1.7 (fork) - forget or reset one radio of several, description */
+"whatsNew.forgetOneRadio.description" = "如果你的节点运行在多台电台上，忘记其中一台或将其恢复出厂设置现在只会移除那一台。你的聊天和其他电台都会保留。";

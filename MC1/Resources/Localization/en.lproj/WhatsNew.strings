@@ -124,3 +124,8 @@
 "whatsNew.liveActivity.title" = "Live Activity";
 /* What's New v1.7 - Live Activity, description */
 "whatsNew.liveActivity.description" = "Unread messages are more prominent and the packets per minute rate is easier to understand.";
+
+/* What's New v1.7 (fork) - forget or reset one radio of several, title */
+"whatsNew.forgetOneRadio.title" = "Forget one radio, keep the rest";
+/* What's New v1.7 (fork) - forget or reset one radio of several, description */
+"whatsNew.forgetOneRadio.description" = "If your node runs on more than one radio, forgetting or factory resetting one now removes only that radio. Your chats and your other radios stay.";

@@ -123,3 +123,8 @@
 "whatsNew.liveActivity.title" = "Atividade em tempo real";
 /* What's New v1.7 - Live Activity, description */
 "whatsNew.liveActivity.description" = "As mensagens por ler estão mais em destaque e a taxa de pacotes por minuto é mais fácil de perceber.";
+
+/* What's New v1.7 (fork) - forget or reset one radio of several, title */
+"whatsNew.forgetOneRadio.title" = "Esqueça um rádio, mantenha o resto";
+/* What's New v1.7 (fork) - forget or reset one radio of several, description */
+"whatsNew.forgetOneRadio.description" = "Se o seu nó funciona em mais do que um rádio, esquecer um ou repô-lo para as definições de fábrica agora remove apenas esse rádio. As suas conversas e os outros rádios ficam.";

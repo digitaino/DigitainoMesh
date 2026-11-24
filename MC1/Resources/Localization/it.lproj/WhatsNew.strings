@@ -124,3 +124,8 @@
 "whatsNew.liveActivity.title" = "Attività Live";
 /* What's New v1.7 - Live Activity, description */
 "whatsNew.liveActivity.description" = "I messaggi non letti sono più in evidenza e il tasso di pacchetti al minuto è più facile da capire.";
+
+/* What's New v1.7 (fork) - forget or reset one radio of several, title */
+"whatsNew.forgetOneRadio.title" = "Dimentica una radio, tieni il resto";
+/* What's New v1.7 (fork) - forget or reset one radio of several, description */
+"whatsNew.forgetOneRadio.description" = "Se il tuo nodo funziona su più radio, dimenticarne una o ripristinarla ai valori di fabbrica ora rimuove solo quella radio. Le tue chat e le altre radio restano.";

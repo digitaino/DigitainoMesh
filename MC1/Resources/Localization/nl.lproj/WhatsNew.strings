@@ -124,3 +124,8 @@
 "whatsNew.liveActivity.title" = "Live Activity";
 /* What's New v1.7 - Live Activity, description */
 "whatsNew.liveActivity.description" = "Ongelezen berichten vallen meer op en de snelheid in pakketten per minuut is makkelijker te begrijpen.";
+
+/* What's New v1.7 (fork) - forget or reset one radio of several, title */
+"whatsNew.forgetOneRadio.title" = "Vergeet één radio, houd de rest";
+/* What's New v1.7 (fork) - forget or reset one radio of several, description */
+"whatsNew.forgetOneRadio.description" = "Draait je node op meer dan één radio, dan verwijdert vergeten of terugzetten naar fabrieksinstellingen nu alleen die radio. Je chats en je andere radio's blijven.";
