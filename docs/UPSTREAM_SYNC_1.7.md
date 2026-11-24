@@ -287,3 +287,87 @@ prune links to the seven upstream deleted.
 7. On the phone: upgrade from the installed 1.6.2 store (migration, a queued reaction,
    several radios on one identity), Bluetooth ↔ Wi-Fi, a recovery, a radio swap.
 8. §8 "As built", beta notes, then merge to `main` on the owner's word.
+
+## 8. As built (2026-11-24)
+
+Branch `upstream-sync-1.7`, cut from `upstream-sync-1.6` at 35d47e20, rerere on. Nothing pushed.
+
+| Commit | What |
+|---|---|
+| 35d47e20 | The notification-caps work (sync slot 4), tested and committed first, on `upstream-sync-1.6`. |
+| 6cd1da91 | This plan and the owner decisions. |
+| 52cf9d77 | The merge (76 conflicted files), with §3 A–N, §4 and decisions 1–7. |
+
+**Where the build differs from the plan:**
+- **§3 A:** `registerConnectionDevice` takes `adoptingRowID`, `armsSwapGuard` and
+  `previousDeviceID`; `PersistenceStore.adoptsAsOwnRow` is the adopt rule (no methods, Wi-Fi
+  only, or a Bluetooth link to this same peripheral). A new row is saved with
+  `lastConnected = .distantPast`; selection stamps it. A cancelled new sibling row has no
+  methods, so a later connect of that radio adopts it as its own.
+- **§3 B:** `PendingRadioErase` stays keyed by radioID (unique column), so one erase per
+  identity at a time; a second radio's erase while another is pending is refused. Scope is
+  evaluated live: while another row with a connection method carries the identity, the erase
+  blocks and removes only its own radio; the last radio gets upstream's full wipe.
+- **Removal re-scopes after the system sheet.** Found by test: forgetting radio A while
+  sibling B was still connecting (B's row not yet registered) matched B by key and
+  disconnected it. `removeDevice` now scopes the context again after confirmation.
+- **Decision 1 reached MeshCore too.** `sendMessageWithRetry` had the fork's
+  `min(maxAttempts, 4)`; it is upstream's loop again, which room posts (4 + 1) need.
+- **§3 H:** a new `NodeConfigRecordsCopyView` owns the `.records` view model for the swap
+  sheet and Copy to This Radio, since upstream's import view takes a caller-owned model.
+  `importConfig` settles the swap guard with `importedRadioID ?? radioID`.
+- **§3 L:** the pill's recovery section (Cancel Connection / Stop Reconnecting, then Change
+  Device) is in the long-press menu and is checked before `connectedDevice`.
+- **Simulator name** stays upstream's "Sim" (it comes from `MockDataProvider`).
+- **A re-pair of the same radio under a new Bluetooth id** still leaves the old row as a
+  sibling until it is forgotten, as before the merge; upstream re-keys the row in place.
+
+**Upstream tests changed to the fork's rules:** `ConnectionRegistrationRekeyTests` and
+`ConnectionRemovalConfirmationTests` (sibling rule; the Wi-Fi-only rekey-in-place case is
+kept), `CanonicalIdentityConsumerTests` and `AdvertisementCleanupContractTests` (a
+radio-deleted contact with messages is kept), the DM sender-rule reaction test (decision 5),
+`ConnectionControlMenuTests` (the fork's pill). `ConnectionTestRadioTransport` answers the
+fork's sync commands with "unsupported", as stock firmware does: without it ten app suites
+timed out on the 5-second sync-slot and notification-caps probes.
+
+**Tests (this Mac, Xcode 27.2, iPhone 17e / iOS 27.2 simulator):**
+- MeshCore: 621 passed.
+- MC1ServicesTests in chunks of 20 suites: 4,223 passed, none failed. Six CoreBluetooth
+  suites abort `swift test` on the Bluetooth TCC check (BLEStateMachine, BondSuspectRecovery,
+  DiscoveryWatchdog, EmptyGATTHold, BondShieldRefresh, ConnectionManagerBLEHealth), the
+  known abort.
+- MC1Tests (StoreKit suites skipped): 4,039 tests, 56 failed expectations in 17 suites.
+  Fail the same way on pristine v1.7.1 in a clean worktree: AppConnectionOwnership,
+  CLIProvenanceContract, ConnectionControlMenu, DiagnosticsSectionCollection,
+  NodeConfigImportTailPresentation, OutgoingRepeatDetails, PairingRecoveryOwnership,
+  RadioWiFiContractAdmission, RepeatRowAccessibility, SettingsTabNavigation (Connection).
+  Recorded for 1.6: ChatChannelInfoPresentation, ChatPinInfoSheet, ChatsSearchFilter,
+  GlassFilterBar, SearchFilterSpacing, NeighborSNRMapBuilder, SettingsTabNavigation
+  (Support). Passed when rerun alone: one test each in NodeConfigImportRecovery,
+  OfflineMapService and SettingsTabNavigation (Blocked Contacts).
+- `make` needs GNU Make 3.82+, which this Mac lacks; the recipes were run by hand.
+  `make test-store` still needs an iOS 18 runtime.
+
+**Migration.** A copy of the phone's store opened with the merged schema on the Mac before
+the install: integrity ok, every count identical, the two new tables added.
+
+**Installed on the phone 2026-11-24 13:30** (52cf9d77, Debug, 1.7.1 over 1.6.2). Backups:
+`phone-backups/2026-11-24-before-upstream-sync-1.7-install/` (10:59) and
+`…-1325-before-upstream-sync-1.7-install/` (13:29), integrity ok. After the first launch
+and connect (`…-after-1.7.1-first-launch/`): integrity ok; devices 6 = 6 (both rows of the
+shared identity kept, the connected one active); channels 87, messages 130,279, repeats
+119,201, reactions 1,042, rooms 21 unchanged; contacts 812 → 813 (one new advert);
+favourites 81, contact pins 79, channel pins 20 unchanged; no pending erase.
+
+**Still open (needs the phone or the owner):**
+- Several radios on one identity: connect the sibling, then Forget and factory reset on one
+  and check the other and the shared history.
+- Bluetooth ↔ Wi-Fi, a recovery with Stop Reconnecting on the pill, a radio swap and Copy to
+  This Radio through the reworked import screen.
+- An 8-send DM through a v1.15 repeater (decision 1's known limit); a reaction to a DM and a
+  channel message; a Text Rule with a reaction from the same sender.
+- iPad layout pass. Beta notes (BETA_CHANGES.md) and the curated What's New wording.
+- Merge `upstream-sync-1.6` and `upstream-sync-1.7` into `main`, push, `fastlane beta` (new
+  App Store Connect version: Beta App Review).
+- Next sync: `upstream/dev` is 24 commits past 1.7.1 (repeater watchlist, expanded Rx Log,
+  MECP 1.4.1, background battery work).
