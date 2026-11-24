@@ -1,13 +1,7 @@
 import MessagingUI
 import SwiftUI
-import UIKit
 
-/// Chat scroll container backed by `MessagingUI.TiledView`.
-///
-/// Replaces the bespoke flipped `UITableView`: the library provides stable
-/// prepend (no scroll jump when paging older messages) and auto-scroll-to-bottom
-/// on append. Consumers keep passing the same items array and cell-content
-/// closure they used with the old table.
+/// MessagingUI.TiledView provides stable prepend positioning and controlled append-follow for chat.
 struct ChatTiledView<Item: Identifiable & Hashable & Sendable, Content: View>: View where Item.ID == UUID {
   let items: [Item]
   let cellContent: (Item) -> Content
@@ -23,9 +17,7 @@ struct ChatTiledView<Item: Identifiable & Hashable & Sendable, Content: View>: V
   /// is already true; `ScrollToBottomButton` calls `scrollPosition.scrollTo` itself.
   var scrollToBottomRequest: Int = 0
 
-  /// Bumped to scroll to the bottom even when scrolled up. Conversation
-  /// views omit this and use `ScrollToBottomButton`; hosted tests bump it
-  /// because Liquid Glass is not hittable in a headless `UIWindow`.
+  /// Request an unconditional bottom scroll, including while reading history.
   var userScrollToBottomRequest: Int = 0
 
   /// Returns whether an appended row raises the unread badge while scrolled up.
@@ -42,10 +34,7 @@ struct ChatTiledView<Item: Identifiable & Hashable & Sendable, Content: View>: V
   /// Invoked when the top is reached, to page in older messages.
   var onLoadOlder: (@MainActor @Sendable () async -> Void)?
 
-  /// Invoked once, on the first post-positioning geometry report, when an
-  /// `initialScrollTargetID` was in effect — the point at which the library has
-  /// consumed the one-shot target. Lets the owner retire a divider target so a
-  /// later `.id` rebuild does not re-jump to it.
+  /// Retire the opening target after its first positioned geometry report so a later rebuild cannot replay it.
   var onInitialTargetConsumed: (() -> Void)?
 
   /// Search-reveal events derived from the scroll geometry: `.reveal` when the reader scrolls
@@ -63,6 +52,10 @@ struct ChatTiledView<Item: Identifiable & Hashable & Sendable, Content: View>: V
   /// unchanged items. Nil measures on each open.
   var sizeCache: TiledSizeCache<Item>?
 
+  var accessibilityHeadingIDs: [UUID]
+
+  @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @Environment(\.appTheme) private var appTheme
   @Environment(\.colorScheme) private var colorScheme
   @Environment(\.colorSchemeContrast) private var colorSchemeContrast
@@ -73,6 +66,11 @@ struct ChatTiledView<Item: Identifiable & Hashable & Sendable, Content: View>: V
   @State private var newestID: Item.ID?
   @State private var hasConsumedInitialGeometry = false
   @State private var searchRevealLatch = ChatSearchRevealLatchBox()
+
+  private var openingScrollTargetID: Item.ID? {
+    guard !hasConsumedInitialGeometry else { return nil }
+    return scrollTargetID ?? initialScrollTargetID
+  }
 
   init(
     items: [Item],
@@ -90,7 +88,8 @@ struct ChatTiledView<Item: Identifiable & Hashable & Sendable, Content: View>: V
     onInitialTargetConsumed: (() -> Void)? = nil,
     onSearchRevealEvent: ((ChatSearchRevealEvent) -> Void)? = nil,
     isSearchBarActive: Bool = false,
-    sizeCache: TiledSizeCache<Item>? = nil
+    sizeCache: TiledSizeCache<Item>? = nil,
+    accessibilityHeadingIDs: [UUID] = []
   ) {
     self.items = items
     self.cellContent = cellContent
@@ -108,11 +107,10 @@ struct ChatTiledView<Item: Identifiable & Hashable & Sendable, Content: View>: V
     self.onSearchRevealEvent = onSearchRevealEvent
     self.isSearchBarActive = isSearchBarActive
     self.sizeCache = sizeCache
-    // Open at the bottom by default; with an initial target present, hold off
-    // append-follow until the geometry callback re-derives it from the resting
-    // position, so an append during open does not fight the target.
+    self.accessibilityHeadingIDs = accessibilityHeadingIDs
+    // Defer append-follow while an initial target is positioning so incoming messages cannot displace it.
     _scrollPosition = State(initialValue: TiledScrollPosition(
-      autoScrollsToBottomOnAppend: initialScrollTargetID == nil,
+      autoScrollsToBottomOnAppend: scrollTargetID == nil && initialScrollTargetID == nil,
       scrollsToBottomOnReplace: true
     ))
   }
@@ -125,22 +123,25 @@ struct ChatTiledView<Item: Identifiable & Hashable & Sendable, Content: View>: V
     return TiledView(items: items, scrollPosition: $scrollPosition) { item in
       ChatTiledCell(item: item, host: host)
     }
+    .accessibilityItemIdentifier { ChatScrollConstants.messageAccessibilityIdentifier($0) }
+    .accessibilityHeadings(accessibilityHeadingIDs) {
+      scrollPosition.cancel()
+      scrollPosition.autoScrollsToBottomOnAppend = false
+    }
     .sizeCache(sizeCache)
     .prependLoader(onLoadOlder.map { load in
       .loader(perform: load) {
         ProgressView().padding(.vertical, 8)
       }
     })
-    .initialScrollTarget(id: initialScrollTargetID.map { AnyHashable($0) }, anchor: .top)
+    .initialScrollTarget(id: openingScrollTargetID.map { AnyHashable($0) }, anchor: .top)
     .onTiledScrollGeometryChange { geometry in
       let atBottom = geometry.pointsFromBottom < ChatScrollConstants.bottomDetectionThreshold
       if atBottom != isAtBottom { isAtBottom = atBottom }
       if atBottom, unreadCount != 0 { unreadCount = 0 }
-      // Only follow appends while near the bottom; otherwise new messages
-      // accumulate as unread (counted in the onChange below). The first report
-      // after a target open reflects the resting position, not a user scroll, so
-      // it consumes the one-shot target instead of arming follow.
-      if hasConsumedInitialGeometry || initialScrollTargetID == nil {
+      // Follow appends only while near the bottom. A one-shot target's first
+      // report is the resting position, so consume it instead of arming follow.
+      if openingScrollTargetID == nil {
         scrollPosition.autoScrollsToBottomOnAppend = atBottom
       } else {
         onInitialTargetConsumed?()
@@ -148,11 +149,10 @@ struct ChatTiledView<Item: Identifiable & Hashable & Sendable, Content: View>: V
       hasConsumedInitialGeometry = true
       reportSearchRevealEvent(geometry)
     }
-    .onDragIntoBottomSafeArea {
-      UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-    }
+    .onDragIntoBottomSafeArea { ChatKeyboardLift.resignFirstResponder() }
     .softTopScrollEdgeEffect()
     .background(contentBackground ?? .clear)
+    .legacyTimelineClip()
     .id(appearanceIdentity)
     .overlay(alignment: .bottomTrailing) {
       ScrollToBottomButton(
@@ -212,12 +212,14 @@ struct ChatTiledView<Item: Identifiable & Hashable & Sendable, Content: View>: V
   /// and by `userScrollToBottomRequest`. Distinct from `scrollToBottomRequest`,
   /// which must not yank a scrolled-up thread.
   private func scrollUserToBottom() {
-    scrollPosition.scrollTo(edge: .bottom)
+    scrollPosition.scrollTo(
+      edge: .bottom,
+      animated: !reduceMotion,
+      focusBottomAccessibilityElement: voiceOverEnabled
+    )
   }
 
-  /// Fingerprint of theme + appearance. A change fully rebuilds the list (via `.id`) so the
-  /// baked bubble colors repaint — the library does not reconfigure cells when only the
-  /// environment changes.
+  /// Rebuild on theme or appearance changes because the library does not reconfigure environment-only cell updates.
   private var appearanceIdentity: String {
     let appearance = AppearanceToken.make(
       colorScheme: colorScheme,
@@ -238,6 +240,22 @@ struct ChatTiledView<Item: Identifiable & Hashable & Sendable, Content: View>: V
 @MainActor
 private final class ChatSearchRevealLatchBox {
   var latch = ChatSearchRevealLatch()
+}
+
+private struct LegacyTimelineClip: ViewModifier {
+  func body(content: Content) -> some View {
+    if #available(iOS 26, *) {
+      content
+    } else {
+      content.clipped()
+    }
+  }
+}
+
+private extension View {
+  func legacyTimelineClip() -> some View {
+    modifier(LegacyTimelineClip())
+  }
 }
 
 private extension TiledView {

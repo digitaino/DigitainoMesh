@@ -462,9 +462,4 @@ When working on diagnostic features (Line of Sight, Trace Path, RX Log), keep th
 ## Further Reading
 
 - [Architecture Overview](Architecture.md)
-- [MeshCore API Reference](api/MeshCore.md)
 - [MC1Services API Reference](api/MC1Services.md)
-- [BLE Transport Guide](guides/BLE_Transport.md)
-- [WiFi Transport Guide](guides/WiFi_Transport.md)
-- [Diagnostics Guide](guides/Diagnostics.md)
-- [iPad Layout Guide](guides/iPad_Layout.md)

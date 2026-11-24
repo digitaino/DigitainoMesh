@@ -15,6 +15,10 @@ public protocol DevicePersisting: Actor {
   /// Save or update a device
   func saveDevice(_ dto: DeviceDTO) async throws
 
+  /// Whether more than one radio carries this node's identity. The phone then owns the node's
+  /// contact favourites and writes them to whichever of its radios connects.
+  func radioSharesIdentity(radioID: UUID) async throws -> Bool
+
   /// The sync deletions currently held back for the radio, empty when none are
   /// (or when no device row exists). See ``SwapGuard``.
   func fetchSwapGuard(radioID: UUID) async throws -> SwapGuard
@@ -25,4 +29,7 @@ public protocol DevicePersisting: Actor {
   /// The settings and channel layout the radio should take on, stored when its swap guard
   /// was armed; nil when none is stored. See ``IdentityProfile``.
   func fetchSwapProfile(radioID: UUID) async throws -> IdentityProfile?
+
+  /// Patches only OCV fields on an existing row in one actor turn.
+  func updateDeviceOCVSettings(id: UUID, preset: String, customArray: String?) async throws -> DeviceDTO?
 }

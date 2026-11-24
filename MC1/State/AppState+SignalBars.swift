@@ -12,14 +12,18 @@ extension AppState {
   /// firmware resolves as a device error quickly, but a radio that has gone quiet takes the
   /// full command timeout, and connection setup must not wait on it. The bars simply appear
   /// once the probe resolves.
-  func wireSignalBars(services: ServiceContainer) {
+  func wireSignalBars(snapshot: ConnectionSnapshot) {
+    // A superseded connection's wiring must not touch the current one's stack.
+    guard connectionManager.isCurrent(snapshot) else { return }
     // `signalBarsStartTask` holds whichever transition is in flight — a start, or the stop the
     // disabled path queues. Each one waits the previous out, so a stop cannot land after the
     // start it was meant to precede and leave the engine down under an attached UI.
     let previousTransition = signalBarsStartTask
     previousTransition?.cancel()
 
-    guard let device = connectedDevice, isSignalBarsEnabled else {
+    let device = snapshot.device
+    let services = snapshot.services
+    guard DevicePreferenceStore().isSignalBarsEnabled(deviceID: device.id) else {
       tearDownSignalBars()
       return
     }
@@ -31,16 +35,22 @@ extension AppState {
       // otherwise. An inconclusive probe leaves the classification unlatched, so the next
       // connection asks again instead of writing the radio off.
       let mode = await services.syncRegistryProbe.signalBarsMode()
-      guard !Task.isCancelled, let self else { return }
+      guard !Task.isCancelled, let self, connectionManager.isCurrent(snapshot) else { return }
 
+      // The live row, when it is still this radio's: a path hash mode change during the
+      // probe reaches it through the settings stream.
+      let pathHashMode = connectedDevice.flatMap { $0.id == device.id ? $0.pathHashMode : nil }
+        ?? device.pathHashMode
       logger.info(
-        "Signal bars: \(String(describing: mode)) mode, pathHashMode=\(device.pathHashMode)"
+        "Signal bars: \(String(describing: mode)) mode, pathHashMode=\(pathHashMode)"
       )
-      await services.signalBarsEngine.start(mode: mode, pathHashMode: device.pathHashMode)
+      await services.signalBarsEngine.start(mode: mode, pathHashMode: pathHashMode)
+      guard !Task.isCancelled, connectionManager.isCurrent(snapshot) else { return }
       // A reconnect mid-ride, or the per-device toggle being switched on mid-ride, would
       // otherwise restart this engine at full cadence underneath a running survey and
       // quietly defeat the airtime rule (analysis 6.4).
       await services.signalBarsEngine.setSurveyActive(signalMapperRideSession != nil)
+      guard !Task.isCancelled, connectionManager.isCurrent(snapshot) else { return }
       await repeaterSignals.attach(to: services.signalBarsEngine)
       startMovementHintsIfAlreadyPermitted()
       // Seed the engine's reference location with whatever is already known, so names
@@ -50,6 +60,16 @@ extension AppState {
     }
   }
 
+  /// Re-runs the wiring for the installed connection, when `services` is still its container
+  /// (the Settings toggle). Otherwise tears down: there is nothing current to wire.
+  func wireSignalBars(services: ServiceContainer) {
+    guard let snapshot = connectionManager.currentConnection, snapshot.services === services else {
+      tearDownSignalBars()
+      return
+    }
+    wireSignalBars(snapshot: snapshot)
+  }
+
   /// Whether the connected radio has repeater tracking turned on — the one source of truth for
   /// the wiring and for the Motion & Fitness prompt the feature is the only consumer of.
   var isSignalBarsEnabled: Bool {
@@ -57,7 +77,7 @@ extension AppState {
     return DevicePreferenceStore().isSignalBarsEnabled(deviceID: device.id)
   }
 
-  /// Releases everything `wireSignalBars(services:)` set up. Safe to call when nothing was
+  /// Releases everything `wireSignalBars(snapshot:)` set up. Safe to call when nothing was
   /// started.
   func tearDownSignalBars() {
     let previousTransition = signalBarsStartTask

@@ -35,7 +35,6 @@ struct ChatInputBar<Leading: View>: View {
   let maxBytes: Int
   let isEncrypted: Bool
   @ViewBuilder let leading: () -> Leading
-  var onFocus: () -> Void = {}
   let onSend: (String) -> Void
 
   @State private var isCoolingDown = false
@@ -68,7 +67,6 @@ struct ChatInputBar<Leading: View>: View {
             isEncrypted: isEncrypted,
             proxy: composerProxy,
             onSend: handleHardwareSend,
-            onFocus: onFocus,
             glassNamespace: glassNamespace
           )
           if canSend || shouldShowCharacterCount {
@@ -93,6 +91,11 @@ struct ChatInputBar<Leading: View>: View {
     .sensoryFeedback(.start, trigger: sendInvocationCounter)
     .animation(.smooth(duration: 0.28), value: canSend)
     .animation(.smooth(duration: 0.28), value: shouldShowCharacterCount)
+    .onChange(of: isEncrypted) { wasEncrypted, isEncrypted in
+      // A draft has no label, so a change to cleartext is spoken on its own.
+      guard wasEncrypted, !isEncrypted, !text.isEmpty else { return }
+      UIAccessibility.post(notification: .announcement, argument: L10n.Chats.Chats.Input.notEncrypted)
+    }
   }
 
   private var sendAccessibilityLabel: String {
@@ -176,7 +179,6 @@ private struct ChatInputTextField: View {
   let isEncrypted: Bool
   let proxy: ChatComposerProxy
   let onSend: () -> Bool
-  let onFocus: () -> Void
   let glassNamespace: Namespace.ID
 
   var body: some View {
@@ -186,8 +188,7 @@ private struct ChatInputTextField: View {
       keyboardResetRequest: keyboardResetRequest,
       isEncrypted: isEncrypted,
       proxy: proxy,
-      onSend: onSend,
-      onFocus: onFocus
+      onSend: onSend
     )
     .frame(maxWidth: .infinity, minHeight: ChatInputMetrics.controlHeight)
     .overlay(alignment: .topLeading) {
@@ -304,7 +305,10 @@ private extension View {
   @ViewBuilder
   func textFieldBackground() -> some View {
     if #available(iOS 26.0, *) {
-      glassEffect(.regular.interactive(), in: .rect(cornerRadius: ChatInputMetrics.fieldCornerRadius))
+      glassEffect(
+        .regular.interactive(!ProcessInfo.processInfo.isiOSAppOnMac),
+        in: .rect(cornerRadius: ChatInputMetrics.fieldCornerRadius)
+      )
     } else {
       // Without the glass capsule the field would read as one fill on the bar's fill, so its edge
       // carries the affordance. A clear centre keeps it legible against any theme canvas.

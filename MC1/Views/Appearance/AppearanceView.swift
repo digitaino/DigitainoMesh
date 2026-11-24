@@ -31,6 +31,7 @@ struct AppearanceView: View {
       themesSection
     }
     .themedCanvas(activeTheme)
+    .settingsSubpageDestinations()
     .navigationTitle(L10n.Settings.Appearance.title)
     .navigationBarTitleDisplayMode(.inline)
     .sensoryFeedback(.selection, trigger: schemeTrigger)

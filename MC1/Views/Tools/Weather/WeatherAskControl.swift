@@ -171,7 +171,7 @@ extension View {
   /// of the tab bar goes with it. Chats does the same inside a conversation, and the mapper
   /// during a ride.
   func weatherToolChrome() -> some View {
-    toolbar(.hidden, for: .tabBar)
+    hidingBottomTabBar()
   }
 
   /// Keeps a list's rows to a readable width in a wide column (docs/MESHWX_UI.md §3.1 U-57). An

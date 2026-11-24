@@ -180,7 +180,34 @@ extension PersistenceStore {
     defaults.removeObject(forKey: Self.repeaterUnreadMigrationKey)
   }
 
-  // MARK: - Message sortDate normalization migration
+  // MARK: - Chat pin split
+
+  private static let chatPinMigrationKey = "hasSplitChatPins"
+  private static let chatPinMigrationLogger = Logger(
+    subsystem: "com.mc1",
+    category: "ChatPinMigration"
+  )
+
+  /// One-time copy: contacts that are already favorites start pinned. Later
+  /// favorites stay unpinned. The flag is set only after the save succeeds.
+  public func performChatPinMigration(defaults: UserDefaults = .standard) throws {
+    guard !defaults.bool(forKey: Self.chatPinMigrationKey) else { return }
+
+    let contacts = try modelContext.fetch(
+      FetchDescriptor<Contact>(predicate: #Predicate { $0.isFavorite })
+    )
+    for contact in contacts {
+      contact.isPinned = true
+    }
+    try modelContext.save()
+    defaults.set(true, forKey: Self.chatPinMigrationKey)
+
+    Self.chatPinMigrationLogger.info(
+      "chat pin migration complete: \(contacts.count) favorites pinned"
+    )
+  }
+
+  // MARK: - Message sortDate normalization
 
   /// Both legacy flags. The backfill (rows persisted before the `sortDate` column existed,
   /// which come up with the `Date.distantPast` schema default) and the reset (an interim

@@ -123,6 +123,8 @@ public enum CommandCode: UInt8, Sendable {
   /// No builder is provided; this library does not use raw-packet injection. The case
   /// exists so the command table stays complete against firmware.
   case sendRawPacket = 0x41
+  /// Runs a UTF-8 CLI command on the paired radio. Firmware v14+ (`CMD_RUN_CLI_COMMAND`).
+  case runCliCommand = 0x42
 
   // MARK: - Digitaino custom: iOS sync registry
 
@@ -149,6 +151,10 @@ public enum SyncID: UInt8, Sendable {
   /// when its own GPS is off or idle. ``CommandCode/setSync`` only: `[version][level]`
   /// with level 0/1/2 (stationary/walking/driving).
   case motionHint = 3
+  /// How many rules per list the firmware keeps from a ``notifPrefs`` blob (radio → app).
+  /// ``CommandCode/getSync`` only: `[version][max_channel_rules][max_contact_rules]`.
+  /// Firmware that predates the slot answers with an empty blob.
+  case notifCaps = 4
 }
 
 /// One entry of a ``CommandCode/listSync`` reply: a sync_id the device knows about
@@ -243,6 +249,8 @@ public enum ResponseCode: UInt8, Sendable {
   case channelDataReceived = 0x1B
   /// Contains the persisted default flood scope. Firmware v11+ (MeshCore v1.15.0+).
   case defaultFloodScope = 0x1C
+  /// UTF-8 reply to ``CommandCode/runCliCommand``. Firmware v14+.
+  case cliReply = 0x1D
 
   // MARK: - Digitaino custom: iOS sync registry responses (0x64+, clear of the upstream range)
 
@@ -342,6 +350,8 @@ public enum TextType: UInt8, Sendable {
   case cliData = 0x01
   /// Cryptographically signed message.
   case signed = 0x02
+  /// Mesh CLI command to execute (firmware TXT_TYPE_CLI_COMMAND). Firmware v14+.
+  case cliCommand = 0x03
 }
 
 // MARK: - Response Categories
@@ -373,7 +383,7 @@ public extension ResponseCode {
     case .ok, .error:
       .simple
     case .selfInfo, .deviceInfo, .battery, .currentTime, .privateKey, .disabled, .advertPath, .tuningParams,
-         .autoAddConfig, .allowedRepeatFreq, .defaultFloodScope:
+         .autoAddConfig, .allowedRepeatFreq, .defaultFloodScope, .cliReply:
       .device
     case .syncValue, .syncList:
       // Digitaino custom; shares the device-category parser dispatcher.

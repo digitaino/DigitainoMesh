@@ -59,6 +59,15 @@ public protocol MessagingSessionOps: Actor {
     pathLength: UInt8,
     pathBytes: Data
   ) async throws
+
+  /// Writes the flood-scope command before every channel message, then clears a non-baseline scope before the next command.
+  /// If restoration fails, the session blocks further commands and preserves any accepted send.
+  func sendChannelMessage(
+    channel: UInt8,
+    text: String,
+    timestamp: Date,
+    floodScope: ResolvedFloodScope
+  ) async throws
 }
 
 // MARK: - Default Implementations

@@ -15,9 +15,6 @@ public protocol HeardRepeatPersisting: Actor {
   /// Fetch all repeats for a message
   func fetchMessageRepeats(messageID: UUID) async throws -> [MessageRepeatDTO]
 
-  /// Delete all repeats for a message
-  func deleteMessageRepeats(messageID: UUID) async throws
-
   /// Check if a repeat exists for the given RX log entry
   func messageRepeatExists(rxLogEntryID: UUID) async throws -> Bool
 
@@ -46,6 +43,30 @@ public protocol HeardRepeatPersisting: Actor {
   /// forever (Rafael, 2026-09-05: "when we resend a message the eye/network view
   /// does not update"). Clearing all three lets the next echo stamp the new hash.
   func clearMessagePacketScope(id: UUID) async throws
+  /// Current canonical, dedup, and insert in one turn.
+  /// A nil path adopts the observation; empty path bytes are a 0-hop, and a distinct path is an extra arrival.
+  func admitIncomingPath(
+    messageID: UUID,
+    pathNodes: Data,
+    pathLength: UInt8,
+    snr: Double?,
+    rssi: Int?,
+    receivedAt: Date,
+    rxLogEntryID: UUID?
+  ) async throws -> IncomingPathAdmission
+
+  /// Records every sent echo, including identical paths, while its timestamp matches.
+  /// Returns nil for a duplicate RX entry or an echo from a prior send.
+  func admitSentEcho(
+    messageID: UUID,
+    expectedTimestamp: UInt32,
+    receivedAt: Date,
+    pathNodes: Data,
+    pathLength: UInt8,
+    snr: Double?,
+    rssi: Int?,
+    rxLogEntryID: UUID?
+  ) async throws -> Int?
 
   /// Writes path columns only when they are still nil. Fetch by id; `#Predicate` cannot match `Data`.
   /// Leaves snr and heardRepeats unchanged.

@@ -72,12 +72,12 @@ struct NotifSyncServiceTests {
 
     let blob = try await service.buildBlob(radioID: Self.radioID)
 
-    #expect(blob.channelRules.count == NotifPrefsBlob.maxChannelRules)
-    #expect(blob.contactRules.count == NotifPrefsBlob.maxContactRules)
+    #expect(blob.channelRules.count == NotifPrefsBlob.Limits.legacy.channelRules)
+    #expect(blob.contactRules.count == NotifPrefsBlob.Limits.legacy.contactRules)
     // What is cached has to be what the wire carries, or a skipped write is unverifiable.
-    #expect(NotifPrefsBlob(decoding: blob.encode()) == blob)
+    #expect(NotifPrefsBlob(decoding: blob.encode(limits: .legacy)) == blob)
     // Channels are capped in store order (by index), not arbitrarily.
-    #expect(blob.channelRules.map(\.channelIdx) == Array(0..<UInt8(NotifPrefsBlob.maxChannelRules)))
+    #expect(blob.channelRules.map(\.channelIdx) == Array(0..<UInt8(NotifPrefsBlob.Limits.legacy.channelRules)))
   }
 
   // MARK: - Push
@@ -96,7 +96,7 @@ struct NotifSyncServiceTests {
 
     let expected = NotifPrefsBlob(globalMode: .all, channelRules: [.init(channelIdx: 3, mode: .silent)])
     let sent = await transport.sentData[1]
-    #expect(sent == PacketBuilder.setSync(id: .notifPrefs, payload: expected.encode()))
+    #expect(sent == PacketBuilder.setSync(id: .notifPrefs, payload: expected.encode(limits: .legacy)))
 
     await transport.simulateOK()
     #expect(try await task.value == .pushed)
@@ -281,11 +281,12 @@ struct NotifSyncServiceTests {
 
     let stored = NotifPrefsBlob(globalMode: .all, channelRules: [.init(channelIdx: 1, mode: .silent)])
     let task = Task { await service.reconcileOnConnect(radioID: Self.radioID) }
-    try await waitUntil("getSync should be sent") { await transport.sentData.count == 2 }
-    await transport.simulateReceive(makeSyncValuePacket(id: .notifPrefs, blob: stored.encode()))
+    try await answerCaps(Data(), transport: transport)
+    try await waitUntil("getSync should be sent") { await transport.sentData.count == 3 }
+    await transport.simulateReceive(makeSyncValuePacket(id: .notifPrefs, blob: stored.encode(limits: .legacy)))
     await task.value
 
-    #expect(await transport.sentData.count == 2, "A matching device needs no write")
+    #expect(await transport.sentData.count == 3, "A matching device needs no write")
     #expect(await service.support == .supported)
   }
 
@@ -299,14 +300,15 @@ struct NotifSyncServiceTests {
     defer { Task { await session.stop() } }
 
     let task = Task { await service.reconcileOnConnect(radioID: Self.radioID) }
-    try await waitUntil("getSync should be sent") { await transport.sentData.count == 2 }
+    try await answerCaps(Data(), transport: transport)
+    try await waitUntil("getSync should be sent") { await transport.sentData.count == 3 }
     // Device has nothing stored yet.
     await transport.simulateReceive(makeSyncValuePacket(id: .notifPrefs, blob: Data()))
 
-    try await waitUntil("setSync should follow") { await transport.sentData.count == 3 }
+    try await waitUntil("setSync should follow") { await transport.sentData.count == 4 }
     let expected = NotifPrefsBlob(globalMode: .all, channelRules: [.init(channelIdx: 1, mode: .silent)])
-    let sent = await transport.sentData[2]
-    #expect(sent == PacketBuilder.setSync(id: .notifPrefs, payload: expected.encode()))
+    let sent = await transport.sentData[3]
+    #expect(sent == PacketBuilder.setSync(id: .notifPrefs, payload: expected.encode(limits: .legacy)))
     await transport.simulateOK()
     await task.value
   }
@@ -324,12 +326,98 @@ struct NotifSyncServiceTests {
     )
     let task = Task { try await service.deviceBlob() }
     try await waitUntil("getSync should be sent") { await transport.sentData.count == 2 }
-    await transport.simulateReceive(makeSyncValuePacket(id: .notifPrefs, blob: stored.encode()))
+    await transport.simulateReceive(makeSyncValuePacket(id: .notifPrefs, blob: stored.encode(limits: .legacy)))
 
     #expect(try await task.value == stored)
   }
 
+  // MARK: - Limits
+
+  @Test
+  func `reconcile asks the radio for its caps before anything else`() async throws {
+    let store = try await makeStore(channels: [], contacts: [])
+    let (service, session, transport) = try await makeService(store: store)
+    defer { Task { await session.stop() } }
+
+    let task = Task { await service.reconcileOnConnect(radioID: Self.radioID) }
+    try await waitUntil("caps getSync should be sent") { await transport.sentData.count == 2 }
+    #expect(await transport.sentData[1] == PacketBuilder.getSync(id: .notifCaps))
+    await transport.simulateReceive(makeSyncValuePacket(id: .notifCaps, blob: Data([1, 40, 12])))
+    try await waitUntil("rules getSync should follow") { await transport.sentData.count == 3 }
+    await transport.simulateReceive(makeSyncValuePacket(id: .notifPrefs, blob: NotifPrefsBlob().encode(limits: .legacy)))
+    await task.value
+
+    #expect(await service.limits == .init(channelRules: 40, contactRules: 12))
+  }
+
+  @Test
+  func `a radio that reports larger caps gets every channel rule`() async throws {
+    let store = try await makeStore(
+      channels: (0..<17).map {
+        .testChannel(radioID: Self.radioID, index: UInt8(20 + $0), notificationLevel: .mentionsOnly)
+      },
+      contacts: []
+    )
+    let (service, session, transport) = try await makeService(store: store)
+    defer { Task { await session.stop() } }
+
+    let task = Task { await service.reconcileOnConnect(radioID: Self.radioID) }
+    try await answerCaps(Data([1, 40, 12]), transport: transport)
+    try await waitUntil("rules getSync should be sent") { await transport.sentData.count == 3 }
+    await transport.simulateReceive(makeSyncValuePacket(id: .notifPrefs, blob: Data()))
+    try await waitUntil("setSync should follow") { await transport.sentData.count == 4 }
+    await transport.simulateOK()
+    await task.value
+
+    let pushed = try #require(await service.lastPushedBlob)
+    #expect(pushed.channelRules.count == 17, "The 17th channel must not be left beeping on the radio")
+  }
+
+  @Test
+  func `a radio without the caps slot keeps the legacy limits`() async throws {
+    let store = try await makeStore(
+      channels: (0..<17).map {
+        .testChannel(radioID: Self.radioID, index: UInt8($0), notificationLevel: .muted)
+      },
+      contacts: []
+    )
+    let (service, session, transport) = try await makeService(store: store)
+    defer { Task { await session.stop() } }
+
+    let task = Task { await service.reconcileOnConnect(radioID: Self.radioID) }
+    try await answerCaps(Data(), transport: transport)
+    try await waitUntil("rules getSync should be sent") { await transport.sentData.count == 3 }
+    await transport.simulateReceive(makeSyncValuePacket(id: .notifPrefs, blob: Data()))
+    try await waitUntil("setSync should follow") { await transport.sentData.count == 4 }
+    await transport.simulateOK()
+    await task.value
+
+    #expect(await service.limits == .legacy)
+    #expect(try #require(await service.lastPushedBlob).channelRules.count == 16)
+  }
+
+  @Test
+  func `a rejected caps read latches unsupported`() async throws {
+    let store = try await makeStore(channels: [], contacts: [])
+    let (service, session, transport) = try await makeService(store: store)
+    defer { Task { await session.stop() } }
+
+    let task = Task { await service.reconcileOnConnect(radioID: Self.radioID) }
+    try await waitUntil("caps getSync should be sent") { await transport.sentData.count == 2 }
+    await transport.simulateError(code: ErrorCode.unsupportedCommand.rawValue)
+    await task.value
+
+    #expect(await service.support == .unsupported)
+    #expect(await transport.sentData.count == 2, "Stock firmware gets nothing further")
+  }
+
   // MARK: - Helpers
+
+  /// Waits for the caps read that opens every reconcile and answers it.
+  private func answerCaps(_ blob: Data, transport: MockTransport) async throws {
+    try await waitUntil("caps getSync should be sent") { await transport.sentData.count == 2 }
+    await transport.simulateReceive(makeSyncValuePacket(id: .notifCaps, blob: blob))
+  }
 
   private func makeStore(
     channels: [ChannelDTO],

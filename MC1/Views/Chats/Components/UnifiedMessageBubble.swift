@@ -226,6 +226,7 @@ struct UnifiedMessageBubble: View, Equatable {
             }
           }
         }
+        .accessibilityIdentifier(ChatScrollConstants.messageAccessibilityIdentifier(message.id))
         .messageBubbleLongPressEffect(isPressing: isLongPressing, trigger: longPressTrigger)
 
         if !item.envelope.isOutgoing {
@@ -416,14 +417,10 @@ struct UnifiedMessageBubble: View, Equatable {
         }
       }
     }
-    switch layout.textPayload?.translation?.phase {
-    case let .showing(translated, _):
-      label += L10n.Chats.Chats.Message.translatedAccessibility(translated)
-    case .inProgress:
-      label += "\(message.text), \(L10n.Chats.Chats.Message.Action.translating)"
-    default:
-      label += message.text
-    }
+    label += MessageVisibleBody(
+      stored: message.text,
+      translation: layout.textPayload?.translation
+    ).spokenText
     if item.grouping.duplicateCount > 1 {
       label += ", \(L10n.Chats.Chats.Message.Duplicates.accessibilityLabel(item.grouping.duplicateCount))"
     }

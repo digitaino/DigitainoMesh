@@ -16,6 +16,8 @@ private let logger = Logger(subsystem: "com.mc1", category: "BLEStatus")
 /// - **Tap** opens the repeater signal table (`RepeaterSignalPopover`), or the device picker
 ///   while disconnected — each state's one obvious destination.
 /// - **Sustained press** opens the device menu (adverts, change device, disconnect, advanced).
+///   While a connection attempt or a recovery is in flight it offers Cancel Connection or
+///   Stop Reconnecting instead, so a reconnect loop can always be stopped from here.
 ///
 /// ## Stable identity is load-bearing
 /// One always-present `ToolbarActionMenu`, never an `if`/`else` between different control
@@ -437,9 +439,38 @@ struct RadioStatusControl: View {
 
   // MARK: - Menu Content
 
+  /// A connection attempt or a recovery in flight, which the menu can stop. Nil once the
+  /// link is up (the connected menu's Disconnect covers it) and when nothing wants a radio.
+  private var recoveryActivity: ConnectionActivity? {
+    guard let activity = appState.connectionManager.connectionActivity else { return nil }
+    switch activity.phase {
+    case .connecting, .reconnecting, .waitingToReconnect:
+      return activity
+    case .connected, .syncing, .ready:
+      return nil
+    }
+  }
+
   @ViewBuilder
   private var menuContent: some View {
-    if let device = appState.connectedDevice {
+    if let activity = recoveryActivity {
+      // Checked before `connectedDevice`, which survives an auto-reconnect: the connected
+      // menu's adverts and Disconnect mean nothing while the link is down. Stopping comes
+      // first, then changing devices. The stop is scoped to this request, so a tap that
+      // lands after a newer attempt took over leaves that one alone.
+      Section(activity.accessibilityValue) {
+        Button {
+          logger.info("Stop tapped in BLE status menu (\(String(describing: activity.phase)))")
+          Task {
+            await appState.disconnect(requestID: activity.requestID, reason: .statusMenuDisconnectTap)
+          }
+        } label: {
+          Label(activity.stopTitle, systemImage: "eject")
+        }
+
+        changeDeviceButton
+      }
+    } else if let device = appState.connectedDevice {
       Section {
         if device.clientRepeat {
           Label(L10n.Settings.BleStatus.repeatModeActive, systemImage: "repeat")
@@ -458,16 +489,17 @@ struct RadioStatusControl: View {
           }
         }
 
-        Button {
-          showingDeviceSelection = true
-        } label: {
-          Label(L10n.Settings.BleStatus.changeDevice, systemImage: "flipphone")
-        }
+        changeDeviceButton
 
         Button(role: .destructive) {
           logger.info("Disconnect tapped in BLE status menu")
+          let requestID = appState.connectionManager.connectionActivity?.requestID
           Task {
-            await appState.disconnect(reason: .statusMenuDisconnectTap)
+            if let requestID {
+              await appState.disconnect(requestID: requestID, reason: .statusMenuDisconnectTap)
+            } else {
+              await appState.disconnect(reason: .statusMenuDisconnectTap)
+            }
           }
         } label: {
           Label(L10n.Settings.BleStatus.disconnect, systemImage: "eject")
@@ -508,9 +540,19 @@ struct RadioStatusControl: View {
     }
   }
 
+  private var changeDeviceButton: some View {
+    Button {
+      showingDeviceSelection = true
+    } label: {
+      Label(L10n.Settings.BleStatus.changeDevice, systemImage: "flipphone")
+    }
+  }
+
   // MARK: - Accessibility
 
+  /// The status, and during an attempt or a recovery the radio it is for.
   private var accessibilityValue: String {
+    if let activity = recoveryActivity { return activity.accessibilityValue }
     guard showsSignalCluster, let best = signals.best else { return statusTitle }
     return "\(statusTitle), \(best.accessibilityDescription)"
   }
@@ -551,7 +593,8 @@ struct RadioStatusControl: View {
   }
 
   private var statusTitle: String {
-    switch appState.connectionState {
+    if let activity = appState.connectionManager.connectionActivity { return activity.statusTitle }
+    return switch appState.connectionState {
     case .disconnected:
       L10n.Settings.BleStatus.Status.disconnected
     case .connecting:

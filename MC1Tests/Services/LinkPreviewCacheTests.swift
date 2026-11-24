@@ -270,7 +270,6 @@ private actor MockPreviewDataStore: PersistenceStoreProtocol {
   func updateMessageStatus(id: UUID, status: MessageStatus) async throws {}
   func updateMessageAck(id: UUID, ackCode: UInt32, status: MessageStatus, roundTripTime: UInt32?) async throws {}
   func updateMessageRetryStatus(id: UUID, status: MessageStatus, retryAttempt: Int, maxRetryAttempts: Int) async throws {}
-  func updateMessageHeardRepeats(id: UUID, heardRepeats: Int) async throws {}
   func updateMessageUserFix(id: UUID, latitude: Double?, longitude: Double?) async throws {}
   func updateMessageLinkPreview(id: UUID, url: String?, title: String?, imageData: Data?, iconData: Data?, fetched: Bool) throws {}
 
@@ -300,6 +299,54 @@ private actor MockPreviewDataStore: PersistenceStoreProtocol {
   }
 
   func saveContact(_ dto: ContactDTO) async throws {}
+
+  func insertContactIfAbsent(radioID: UUID, from frame: ContactFrame) async throws -> (id: UUID, isNew: Bool) {
+    (id: UUID(), isNew: false)
+  }
+
+  func updateContactLocalPreferences(
+    contactID: UUID,
+    nickname: ContactNicknameUpdate,
+    isBlocked: Bool?,
+    isFavorite: Bool?,
+    clearRemoteCLI: Bool
+  ) async throws -> ContactPreferenceCommit {
+    throw PersistenceStoreError.contactNotFound
+  }
+
+  func updateContactOCVSettings(
+    contactID: UUID,
+    preset: String,
+    customArray: String?
+  ) async throws -> ContactDTO {
+    throw PersistenceStoreError.contactNotFound
+  }
+
+  func updateContactAvatar(contactID: UUID, imageData: Data?) async throws -> ContactDTO {
+    throw PersistenceStoreError.contactNotFound
+  }
+
+  func updateContactFavorite(contactID: UUID, isFavorite: Bool) async throws -> ContactDTO {
+    throw PersistenceStoreError.contactNotFound
+  }
+
+  func updateContactTelemetryPermissions(contactID: UUID, granted: Bool) async throws -> ContactDTO {
+    throw PersistenceStoreError.contactNotFound
+  }
+
+  func updateContactRemoteCLIPermission(contactID: UUID, granted: Bool) async throws -> ContactDTO {
+    throw PersistenceStoreError.contactNotFound
+  }
+
+  func updateContactRoute(
+    radioID: UUID,
+    publicKey: Data,
+    outPathLength: UInt8,
+    outPath: Data
+  ) async throws -> ContactDTO? {
+    nil
+  }
+
   func deleteContact(id: UUID) async throws {}
   @discardableResult
   func touchContactHeard(radioID: UUID, publicKey: Data, at date: Date) async throws -> Bool {
@@ -406,12 +453,45 @@ private actor MockPreviewDataStore: PersistenceStoreProtocol {
     false
   }
 
-  func deleteMessageRepeats(messageID: UUID) async throws {}
+  func admitIncomingPath(
+    messageID: UUID,
+    pathNodes: Data,
+    pathLength: UInt8,
+    snr: Double?,
+    rssi: Int?,
+    receivedAt: Date,
+    rxLogEntryID: UUID?
+  ) async throws -> IncomingPathAdmission {
+    .missingParent
+  }
+
+  func admitSentEcho(
+    messageID: UUID,
+    expectedTimestamp: UInt32,
+    receivedAt: Date,
+    pathNodes: Data,
+    pathLength: UInt8,
+    snr: Double?,
+    rssi: Int?,
+    rxLogEntryID: UUID?
+  ) async throws -> Int? {
+    nil
+  }
+
   func incrementMessageSendCount(id: UUID) async throws -> Int {
     0
   }
 
   func updateMessageTimestamp(id: UUID, timestamp: UInt32) async throws {}
+  func commitOutgoingDirectMessageTimestamp(id: UUID, timestamp: UInt32) async throws -> UInt32? {
+    nil
+  }
+
+  func setPendingSendWireAttempt(id: UUID, to next: UInt8) async throws -> Bool {
+    false
+  }
+
+  func prepareChannelMessageResend(id: UUID, timestamp: UInt32) async throws {}
 
   // Debug Log Entries
   func saveDebugLogEntries(_ dtos: [DebugLogEntryDTO]) async throws {}
@@ -496,6 +576,10 @@ private actor MockPreviewDataStore: PersistenceStoreProtocol {
   }
 
   func saveReaction(_ dto: ReactionDTO) async throws {}
+  func admitReaction(_ dto: ReactionDTO) async throws -> ReactionAdmission? {
+    nil
+  }
+
   func reactionExists(messageID: UUID, senderName: String, emoji: String) async throws -> Bool {
     false
   }
@@ -535,6 +619,7 @@ private actor MockPreviewDataStore: PersistenceStoreProtocol {
 
   func updateDeviceLastContactSync(radioID: UUID, timestamp: UInt32) async throws {}
   func fetchSwapGuard(radioID: UUID) async throws -> SwapGuard { [] }
+  func radioSharesIdentity(radioID: UUID) async throws -> Bool { false }
   func releaseSwapGuard(radioID: UUID, _ parts: SwapGuard) async throws {}
   func fetchSwapProfile(radioID: UUID) async throws -> IdentityProfile? { nil }
   func recordIdentityDeletion(radioID: UUID, kind: IdentityDeletionKind, key: Data) async throws {}
@@ -565,11 +650,23 @@ private actor MockPreviewDataStore: PersistenceStoreProtocol {
   }
 
   func markMessageAsRead(id: UUID) async throws {}
-  func incrementPendingSendAttemptCount(messageID: UUID) async throws -> Int? {
+  func savePendingAcknowledgement(_ dto: PendingSendDTO, replacingPendingSendID: UUID?, markSent _: Bool) async throws -> Bool {
+    false
+  }
+
+  func resolvePendingAcknowledgement(id: UUID, expectedDeadline: Date?, status: MessageStatus, ackCode: UInt32?, roundTripTime: UInt32?) async throws -> Bool {
+    false
+  }
+
+  func preparePendingSendAttempt(messageID: UUID) async throws -> (pendingSendID: UUID, attemptCount: Int)? {
     nil
   }
 
   func saveDevice(_ dto: DeviceDTO) async throws {}
+  func updateDeviceOCVSettings(id: UUID, preset: String, customArray: String?) async throws -> DeviceDTO? {
+    nil
+  }
+
   func fetchRemoteNodeSessionByPrefix(_ prefix: Data) async throws -> RemoteNodeSessionDTO? {
     nil
   }
@@ -583,6 +680,18 @@ private actor MockPreviewDataStore: PersistenceStoreProtocol {
   }
 
   func saveRemoteNodeSessionDTO(_ dto: RemoteNodeSessionDTO) async throws {}
+  func reuseOrCreateRemoteNodeSession(_ presentation: RoomSessionPresentation) async throws -> RemoteNodeSessionDTO {
+    RemoteNodeSessionDTO(
+      radioID: presentation.radioID,
+      publicKey: presentation.publicKey,
+      name: presentation.name,
+      role: presentation.role,
+      latitude: presentation.latitude,
+      longitude: presentation.longitude,
+      isConnected: false
+    )
+  }
+
   func updateRemoteNodeSessionConnection(id: UUID, isConnected: Bool, permissionLevel: RoomPermissionLevel) async throws {}
   func cleanupDuplicateRemoteNodeSessions(publicKey: Data, keepID: UUID) async throws {}
   func deleteRemoteNodeSession(id: UUID) async throws {}
@@ -664,6 +773,23 @@ private actor MockPreviewDataStore: PersistenceStoreProtocol {
   }
 
   func deleteOldNodeStatusSnapshots(olderThan date: Date) async throws {}
+
+  func recordSelfTelemetrySnapshot(
+    deviceID: UUID,
+    radioID: UUID,
+    nodePublicKey: Data,
+    telemetry: [TelemetrySnapshotEntry]?,
+    location: NodeLocationFix?
+  ) async throws -> UUID? {
+    nil
+  }
+
+  func fetchSelfTelemetrySnapshots(
+    radioID: UUID,
+    nodePublicKey: Data
+  ) async throws -> [NodeStatusSnapshotDTO] {
+    []
+  }
 
   // Pending Sends
   func upsertPendingSend(_ dto: PendingSendDTO) async throws {}

@@ -13,4 +13,6 @@ public enum DisconnectReason: String, Sendable {
   case pairingFailed = "device pairing failed"
   case wifiReconnectPrep = "preparing for WiFi reconnect"
   case identityChanged = "radio set up as another node"
+  case bluetoothConnectPrep = "preparing for Bluetooth reconnect"
+  case powerOff = "device power off"
 }

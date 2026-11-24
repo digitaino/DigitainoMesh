@@ -40,6 +40,12 @@ private actor StubSignalBarsSession: SignalBarsSessionOps, SessionEventStreaming
     AsyncStream { $0.finish() }
   }
 
+  func eventsTracked(filter _: EventFilter) async -> (id: UUID, stream: AsyncStream<MeshEvent>) {
+    (UUID(), AsyncStream { $0.finish() })
+  }
+
+  func finishEvents(id _: UUID) async {}
+
   func waitForEvent(filter _: EventFilter, timeout _: TimeInterval?) async -> MeshEvent? {
     nil
   }

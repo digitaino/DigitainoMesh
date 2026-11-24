@@ -205,11 +205,24 @@ actor MockSignalBarsSession: SignalBarsSessionOps, SessionEventStreaming {
     makeStream(filter: filter)
   }
 
+  func eventsTracked(filter: EventFilter) async -> (id: UUID, stream: AsyncStream<MeshEvent>) {
+    makeTrackedStream(filter: filter)
+  }
+
+  func finishEvents(id: UUID) async {
+    filters[id] = nil
+    continuations.removeValue(forKey: id)?.finish()
+  }
+
   func waitForEvent(filter _: EventFilter, timeout _: TimeInterval?) async -> MeshEvent? {
     nil
   }
 
   private func makeStream(filter: EventFilter?) -> AsyncStream<MeshEvent> {
+    makeTrackedStream(filter: filter).stream
+  }
+
+  private func makeTrackedStream(filter: EventFilter?) -> (id: UUID, stream: AsyncStream<MeshEvent>) {
     let id = UUID()
     let (stream, continuation) = AsyncStream<MeshEvent>.makeStream()
     continuations[id] = continuation
@@ -217,7 +230,7 @@ actor MockSignalBarsSession: SignalBarsSessionOps, SessionEventStreaming {
     continuation.onTermination = { [weak self] _ in
       Task { await self?.removeStream(id) }
     }
-    return stream
+    return (id, stream)
   }
 
   private var filters: [UUID: EventFilter?] = [:]

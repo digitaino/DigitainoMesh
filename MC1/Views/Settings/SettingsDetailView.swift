@@ -1,11 +1,14 @@
 import SwiftUI
 
-/// Renders the destination for a `SettingsDetail`. Single source of truth for the settings detail
-/// pages, used by the compact `SettingsView` (`navigationDestination`) and the iPad split's detail
-/// column (`MainSidebarView`).
+/// Renders the destination for a `SettingsDetail`. Used as the split detail
+/// root by `SettingsView`.
 struct SettingsDetailView: View {
-  @Environment(\.appState) private var appState
   let detail: SettingsDetail
+  let descendantPath: [SettingsSubpage]
+  let requestNameEdit: SettingsEditorPresentation.NameRequest
+  let requestRegionAdd: SettingsEditorPresentation.RegionRequest
+  let backupPresentation: SettingsBackupPresentation?
+  let configImport: NodeConfigImportViewModel
 
   /// The radio status pair is mounted here rather than on `SettingsView`'s
   /// `navigationDestination` so it reaches both hosts from one place: the compact push and the
@@ -19,19 +22,23 @@ struct SettingsDetailView: View {
   private var page: some View {
     switch detail {
     case .deviceInfo:
-      DeviceInfoView()
+      DeviceInfoView(requestNameEdit: requestNameEdit)
     case .radio:
       RadioSettingsView()
     case .location:
       LocationSettingsView()
     case .connection:
-      ConnectionSettingsView()
+      ConnectionSettingsView(descendantPath: descendantPath)
     case .advanced:
-      AdvancedSettingsView()
+      AdvancedSettingsView(
+        descendantPath: descendantPath, requestRegionAdd: requestRegionAdd, configImport: configImport
+      )
     case .notifications:
       NotificationSettingsView()
     case .chats:
       ChatSettingsView()
+    case .blocksAndFilters:
+      BlocksAndFiltersSettingsView()
     case .appearance:
       AppearanceView()
     case .maps:
@@ -39,13 +46,9 @@ struct SettingsDetailView: View {
     case .language:
       LanguageSettingsView()
     case .backup:
-      BackupRestoreView(
-        connectionManager: appState.connectionManager,
-        onImportRestoredData: { [appState] in appState.notifyDataRestored() },
-        onChannelDraftSlotsAffected: { [appState] slotsByRadio in
-          appState.draftStore.clearChannelDrafts(slotsByRadio: slotsByRadio)
-        }
-      )
+      if let backupPresentation {
+        BackupRestoreView(presentation: backupPresentation)
+      }
     case .support:
       SupportDevelopmentView()
     case .feedback:

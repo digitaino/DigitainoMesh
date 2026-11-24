@@ -32,7 +32,6 @@ struct ChatPrewarmRefresherTests {
       connectionState: { .disconnected },
       connectedDevice: { nil },
       currentRadioID: { nil },
-      session: { nil },
       reactionService: { nil },
       chatSendQueueService: { nil },
       inlineImageDimensionsStore: { nil },
@@ -88,7 +87,7 @@ struct ChatPrewarmRefresherTests {
       unreadCount: 0,
       unreadMentionCount: 0,
       notificationLevel: .all,
-      isFavorite: false
+      isPinned: false
     )
   }
 

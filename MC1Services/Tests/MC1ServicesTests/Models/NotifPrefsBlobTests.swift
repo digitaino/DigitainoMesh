@@ -27,7 +27,7 @@ struct NotifPrefsBlobTests {
   @Test
   func `Empty blob encodes to 4 bytes: version, global_mode, 0, 0`() {
     let blob = NotifPrefsBlob(globalMode: .all)
-    let data = blob.encode()
+    let data = blob.encode(limits: .legacy)
     #expect(data.count == 4)
     #expect(data[0] == 1) // version
     #expect(data[1] == FirmwareNotifMode.all.rawValue)
@@ -44,7 +44,7 @@ struct NotifPrefsBlobTests {
         .init(channelIdx: 5, mode: .silent)
       ]
     )
-    let data = blob.encode()
+    let data = blob.encode(limits: .legacy)
     // [ver=1][global=1][nch=2][3, mentions][5, silent][nrt=0]
     #expect(data.count == 4 + 2 * 2)
     #expect(data[2] == 2)
@@ -62,7 +62,7 @@ struct NotifPrefsBlobTests {
       globalMode: .all,
       contactRules: [.init(pubKeyPrefix: prefix, mode: .silent)]
     )
-    let data = blob.encode()
+    let data = blob.encode(limits: .legacy)
     // [ver=1][global=1][nch=0][nrt=1][DE AD BE EF 12 34][silent]
     #expect(data.count == 4 + 7)
     #expect(data[3] == 1)
@@ -76,7 +76,7 @@ struct NotifPrefsBlobTests {
       globalMode: .all,
       contactRules: [.init(pubKeyPrefix: Data([0xAB, 0xCD]), mode: .silent)]
     )
-    let data = blob.encode()
+    let data = blob.encode(limits: .legacy)
     #expect(Array(data.subdata(in: 4..<10)) == [0xAB, 0xCD, 0x00, 0x00, 0x00, 0x00])
   }
 
@@ -86,19 +86,48 @@ struct NotifPrefsBlobTests {
       globalMode: .all,
       contactRules: [.init(pubKeyPrefix: Data([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]), mode: .silent)]
     )
-    let data = blob.encode()
+    let data = blob.encode(limits: .legacy)
     #expect(Array(data.subdata(in: 4..<10)) == [1, 2, 3, 4, 5, 6])
   }
 
   @Test
   func `Rule lists above the firmware caps are dropped during encode`() {
     let manyChannels = (0..<32).map { NotifPrefsBlob.ChannelRule(channelIdx: UInt8($0), mode: .silent) }
-    #expect(NotifPrefsBlob(globalMode: .all, channelRules: manyChannels).encode()[2] == UInt8(NotifPrefsBlob.maxChannelRules))
+    #expect(NotifPrefsBlob(globalMode: .all, channelRules: manyChannels).encode(limits: .legacy)[2] == 16)
 
     let manyContacts = (0..<32).map { i in
       NotifPrefsBlob.ContactRule(pubKeyPrefix: Data([UInt8(i), 0, 0, 0, 0, 0]), mode: .silent)
     }
-    #expect(NotifPrefsBlob(globalMode: .all, contactRules: manyContacts).encode()[3] == UInt8(NotifPrefsBlob.maxContactRules))
+    #expect(NotifPrefsBlob(globalMode: .all, contactRules: manyContacts).encode(limits: .legacy)[3] == 16)
+  }
+
+  @Test
+  func `A radio with larger caps receives every channel rule`() throws {
+    let limits = NotifPrefsBlob.Limits(channelRules: 40, contactRules: 12)
+    let channels = (0..<40).map { NotifPrefsBlob.ChannelRule(channelIdx: UInt8($0), mode: .mentions) }
+    let contacts = (0..<20).map { i in
+      NotifPrefsBlob.ContactRule(pubKeyPrefix: Data([UInt8(i), 0, 0, 0, 0, 0]), mode: .silent)
+    }
+    let data = NotifPrefsBlob(globalMode: .all, channelRules: channels, contactRules: contacts).encode(limits: limits)
+
+    let decoded = try #require(NotifPrefsBlob(decoding: data))
+    #expect(decoded.channelRules == channels)
+    #expect(decoded.contactRules == Array(contacts.prefix(12)))
+    // The Wio's CMD_SET_SYNC frame is 4 header bytes plus this, inside the 176-byte frame limit.
+    #expect(data.count == 168)
+  }
+
+  // MARK: - Limits
+
+  @Test
+  func `Caps reply decodes channel and contact limits`() {
+    #expect(NotifPrefsBlob.Limits(decoding: Data([1, 40, 12])) == .init(channelRules: 40, contactRules: 12))
+  }
+
+  @Test
+  func `An empty or short caps reply means the radio predates the slot`() {
+    #expect(NotifPrefsBlob.Limits(decoding: Data()) == nil)
+    #expect(NotifPrefsBlob.Limits(decoding: Data([1, 40])) == nil)
   }
 
   // MARK: - Round-trip
@@ -117,7 +146,7 @@ struct NotifPrefsBlobTests {
         .init(pubKeyPrefix: Data([0x01, 0x02, 0x03, 0x04, 0x05, 0x06]), mode: .all)
       ]
     )
-    let decoded = try #require(NotifPrefsBlob(decoding: original.encode()))
+    let decoded = try #require(NotifPrefsBlob(decoding: original.encode(limits: .legacy)))
 
     #expect(decoded.version == 1)
     #expect(decoded.globalMode == original.globalMode)

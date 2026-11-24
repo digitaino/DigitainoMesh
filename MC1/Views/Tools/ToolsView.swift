@@ -1,37 +1,26 @@
 import SwiftUI
 
-/// The compact (iPhone / compact-width) Tools tab: a stack that pushes each tool. The iPad
-/// regular-width layout routes Tools through `MainSidebarView`'s split (`ToolsContentColumn` +
-/// `ToolsDetailColumn`) instead, so this view is only reached in compact width.
+/// Tools tab: a stack that mirrors `NavigationCoordinator.selectedTool`, so the open tool
+/// survives tab switches and view rebuilds. Back writes an empty path.
 struct ToolsView: View {
   @Environment(\.appState) private var appState
   @Environment(\.appTheme) private var theme
 
-  /// This stack's own path. It is seeded once from the hoisted `selectedTool` and written back to
-  /// it on every change, but nothing drives it from that selection afterwards — the flow is one
-  /// way, out of this stack.
+  /// This stack's own path. It follows `selectedTool` whenever something names a tool (a weather
+  /// alert tap, the seed of a rebuilt stack) and writes every push and pop back to it, but it
+  /// ignores a *clear* from outside.
   ///
-  /// Seeding is the rotation fix: an iPhone whose landscape width class is regular swaps the whole
-  /// shell when it turns (`ContentView` builds `MainSidebarView` instead of `MainTabView`), which
-  /// tears this view down. The old implicit path meant the rebuilt stack came back at the tool
-  /// list, so an open Signal Mapper exited on the way out and was still gone on the way back; a
-  /// stack that seeds itself from the tool the other shell was showing comes back on the tool, in
-  /// both directions.
-  ///
-  /// The one-way rule is deliberate. Binding the stack directly to `selectedTool` would also let
-  /// every *clear* of that selection pop this stack — and `clearPerDeviceSelection` runs on the
-  /// disconnect tick, exactly when `RadioStatusControl` dismisses its popover on
-  /// `connectedDevice == nil`. Tearing a popover's host down inside its own dismissal is the
-  /// iOS 26 zoom-morph trap behind TestFlight crash B8A782EC, and compact width is its worst case
-  /// because every popover here forces `presentationCompactAdaptation(.popover)`. Ignoring
-  /// external clears keeps this stack exactly where the pre-fix build left it. The cost is one
-  /// edge case: disconnect the radio and *then* rotate, and the rebuilt stack seeds from a
-  /// selection that was cleared meanwhile, so it lands on the tool list.
+  /// That one exception is deliberate. `clearPerDeviceSelection` runs on the disconnect tick,
+  /// exactly when `RadioStatusControl` dismisses its popover on `connectedDevice == nil`. A stack
+  /// bound straight to the selection would pop the open radio tool, whose toolbar hosts that
+  /// popover, inside its own dismissal: the iOS 26 zoom-morph trap behind TestFlight crash
+  /// B8A782EC, worst at compact width, where every popover here forces
+  /// `presentationCompactAdaptation(.popover)`. So a disconnect leaves the open tool on screen,
+  /// as builds before the fix did, and the user leaves it with Back.
   @State private var path: [ToolSelection] = []
 
   /// Whether the seed has already run. `onAppear` fires again every time the Tools tab is
-  /// re-selected, and re-seeding there would apply an external clear the stack is meant to ignore
-  /// — and would re-push a tool the user had popped.
+  /// re-selected, and re-seeding there would re-push a tool the user had popped.
   @State private var hasSeeded = false
 
   var body: some View {
@@ -45,7 +34,7 @@ struct ToolsView: View {
         .themedRowBackground(theme)
       }
       .navigationDestination(for: ToolSelection.self) { tool in
-        ToolDestinationView(tool: tool) { LineOfSightView() }
+        ToolDestinationView(tool: tool)
       }
       .themedCanvas(theme)
       .navigationTitle(L10n.Tools.Tools.title)
@@ -55,14 +44,18 @@ struct ToolsView: View {
     }
     .onAppear { seedPathOnce() }
     .onChange(of: path) { _, newPath in
-      // The regular shell renders its Tools columns from `selectedTool`, so every push and pop
-      // here has to reach it: this write is what the split view — and the next rebuild of this
-      // stack — reads after a rotation.
+      // Every push and pop reaches the selection: it is what the next rebuild of this stack
+      // seeds from, and what keeps the open tool across tab switches.
       appState.navigation.selectedTool = Self.selection(for: newPath)
+    }
+    .onChange(of: appState.navigation.selectedTool) { _, tool in
+      // Follow a tool named from outside; ignore a clear (see `path`).
+      guard let tool, Self.selection(for: path) != tool else { return }
+      path = Self.initialPath(for: tool)
     }
   }
 
-  /// Restores the tool the other shell was showing, once per view lifetime.
+  /// Restores the tool this stack showed before it was rebuilt, once per view lifetime.
   private func seedPathOnce() {
     guard !hasSeeded else { return }
     hasSeeded = true

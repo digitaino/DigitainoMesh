@@ -1,7 +1,7 @@
 import Foundation
 
 /// Tuning for the `withPoolBackoff` helper that absorbs short bursts of
-/// firmware pool-exhaustion errors before parking the envelope.
+/// firmware pool-exhaustion errors before ACK handoff or queue recovery.
 struct PoolBackoffConfig {
   /// Maximum in-loop retries before re-throwing the transient `deviceError`.
   let attemptCap: Int
@@ -38,15 +38,6 @@ struct MessageServiceConfig {
   /// Whether to use flood routing when user manually retries a failed message
   let floodFallbackOnRetry: Bool
 
-  /// Maximum total send attempts for automatic retry
-  let maxAttempts: Int
-
-  /// Maximum attempts to make after switching to flood routing
-  let maxFloodAttempts: Int
-
-  /// Number of direct attempts before switching to flood routing
-  let floodAfter: Int
-
   /// Minimum timeout in seconds (floor for device-suggested timeout)
   let minTimeout: TimeInterval
 
@@ -68,23 +59,12 @@ struct MessageServiceConfig {
 
   init(
     floodFallbackOnRetry: Bool = true,
-    maxAttempts: Int = 4,
-    maxFloodAttempts: Int = 1,
-    floodAfter: Int = 3,
     minTimeout: TimeInterval = 0,
     triggerPathDiscoveryAfterFlood: Bool = true,
     ackGiveUpWindow: TimeInterval = 30,
     poolBackoff: PoolBackoffConfig = .default
   ) {
-    // 4 = 3 on the stored path + 1 flood: attempt indices 0-3. Firmware hashes
-    // `attempt & 0x03`, so attempt 4 would repeat attempt 0's ACK code, and a
-    // repeater that already relayed that code drops it: a 5th send's
-    // confirmation can be lost even when the message arrived.
-    precondition(maxAttempts <= 4, "maxAttempts must be <= 4 (attempt indices 0-3)")
     self.floodFallbackOnRetry = floodFallbackOnRetry
-    self.maxAttempts = maxAttempts
-    self.maxFloodAttempts = maxFloodAttempts
-    self.floodAfter = floodAfter
     self.minTimeout = minTimeout
     self.triggerPathDiscoveryAfterFlood = triggerPathDiscoveryAfterFlood
     self.ackGiveUpWindow = ackGiveUpWindow

@@ -1,3 +1,53 @@
+Beta Changes -- v1.7.1
+
+MeshCore One 1.7, Forgetting One Radio of Several, and Sturdier Connections
+
+What is different from the 1.6.2 build of 30 October.
+
+Forget one radio, keep the rest. If your node runs on more than one radio, Forget and factory reset now act on that radio only: its entry goes, and your chats, contacts, channels and the other radios stay. MeshCore One 1.7 would otherwise erase the node's whole history, and every radio carrying it, when one of them is erased. With a single radio nothing changes: erasing it still removes its history. A radio that cannot be reached is erased the next time it connects, and that wait never holds up your other radios.
+
+Connections. From MeshCore One 1.7: the connection code was rebuilt so that each connection looks after its own recovery, and an old attempt can no longer interfere with a new one. While the app is connecting or reconnecting, press and hold the radio pill for Cancel Connection or Stop Reconnecting. Pairing shows the sync status, and a pairing that gets stuck during setup can be cancelled.
+
+Direct messages. From MeshCore One 1.7: a direct message is tried on its path up to 4 times and then by flood up to 4 times, 8 sends in all. The earlier builds of this app stopped at 4. Settings > Advanced has Attempts on Path, Flood Attempts and Fall Back to Flood, and a separate switch for flood fallback when logging in to repeaters and rooms. Known limit: through a repeater on firmware 1.15, a message that arrives on send 5 to 8 can still show Failed.
+
+Reactions. A reaction you send now goes out once, and its badge appears when the radio has accepted it instead of at once. A reaction that could not be sent shows as failed. Reactions waiting to be sent survive closing the app.
+
+Blocks & Filters. From MeshCore One 1.7: Settings > Blocks & Filters holds blocked contacts, blocked channel senders and new Text Rules, which hide messages that match a word or phrase in the message, the sender's name or both, in the chats you choose. Hidden messages are listed under Recently Blocked. In this app a Text Rule does not hide reactions; blocking a contact or sender still does. Blocking has moved here from Settings > Chats.
+
+Notification rules on the radio. A radio with Digitaino firmware now tells the app how many notification rules it keeps, and the app sends that many instead of stopping at 16 per list. Older firmware keeps 16.
+
+From MeshCore One 1.7. Sensor nodes can be discovered, logged in to and set up. Settings > Device Info shows telemetry kept from your own node. Emergency (MECP) readings in a chat are shown as readable text. Temperature, distance and pressure follow your phone's region. The Live Activity makes unread messages more prominent and words the packet rate more clearly. Debug logs are collected only if you turn that on in Settings > Diagnostics, and stay on the phone until you export them; please turn it on before reporting a problem. VoiceOver goes to the newest message. Many fixes to retries, channel resends, config import and the keyboard. What's New shows the 1.7 notes.
+
+What to try. If you have two radios carrying your node, forget one and check the other still has everything; then pair it again. Hold the radio pill while it reconnects and stop it. Send a direct message to someone out of reach and watch the attempt count. React to a direct message and to a channel message. Add a Text Rule for a word and check Recently Blocked.
+
+Unchanged: everything in the 1.6.2 build below. New text is in all 12 languages.
+
+---
+
+Beta Changes -- v1.6.2
+
+MeshCore One 1.6, Favorites That Follow You Across Radios, and Weather From Several Radios
+
+What is different from the second 1.5.2 build of 17 October.
+
+Pinned chats. From MeshCore One 1.6: pinning a chat is now separate from the radio's favorite star, and pinned chats sit in their own Pinned section. Contacts that were favorites are pinned the first time this build opens. A pinned chat is never deleted by a full radio, by stale-node cleanup or by Remove Non-Favorite Nodes, the same as a favorite.
+
+Favorites on every radio. If your node runs on more than one radio, the stars you set in the app are now written to whichever radio you connect, so every radio keeps the same favorites (and protects them when its contact list fills up). MeshCore One 1.6 would otherwise copy each radio's own stars onto the phone, so switching radios lost them. A star changed outside this app on one of those radios is put back at the next connect. With one radio, the radio's star still reaches the phone.
+
+Weather from several radios. When more than one weather radio is on #meshwx, Weather asks the one that covers where you are, and names each with its ID, such as WX-AUS 1D04.
+
+Info sheets without the radio. A chat's notification level, pin, a contact's nickname, avatar and block, and deleting a message all save with the radio off. Known regions wait for the radio, since the list belongs to it.
+
+From MeshCore One 1.6. Mark a chat read or unread (long press, or a full swipe). On iPad the sidebar is now a tab bar at the top, and the open chat, page and tool survive tab switches and rotation. Map filters for last heard and hop count. Bluetooth and Wi-Fi on the same radio, switchable in Connect Device and Settings › Connection (firmware 1.18, radio paired both ways). A command line for your own radio and remote commands for contacts' radios. Offline maps choose a detail level. Many fixes to the keyboard, scrolling, link previews and connections. What's New shows the 1.6 notes.
+
+Weather alerts. A tapped alert notification now opens Weather on iPhone too, not the Tools list.
+
+What to try. Switch between two radios that carry your node and check your stars stay put on both. Pin a channel and a DM, then check the Pinned section. On an iPad, use the tab bar and open Weather and the Signal Mapper. Tap a weather alert notification.
+
+Unchanged: everything in the 1.5.2 builds below.
+
+---
+
 Beta Changes -- v1.5.2 (second build)
 
 Weather Alerts You Can Trust a Little More

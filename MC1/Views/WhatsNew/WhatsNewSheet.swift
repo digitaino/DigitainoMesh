@@ -45,10 +45,15 @@ struct WhatsNewSheet: View {
         Button {
           supportMeTapped()
         } label: {
-          Label(L10n.WhatsNew.WhatsNew.supportButton, systemImage: "heart")
-            .font(.headline)
-            .frame(maxWidth: .infinity)
-            .padding()
+          Label {
+            Text(L10n.WhatsNew.WhatsNew.supportButton)
+          } icon: {
+            Image(systemName: "heart")
+              .foregroundStyle(.red)
+          }
+          .font(.headline)
+          .frame(maxWidth: .infinity)
+          .padding()
         }
         .liquidGlassSecondaryButtonStyle()
 
@@ -97,6 +102,7 @@ private struct WhatsNewRow: View {
       Image(systemName: item.symbol)
         .font(.title)
         .foregroundStyle(.tint)
+        .scaleEffect(y: item.flipsSymbolVertically ? -1 : 1)
         .frame(width: WhatsNewSheet.Metrics.symbolColumnWidth)
         .accessibilityHidden(true)
 

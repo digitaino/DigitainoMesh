@@ -138,18 +138,30 @@ actor MockBenchmarkSession: BenchmarkSessionOps, SessionEventStreaming {
     makeStream()
   }
 
+  func eventsTracked(filter _: EventFilter) async -> (id: UUID, stream: AsyncStream<MeshEvent>) {
+    makeTrackedStream()
+  }
+
+  func finishEvents(id: UUID) async {
+    continuations.removeValue(forKey: id)?.finish()
+  }
+
   func waitForEvent(filter _: EventFilter, timeout _: TimeInterval?) async -> MeshEvent? {
     nil
   }
 
   private func makeStream() -> AsyncStream<MeshEvent> {
+    makeTrackedStream().stream
+  }
+
+  private func makeTrackedStream() -> (id: UUID, stream: AsyncStream<MeshEvent>) {
     let id = UUID()
     let (stream, continuation) = AsyncStream<MeshEvent>.makeStream()
     continuations[id] = continuation
     continuation.onTermination = { [weak self] _ in
       Task { await self?.removeStream(id) }
     }
-    return stream
+    return (id, stream)
   }
 
   private func removeStream(_ id: UUID) {

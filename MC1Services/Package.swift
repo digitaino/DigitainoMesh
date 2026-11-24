@@ -3,6 +3,7 @@ import PackageDescription
 
 let package = Package(
   name: "MC1Services",
+  defaultLocalization: "en",
   platforms: [.iOS(.v18), .macOS(.v15)],
   products: [
     .library(name: "MC1Services", targets: ["MC1Services"]),
@@ -25,7 +26,10 @@ let package = Package(
   targets: [
     .target(
       name: "MC1Services",
-      dependencies: ["MeshCore", "SurveyKit", "MeshWX"]
+      dependencies: ["MeshCore", "SurveyKit", "MeshWX"],
+      resources: [
+        .process("MECP/Languages")
+      ]
     ),
     // MeshWX v5 weather protocol: the wire codec, the preload tables it decodes
     // against, and the pure rendering rules of spec §10-11. The app's weather service
@@ -79,6 +83,9 @@ let package = Package(
         "MC1Services",
         "MeshWX",
         .product(name: "MeshCoreTestSupport", package: "MeshCore")
+      ],
+      resources: [
+        .process("MECP")
       ]
     ),
     .testTarget(

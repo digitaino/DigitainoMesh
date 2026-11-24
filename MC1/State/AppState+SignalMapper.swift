@@ -18,7 +18,10 @@ extension AppState {
   /// A running survey **run** is not ended here (M3.5 §2.6): the probe engine of the old
   /// stack is stopped and its counters folded into the run, and once the new stack is up
   /// the probe session restarts against it silently — no prompts, same runID, same focus.
-  func wireSignalMapper(services: ServiceContainer) {
+  func wireSignalMapper(snapshot: ConnectionSnapshot) {
+    // A superseded connection's wiring must not touch the current one's stack.
+    guard connectionManager.isCurrent(snapshot) else { return }
+    let services = snapshot.services
     // Re-wiring replaces the capture stack a running survey folds into, so the current
     // probe engine ends here whichever branch follows — folding into a replaced engine
     // would silently lose its tail. The run itself survives.
@@ -60,7 +63,7 @@ extension AppState {
       // Wait out whichever transition was already in flight, so a stop queued a moment ago
       // cannot land after the start it was meant to precede.
       await previousTransition?.value
-      guard !Task.isCancelled else { return }
+      guard !Task.isCancelled, self.connectionManager.isCurrent(snapshot) else { return }
       await router.setFallback(fixes)
       await engine.start()
       // The raw log is always on since v3 (§7 step 2): a recorder exists whenever capture
@@ -86,7 +89,7 @@ extension AppState {
     }
   }
 
-  /// Releases everything ``wireSignalMapper(services:)`` set up, flushing whatever the
+  /// Releases everything ``wireSignalMapper(snapshot:)`` set up, flushing whatever the
   /// session had buffered. Safe to call when nothing was started.
   ///
   /// A running run stays open (§2.6): its probe engine is written off into the run's
@@ -153,11 +156,11 @@ extension AppState {
     // permission here rather than having to wait for the next connect to see one.
     requestMapperMovementHintsIfNeeded()
 
-    guard let services else {
+    guard let snapshot = connectionManager.currentConnection else {
       tearDownSignalMapper()
       return
     }
-    wireSignalMapper(services: services)
+    wireSignalMapper(snapshot: snapshot)
   }
 
   /// Starts movement classification for the mapper, prompting for Motion & Fitness if that

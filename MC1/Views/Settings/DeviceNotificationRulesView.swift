@@ -17,6 +17,7 @@ struct DeviceNotificationRulesView: View {
 
   @State private var deviceBlob: NotifPrefsBlob?
   @State private var support: NotifSyncService.FirmwareSupport = .unknown
+  @State private var limits: NotifPrefsBlob.Limits = .legacy
   @State private var fetchError: String?
   @State private var lastFetched: Date?
   @State private var isFetching = false
@@ -122,7 +123,7 @@ struct DeviceNotificationRulesView: View {
     } header: {
       Text(L10n.Settings.DeviceNotificationRules.channelRules)
     } footer: {
-      overflowNote(local: localChannelRuleCount, cap: NotifPrefsBlob.maxChannelRules)
+      overflowNote(local: localChannelRuleCount, cap: limits.channelRules)
     }
     .themedRowBackground(theme)
   }
@@ -144,7 +145,7 @@ struct DeviceNotificationRulesView: View {
     } header: {
       Text(L10n.Settings.DeviceNotificationRules.contactRules)
     } footer: {
-      overflowNote(local: localContactRuleCount, cap: NotifPrefsBlob.maxContactRules)
+      overflowNote(local: localContactRuleCount, cap: limits.contactRules)
     }
     .themedRowBackground(theme)
   }
@@ -296,6 +297,8 @@ struct DeviceNotificationRulesView: View {
     defer { isFetching = false }
 
     do {
+      // The caps decide the overflow note; normally already read at connect.
+      await services.notifSyncService.loadLimitsIfNeeded()
       // An empty slot is a valid state, not an error: the firmware simply has nothing
       // stored yet and is falling back to its default mode.
       deviceBlob = try await services.notifSyncService.deviceBlob() ?? NotifPrefsBlob()
@@ -307,6 +310,7 @@ struct DeviceNotificationRulesView: View {
       deviceBlob = nil
     }
     support = await services.notifSyncService.support
+    limits = await services.notifSyncService.limits
     if support == .unsupported {
       deviceBlob = nil
       fetchError = nil

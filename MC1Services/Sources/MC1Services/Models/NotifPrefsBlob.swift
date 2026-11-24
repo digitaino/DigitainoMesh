@@ -43,16 +43,39 @@ public struct NotifPrefsBlob: Sendable, Equatable {
   /// Default notification mode when no per-channel or per-contact rule matches.
   public var globalMode: FirmwareNotifMode
 
-  /// Per-channel overrides. Firmware caps at 16; producers are expected to apply the cap
-  /// themselves so a cached blob matches the wire, and the encoder truncates as a backstop.
+  /// Per-channel overrides. The firmware keeps at most ``Limits/channelRules`` of them;
+  /// producers are expected to apply the cap themselves so a cached blob matches the wire,
+  /// and the encoder truncates as a backstop.
   public var channelRules: [ChannelRule]
 
   /// Per-contact overrides, capped like ``channelRules``.
   public var contactRules: [ContactRule]
 
-  /// Firmware's hard limit per rule list. Encoder truncates above this.
-  public static let maxChannelRules = 16
-  public static let maxContactRules = 16
+  /// How many rules per list a radio keeps, read from the ``SyncID/notifCaps`` slot.
+  public struct Limits: Sendable, Equatable {
+    public let channelRules: Int
+    public let contactRules: Int
+
+    public init(channelRules: Int, contactRules: Int) {
+      self.channelRules = channelRules
+      self.contactRules = contactRules
+    }
+
+    /// What firmware that predates the caps slot keeps. It reads a longer list wrongly,
+    /// so nothing past these counts may be sent to it.
+    public static let legacy = Limits(channelRules: 16, contactRules: 16)
+
+    /// Parses a ``SyncID/notifCaps`` reply: `[version][max_channel_rules][max_contact_rules]`.
+    /// Returns `nil` for an empty reply (firmware without the slot) or one too short to read.
+    public init?(decoding data: Data) {
+      guard data.count >= 3 else { return nil }
+      let start = data.startIndex
+      self.init(
+        channelRules: Int(data[data.index(start, offsetBy: 1)]),
+        contactRules: Int(data[data.index(start, offsetBy: 2)])
+      )
+    }
+  }
 
   public init(
     version: UInt8 = Self.currentVersion,
@@ -86,19 +109,21 @@ public struct NotifPrefsBlob: Sendable, Equatable {
   ///
   /// Binary layout (matches firmware `parseNotifPrefs`):
   /// `[version][global_mode][num_channel_rules]([channel_idx][mode]) x N[num_contact_rules]([pub_key_prefix(6)][mode]) x M`
-  public func encode() -> Data {
+  ///
+  /// - Parameter limits: The receiving radio's caps. Rules past them are dropped.
+  public func encode(limits: Limits) -> Data {
     var out = Data()
     out.append(version)
     out.append(globalMode.rawValue)
 
-    let channels = Array(channelRules.prefix(Self.maxChannelRules))
+    let channels = Array(channelRules.prefix(min(limits.channelRules, Int(UInt8.max))))
     out.append(UInt8(channels.count))
     for r in channels {
       out.append(r.channelIdx)
       out.append(r.mode.rawValue)
     }
 
-    let contacts = Array(contactRules.prefix(Self.maxContactRules))
+    let contacts = Array(contactRules.prefix(min(limits.contactRules, Int(UInt8.max))))
     out.append(UInt8(contacts.count))
     for r in contacts {
       // Force-write exactly 6 bytes, zero-padding short prefixes.

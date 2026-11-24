@@ -13,7 +13,8 @@ extension SyncCoordinator {
   @discardableResult
   func persistReactionIfNew(
     _ reactionDTO: ReactionDTO,
-    dependencies: SyncDependencies
+    dependencies: SyncDependencies,
+    directMessage: (scope: ReceiveScope, contact: ContactDTO)? = nil
   ) async -> Bool {
     let exists = try? await dependencies.dataStore.reactionExists(
       messageID: reactionDTO.messageID,
@@ -25,9 +26,17 @@ extension SyncCoordinator {
 
     if let result = await dependencies.reactionService.persistReactionAndUpdateSummary(
       reactionDTO,
-      using: dependencies.dataStore
+      using: dependencies.dataStore,
+      directMessage: directMessage
     ) {
-      dataEventBroadcaster.yield(.reactionReceived(messageID: result.messageID, summary: result.summary))
+      if let (scope, contact) = directMessage {
+        guard await (try? dependencies.dataStore.currentDirectMessageContact(contact, scope: scope)) != nil,
+              scope.isCurrent else { return false }
+      }
+      dataEventBroadcaster.yield(.reactionReceived(
+        messageID: result.messageID, summary: result.summary,
+        scope: directMessage?.scope, contact: directMessage?.contact
+      ))
     }
 
     return true
@@ -40,8 +49,12 @@ extension SyncCoordinator {
     text: String,
     contact: ContactDTO,
     radioID: UUID,
-    dependencies: SyncDependencies
+    dependencies: SyncDependencies,
+    scope: ReceiveScope? = nil
   ) async -> Bool {
+    guard scope?.isCurrent != false else { return true }
+    let directMessage = scope.map { (scope: $0, contact: contact) }
+
     // Try meshcore-open v3 format
     if let mcoReaction = MeshCoreOpenReactionParser.parse(text) {
       return await handleMCODMReaction(
@@ -49,7 +62,8 @@ extension SyncCoordinator {
         rawText: text,
         contact: contact,
         radioID: radioID,
-        dependencies: dependencies
+        dependencies: dependencies,
+        directMessage: directMessage
       )
     }
 
@@ -63,7 +77,8 @@ extension SyncCoordinator {
         rawText: text,
         contact: contact,
         radioID: radioID,
-        dependencies: dependencies
+        dependencies: dependencies,
+        directMessage: directMessage
       )
     }
 
@@ -83,7 +98,7 @@ extension SyncCoordinator {
         contactID: contact.id,
         radioID: radioID
       )
-      if await persistReactionIfNew(reactionDTO, dependencies: dependencies) {
+      if await persistReactionIfNew(reactionDTO, dependencies: dependencies, directMessage: directMessage) {
         logger.debug("Saved DM reaction \(parsed.emoji) to message \(targetMessageID)")
       }
 
@@ -109,7 +124,7 @@ extension SyncCoordinator {
         contactID: contact.id,
         radioID: radioID
       )
-      if await persistReactionIfNew(reactionDTO, dependencies: dependencies) {
+      if await persistReactionIfNew(reactionDTO, dependencies: dependencies, directMessage: directMessage) {
         logger.debug("Saved DM reaction \(parsed.emoji) to message \(targetMessage.id) (from DB)")
       }
 
@@ -122,7 +137,8 @@ extension SyncCoordinator {
       contactID: contact.id,
       senderName: contact.displayName,
       rawText: text,
-      radioID: radioID
+      radioID: radioID,
+      directMessage: directMessage
     )
 
     logger.debug("Queued pending DM reaction \(parsed.emoji)")
@@ -251,15 +267,16 @@ extension SyncCoordinator {
     return true
   }
 
-  /// Computes a symmetric timestamp window around the given time for reaction matching.
+  /// Computes a bounded timestamp window around the given time for reaction matching.
   private func reactionTimestampWindow(at time: Date = Date()) -> ClosedRange<UInt32> {
     reactionTimestampWindow(anchor: UInt32(time.timeIntervalSince1970))
   }
 
-  /// Computes a symmetric timestamp window around a specific anchor timestamp.
+  /// Computes a timestamp window around the anchor, bounded to the UInt32 range.
   private func reactionTimestampWindow(anchor: UInt32) -> ClosedRange<UInt32> {
     let start = anchor > reactionTimestampWindowSeconds ? anchor - reactionTimestampWindowSeconds : 0
-    return start...(anchor + reactionTimestampWindowSeconds)
+    let end = anchor > UInt32.max - reactionTimestampWindowSeconds ? UInt32.max : anchor + reactionTimestampWindowSeconds
+    return start...end
   }
 
   // MARK: - meshcore-open Reaction Handlers
@@ -272,7 +289,8 @@ extension SyncCoordinator {
     rawText: String,
     contact: ContactDTO,
     radioID: UUID,
-    dependencies: SyncDependencies
+    dependencies: SyncDependencies,
+    directMessage: (scope: ReceiveScope, contact: ContactDTO)?
   ) async -> Bool {
     let timestampWindow = reactionTimestampWindow()
 
@@ -307,7 +325,7 @@ extension SyncCoordinator {
         contactID: contact.id,
         radioID: radioID
       )
-      if await persistReactionIfNew(reactionDTO, dependencies: dependencies) {
+      if await persistReactionIfNew(reactionDTO, dependencies: dependencies, directMessage: directMessage) {
         logger.debug("Saved MCO DM reaction \(mcoReaction.emoji) to message \(candidate.id)")
       }
       return true
@@ -389,7 +407,8 @@ extension SyncCoordinator {
     rawText: String,
     contact: ContactDTO,
     radioID: UUID,
-    dependencies: SyncDependencies
+    dependencies: SyncDependencies,
+    directMessage: (scope: ReceiveScope, contact: ContactDTO)?
   ) async -> Bool {
     let timestampWindow = reactionTimestampWindow(
       anchor: v1Reaction.timestampSeconds
@@ -420,7 +439,7 @@ extension SyncCoordinator {
         contactID: contact.id,
         radioID: radioID
       )
-      if await persistReactionIfNew(reactionDTO, dependencies: dependencies) {
+      if await persistReactionIfNew(reactionDTO, dependencies: dependencies, directMessage: directMessage) {
         logger.debug("Saved MCO v1 DM reaction \(v1Reaction.emoji) to message \(candidate.id)")
       }
       return true

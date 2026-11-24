@@ -372,4 +372,175 @@ struct RadioSwapGuardTests {
     )
     #expect(reconnected.lastContactSync == 1_700_000_000)
   }
+
+  // MARK: - Sibling radios across connect, erase and forget (docs/UPSTREAM_SYNC_1.7.md §3 A, B)
+
+  /// Two Bluetooth radios carrying one node's key, sharing `radioID`, the first connected most
+  /// recently, with a channel in the shared history.
+  private func makeTwoRadios(_ store: PersistenceStore) async throws -> (first: DeviceDTO, second: DeviceDTO) {
+    let radioID = UUID()
+    let first = DeviceDTO.testDevice(radioID: radioID, publicKey: Self.identityKey).copy {
+      $0.connectionMethods = Self.bluetooth($0.id)
+      $0.lastConnected = Date(timeIntervalSinceReferenceDate: 2000)
+    }
+    let second = DeviceDTO.testDevice(radioID: radioID, publicKey: Self.identityKey).copy {
+      $0.connectionMethods = Self.bluetooth($0.id)
+      $0.lastConnected = Date(timeIntervalSinceReferenceDate: 1000)
+    }
+    try await store.saveDevice(first)
+    try await store.saveDevice(second)
+    _ = try await store.saveChannel(
+      radioID: radioID, from: ChannelInfo(index: 0, name: "Public", secret: Data(repeating: 0x01, count: 16))
+    )
+    return (first, second)
+  }
+
+  @Test
+  func `A second radio with a known key gets its own row and leaves the other radio's row`() async throws {
+    let store = try await createStore()
+    let radioID = UUID()
+    let wio = DeviceDTO.testDevice(radioID: radioID, publicKey: Self.identityKey, nodeName: "Digitaino").copy {
+      $0.connectionMethods = Self.bluetooth($0.id)
+      $0.lastConnected = Date(timeIntervalSinceReferenceDate: 1000)
+      $0.lastContactSync = 1_700_000_000
+    }
+    try await store.saveDevice(wio)
+    let rakID = UUID()
+    #expect(!PersistenceStore.adoptsAsOwnRow(wio, deviceID: rakID))
+
+    let observation = ConnectionManager.identityTemplate(from: wio).copy { $0.id = rakID }
+    let registered = try await store.registerConnectionDevice(
+      observation, bluetoothPeripheralID: rakID, armsSwapGuard: true, previousDeviceID: wio.id
+    )
+
+    #expect(registered.id == rakID)
+    #expect(registered.radioID == radioID)
+    #expect(registered.lastContactSync == 0)
+    let kept = try #require(try await store.fetchDevice(id: wio.id))
+    #expect(kept.connectionMethods == Self.bluetooth(wio.id))
+    #expect(kept.lastContactSync == 1_700_000_000)
+    #expect(try await store.fetchDevices(radioID: radioID).count == 2)
+    // Until the connection commits, the new row is not the identity's most recent radio.
+    #expect(try await store.fetchDevice(radioID: radioID)?.id == wio.id)
+
+    _ = try await store.selectConnectionDevice(id: rakID, method: .bluetooth(peripheralUUID: rakID, displayName: nil))
+    #expect(try await store.fetchDevice(radioID: radioID)?.id == rakID)
+    #expect(try await store.fetchSwapGuard(radioID: radioID) == .all)
+    #expect(try await store.fetchSwapProfile(radioID: radioID)?.nodeName == "Digitaino")
+    #expect(try await store.fetchDevice(id: wio.id) != nil)
+  }
+
+  @Test
+  func `A ghost found by key is still adopted by the radio that carries its key`() async throws {
+    let store = try await createStore()
+    let historyRadioID = UUID()
+    let ghost = DeviceDTO.testDevice(radioID: historyRadioID, publicKey: Self.identityKey, isActive: false)
+    try await store.saveDevice(ghost.copy { $0.connectionMethods = [] })
+    let newID = UUID()
+    #expect(PersistenceStore.adoptsAsOwnRow(ghost.copy { $0.connectionMethods = [] }, deviceID: newID))
+
+    let observation = ghost.copy { $0.id = newID }
+    let registered = try await store.registerConnectionDevice(
+      observation, bluetoothPeripheralID: newID, adoptingRowID: ghost.id, armsSwapGuard: true
+    )
+
+    #expect(registered.id == newID)
+    #expect(registered.radioID == historyRadioID)
+    #expect(try await store.fetchDevice(id: ghost.id) == nil)
+    #expect(try await store.fetchDevices(radioID: historyRadioID).map(\.id) == [newID])
+  }
+
+  @Test
+  func `Erasing one of two radios removes only its row and keeps the shared history`() async throws {
+    let store = try await createStore()
+    let (first, second) = try await makeTwoRadios(store)
+    let radioID = first.radioID
+
+    _ = try await store.beginRadioErase(first, isFactoryReset: true)
+    try await store.completeRadioErase(radioID: radioID)
+
+    #expect(try await store.fetchDevice(id: first.id) == nil)
+    #expect(try await store.fetchDevices(radioID: radioID).map(\.id) == [second.id])
+    #expect(try await store.fetchChannels(radioID: radioID).count == 1)
+    #expect(try await store.fetchPendingRadioErases().isEmpty)
+  }
+
+  @Test
+  func `A pending erase of one radio does not block its sibling's connect or receive`() async throws {
+    let store = try await createStore()
+    let (first, second) = try await makeTwoRadios(store)
+    let radioID = first.radioID
+
+    _ = try await store.beginRadioErase(first)
+
+    #expect(try await !store.isRadioErasePending(radioID))
+    #expect(try await store.isRadioErasePending(radioID, deviceID: first.id))
+    #expect(try await !store.isRadioErasePending(radioID, deviceID: second.id))
+    let selected = try await store.selectConnectionDevice(id: second.id, method: nil)
+    #expect(selected.id == second.id)
+    #expect(try await store.captureReceiveScope(radioID: radioID, link: ReceiveScope.Lifetime()) != nil)
+    await #expect(throws: (any Error).self) {
+      _ = try await store.selectConnectionDevice(id: first.id, method: nil)
+    }
+    // Another radio's pending erase is never taken over by a second erase.
+    await #expect(throws: (any Error).self) {
+      _ = try await store.beginRadioErase(second)
+    }
+  }
+
+  @Test
+  func `Erasing the identity's last radio still removes the identity and its history`() async throws {
+    let store = try await createStore()
+    let radioID = UUID()
+    let only = DeviceDTO.testDevice(radioID: radioID, publicKey: Self.identityKey).copy {
+      $0.connectionMethods = Self.bluetooth($0.id)
+    }
+    try await store.saveDevice(only)
+    _ = try await store.saveChannel(
+      radioID: radioID, from: ChannelInfo(index: 0, name: "Public", secret: Data(repeating: 0x01, count: 16))
+    )
+
+    _ = try await store.beginRadioErase(only)
+    #expect(try await store.isRadioErasePending(radioID))
+    try await store.completeRadioErase(radioID: radioID)
+
+    #expect(try await store.fetchDevices(radioID: radioID).isEmpty)
+    #expect(try await store.fetchChannels(radioID: radioID).isEmpty)
+  }
+
+  @Test
+  func `A removal aimed at a spare radio matches only that radio`() {
+    let radioID = UUID()
+    let spare = ConnectionDeviceIdentity(deviceID: UUID(), publicKey: Self.identityKey, radioID: radioID, scopedToDevice: true)
+    let connected = ConnectionDeviceIdentity(deviceID: UUID(), publicKey: Self.identityKey, radioID: radioID)
+
+    #expect(!spare.matches(connected))
+    #expect(!connected.matches(spare))
+    #expect(spare.matches(ConnectionDeviceIdentity(deviceID: spare.deviceID)))
+    #expect(ConnectionDeviceIdentity(publicKey: Self.identityKey, radioID: radioID).matches(connected))
+  }
+
+  @Test
+  @MainActor
+  func `Forget of a spare radio is scoped to it and never resolves to its sibling`() async throws {
+    let (cm, _) = try ConnectionManager.createForTesting()
+    let store = cm.persistenceStore
+    let (first, second) = try await makeTwoRadios(store)
+
+    let captured = try await cm.captureRemoval(id: second.id)
+    let context = await cm.scopedToDevice(captured)
+    #expect(context.identity.scopedToDevice)
+    #expect(!context.identity.matches(ConnectionDeviceIdentity(first)))
+
+    // A subject without a row of its own never resolves to a sibling by radio ID or key.
+    #expect(try await cm.resolveRemovalDevice(
+      ConnectionDeviceIdentity(deviceID: UUID(), publicKey: Self.identityKey, radioID: first.radioID), store: store
+    ) == nil)
+    #expect(try await cm.resolveRemovalDevice(context.identity, store: store)?.id == second.id)
+    try await store.deleteDevice(id: second.id)
+    #expect(try await cm.resolveRemovalDevice(context.identity, store: store) == nil)
+
+    #expect(try await store.forgetRadio(id: first.id) == false)
+    #expect(try await store.fetchChannels(radioID: first.radioID).count == 1)
+  }
 }
