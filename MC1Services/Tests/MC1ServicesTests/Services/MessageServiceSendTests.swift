@@ -543,20 +543,6 @@ struct MessageServiceSendTests {
 
     let statusEvents = service.statusEvents()
 
-    // Pre-populate the pending-ack entry as already delivered so the
-    // retry loop short-circuits after sendMessage returns.
-    let ackCode = Data([0xAB, 0xCD, 0xEF, 0x12])
-    await service.setPendingAckForTest(
-      PendingAck(
-        messageID: messageID,
-        contactID: contactID,
-        ackCodes: [ackCode],
-        sentAt: Date(),
-        timeout: 30,
-        isDelivered: true
-      )
-    )
-
     let resendTask = Task {
       try await service.resendDirectMessage(messageID: messageID, to: contact)
     }
@@ -564,6 +550,13 @@ struct MessageServiceSendTests {
     try await waitUntil("resend should send CMD_SEND_TXT_MSG") {
       await transport.sentData.count == 2
     }
+
+    let timestamp = try #require(try await dataStore.fetchMessage(id: messageID)?.timestamp)
+    let senderKey = try #require(await session.currentSelfInfo?.publicKey)
+    let ackCode = AckCodeBuilder.expectedAck(
+      timestamp: timestamp, attempt: 0, text: delivered.text, senderPublicKey: senderKey
+    )
+    await service.handleAcknowledgement(code: ackCode, tripTime: 40)
 
     var msgSent = Data([ResponseCode.messageSent.rawValue])
     msgSent.append(0)
@@ -625,20 +618,6 @@ struct MessageServiceSendTests {
 
     let statusEvents = service.statusEvents()
 
-    // Pre-populate the pending-ack entry as already delivered so the
-    // retry loop short-circuits after sendMessage returns.
-    let ackCode = Data([0xAB, 0xCD, 0xEF, 0x12])
-    await service.setPendingAckForTest(
-      PendingAck(
-        messageID: messageID,
-        contactID: contactID,
-        ackCodes: [ackCode],
-        sentAt: Date(),
-        timeout: 30,
-        isDelivered: true
-      )
-    )
-
     let sendTask = Task {
       try await service.sendPendingDirectMessage(messageID: messageID, to: contact)
     }
@@ -646,6 +625,13 @@ struct MessageServiceSendTests {
     try await waitUntil("send should send CMD_SEND_TXT_MSG") {
       await transport.sentData.count == 2
     }
+
+    let timestamp = try #require(try await dataStore.fetchMessage(id: messageID)?.timestamp)
+    let senderKey = try #require(await session.currentSelfInfo?.publicKey)
+    let ackCode = AckCodeBuilder.expectedAck(
+      timestamp: timestamp, attempt: 0, text: pending.text, senderPublicKey: senderKey
+    )
+    await service.handleAcknowledgement(code: ackCode, tripTime: 40)
 
     var msgSent = Data([ResponseCode.messageSent.rawValue])
     msgSent.append(0)
@@ -667,6 +653,7 @@ struct MessageServiceSendTests {
             ".resent must not broadcast on first send")
 
     let stored = try await dataStore.fetchMessage(id: messageID)
+    #expect(stored?.status == .delivered)
     #expect(stored?.sendCount == 1,
             "successful sendPendingDirectMessage must leave sendCount at 1")
   }
@@ -752,7 +739,7 @@ struct MessageServiceSendTests {
         ackCodes: [ackCode],
         sentAt: Date(),
         timeout: 30,
-        isDelivered: true
+        resolution: .resolved
       )
     )
 
@@ -793,7 +780,7 @@ struct MessageServiceSendTests {
         ackCodes: [ackCode],
         sentAt: Date(),
         timeout: 30,
-        isDelivered: false
+        resolution: .awaitingAck
       )
     )
 
@@ -802,7 +789,7 @@ struct MessageServiceSendTests {
       contactID: contactID,
       radioID: radioID,
       publicKey: publicKey,
-      sentInfo: nil,
+      acknowledgedCode: nil,
       initialPathLength: 0
     )
 
@@ -831,12 +818,13 @@ struct MessageServiceSendTests {
 
     let container = try PersistenceStore.createContainer(inMemory: true)
     let dataStore = PersistenceStore(modelContainer: container)
-    // maxAttempts 2 so the loop writes .retrying once; floodAfter high so no path reset fires.
+    // Two initial attempts exercise retrying without resetting the out path.
     let service = MessageService(
       session: session,
       dataStore: dataStore,
       contactService: nil,
-      config: MessageServiceConfig(maxAttempts: 2, floodAfter: 5, minTimeout: 0)
+      config: MessageServiceConfig(minTimeout: 0),
+      dmSendBudget: { DMSendBudget(directAttempts: 2, floodAttempts: 0) }
     )
 
     let contact = ContactDTO.testContact(id: UUID(), radioID: testDeviceID)
@@ -943,7 +931,7 @@ struct MessageServiceSendTests {
       session: session,
       dataStore: dataStore,
       contactService: nil,
-      config: MessageServiceConfig(maxAttempts: 2, floodAfter: 5)
+      dmSendBudget: { DMSendBudget(directAttempts: 2, floodAttempts: 0) }
     )
 
     let contactID = UUID()
@@ -1014,7 +1002,8 @@ struct MessageServiceSendTests {
       session: session,
       dataStore: dataStore,
       contactService: nil,
-      config: MessageServiceConfig(maxAttempts: 2, floodAfter: 5, ackGiveUpWindow: 1)
+      config: MessageServiceConfig(ackGiveUpWindow: 1),
+      dmSendBudget: { DMSendBudget(directAttempts: 2, floodAttempts: 0) }
     )
 
     let contactID = UUID()
@@ -1062,7 +1051,7 @@ struct MessageServiceSendTests {
 
   @Test
   @MainActor
-  func `the retry loop sends exactly config.maxAttempts times under sustained non-ACK`() async throws {
+  func `the retry loop sends exactly the budget's total attempts under sustained non-ACK`() async throws {
     let transport = MockTransport()
     let session = MeshCoreSession(
       transport: transport,
@@ -1078,13 +1067,14 @@ struct MessageServiceSendTests {
 
     let container = try PersistenceStore.createContainer(inMemory: true)
     let dataStore = PersistenceStore(modelContainer: container)
-    // floodAfter above maxAttempts so no path reset fires; this case isolates the budget count.
-    let maxAttempts = 2
+    // No flood attempts, so no path reset fires; this case isolates the budget count.
+    let budget = DMSendBudget(directAttempts: 2, floodAttempts: 0)
     let service = MessageService(
       session: session,
       dataStore: dataStore,
       contactService: nil,
-      config: MessageServiceConfig(maxAttempts: maxAttempts, floodAfter: maxAttempts + 3, minTimeout: 0)
+      config: MessageServiceConfig(minTimeout: 0),
+      dmSendBudget: { budget }
     )
 
     let contact = ContactDTO.testContact(id: UUID(), radioID: testDeviceID)
@@ -1121,13 +1111,13 @@ struct MessageServiceSendTests {
 
     let sends = await transport.sentData
     let directSendCount = sends.count(where: { $0.first == CommandCode.sendMessage.rawValue })
-    #expect(directSendCount == maxAttempts,
-            "the retry loop must send exactly config.maxAttempts times, not maxAttempts+1")
+    #expect(directSendCount == budget.totalAttempts,
+            "the retry loop must send exactly totalAttempts times, not totalAttempts+1")
   }
 
   @Test
   @MainActor
-  func `the retry loop escalates from direct to flood via resetPath after exactly config.floodAfter direct failures`() async throws {
+  func `the retry loop escalates from direct to flood via resetPath after exactly directAttempts failures`() async throws {
     let transport = MockTransport()
     let session = MeshCoreSession(
       transport: transport,
@@ -1143,14 +1133,14 @@ struct MessageServiceSendTests {
 
     let container = try PersistenceStore.createContainer(inMemory: true)
     let dataStore = PersistenceStore(modelContainer: container)
-    // floodAfter < maxAttempts so the loop must switch to flood mid-run.
-    let maxAttempts = 3
-    let floodAfter = 2
+    // One flood attempt after the direct ones, so the loop must switch to flood mid-run.
+    let budget = DMSendBudget(directAttempts: 2, floodAttempts: 1)
     let service = MessageService(
       session: session,
       dataStore: dataStore,
       contactService: nil,
-      config: MessageServiceConfig(maxAttempts: maxAttempts, floodAfter: floodAfter, minTimeout: 0)
+      config: MessageServiceConfig(minTimeout: 0),
+      dmSendBudget: { budget }
     )
 
     let contact = ContactDTO.testContact(id: UUID(), radioID: testDeviceID)
@@ -1190,23 +1180,23 @@ struct MessageServiceSendTests {
     let sends = await transport.sentData
     let resetIndex = sends.firstIndex { $0.first == CommandCode.resetPath.rawValue }
     #expect(resetIndex != nil,
-            "the loop must escalate to flood via resetPath after config.floodAfter direct failures")
+            "the loop must escalate to flood via resetPath after directAttempts direct failures")
 
     if let resetIndex {
       let directSendsBeforeReset = sends[..<resetIndex]
         .count(where: { $0.first == CommandCode.sendMessage.rawValue })
 
-      #expect(directSendsBeforeReset == floodAfter,
-              "resetPath must fire after exactly config.floodAfter direct sends")
+      #expect(directSendsBeforeReset == budget.directAttempts,
+              "resetPath must fire after exactly directAttempts direct sends")
     }
   }
 
-  /// The default config gives a DM four sends with one timestamp: attempts 0-2 on the stored
-  /// path, then resetPath and attempt 3 by flood. Attempt 4 would repeat attempt 0's ACK code,
-  /// which a repeater that already relayed it drops.
+  /// The default budget gives a DM eight sends with one timestamp: attempts 0-3 on the stored
+  /// path, then resetPath and attempts 4-7 by flood. Attempts 4-7 reuse the ACK codes of 0-3
+  /// (see `AckCodeBuilder` for the known limit with v1.15 repeaters).
   @Test
   @MainActor
-  func `the default config sends attempts 0-2 on the stored path, then resets the path and sends attempt 3 by flood`() async throws {
+  func `the default budget sends attempts 0-3 on the stored path, then resets the path and sends attempts 4-7 by flood`() async throws {
     let transport = MockTransport()
     let session = MeshCoreSession(
       transport: transport,
@@ -1226,7 +1216,8 @@ struct MessageServiceSendTests {
       session: session,
       dataStore: dataStore,
       contactService: nil,
-      config: MessageServiceConfig()
+      config: MessageServiceConfig(),
+      dmSendBudget: { .default }
     )
 
     let contact = ContactDTO.testContact(id: UUID(), radioID: testDeviceID)
@@ -1258,17 +1249,17 @@ struct MessageServiceSendTests {
     }
     defer { responder.cancel() }
 
-    let sent = try await service.sendMessageWithRetry(text: "four sends", to: contact)
+    let sent = try await service.sendMessageWithRetry(text: "eight sends", to: contact)
     #expect(sent.status == .sent)
 
     let sends = await transport.sentData
     // sendMessage packet: [code, type, attempt, timestamp LE32, key prefix, text]
     let messageSends = sends.filter { $0.first == CommandCode.sendMessage.rawValue }.map { [UInt8]($0) }
-    #expect(messageSends.map { $0[2] } == [0, 1, 2, 3])
+    #expect(messageSends.map { $0[2] } == [0, 1, 2, 3, 4, 5, 6, 7])
     #expect(Set(messageSends.map { Array($0[3..<7]) }).count == 1, "every attempt must reuse the message's timestamp")
     #expect(sends.count(where: { $0.first == CommandCode.resetPath.rawValue }) == 1)
     let resetIndex = try #require(sends.firstIndex { $0.first == CommandCode.resetPath.rawValue })
-    #expect(sends[..<resetIndex].count(where: { $0.first == CommandCode.sendMessage.rawValue }) == 3,
-            "resetPath must come after the third send and before the fourth")
+    #expect(sends[..<resetIndex].count(where: { $0.first == CommandCode.sendMessage.rawValue }) == 4,
+            "resetPath must come after the fourth send and before the fifth")
   }
 }

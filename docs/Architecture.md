@@ -159,8 +159,6 @@ The foundation of the project, responsible for low-level communication with Mesh
 - **Auto-Reconnection**: Both transports automatically reconnect when connection is lost, with configurable retry logic and backoff strategies.
 - **LPP Telemetry**: Includes a full implementation of the Cayenne Low Power Payload (LPP) for efficient sensor data transmission.
 
-See: [MeshCore API Reference](api/MeshCore.md) | [BLE Transport Guide](guides/BLE_Transport.md)
-
 ---
 
 ## 2. MC1Services (Business Logic Layer)
@@ -296,7 +294,7 @@ A modern SwiftUI application that provides a user-friendly experience for mesh m
 - **iMessage-Style Chat**: Rich messaging interface with delivery status, timestamps, and metadata (SNR, path length).
 - **MapKit Integration**: Displays contact locations on a map with real-time updates and type-based markers.
 
-See: [MeshCore One API Reference](api/MeshCore One.md) | [User Guide](User_Guide.md)
+See: [User Guide](User_Guide.md)
 
 ---
 
@@ -517,14 +515,8 @@ MeshCore One includes several diagnostic tools built on a shared infrastructure 
 - [User Guide](User_Guide.md)
 
 ### API References
-- [MeshCore API](api/MeshCore.md)
 - [MC1Services API](api/MC1Services.md)
-- [MeshCore One API](api/MeshCore One.md)
 
 ### Topic Guides
-- [BLE Transport](guides/BLE_Transport.md)
-- [WiFi Transport](guides/WiFi_Transport.md)
 - [Messaging](guides/Messaging.md)
 - [Sync](guides/Sync.md)
-- [Diagnostics](guides/Diagnostics.md)
-- [iPad Layout](guides/iPad_Layout.md)

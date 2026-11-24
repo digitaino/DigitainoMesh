@@ -1,55 +1,29 @@
-import Foundation
 @testable import MC1
 @testable import MC1Services
 import Testing
 
 @Suite("Message status text")
 struct MessageStatusTextTests {
-  private func makeItem(
+  private func makeFooter(
     status: MessageStatus,
     isChannelMessage: Bool,
-    heardRepeats: Int = 0,
-    sendCount: Int = 1,
     retryAttempt: Int = 0,
     maxRetryAttempts: Int = 0
-  ) -> MessageItem {
-    MessageItem(
-      id: UUID(),
-      envelope: MessageEnvelope(
-        messageID: UUID(),
-        isOutgoing: true,
-        senderName: "me",
-        senderResolution: NodeNameResolution(displayName: "me", matchKind: .exact),
-        status: status,
-        date: Date(timeIntervalSince1970: 1_700_000_000),
-        hasFailed: status == .failed,
-        containsSelfMention: false,
-        mentionSeen: false,
-        incomingAvatar: nil
-      ),
-      content: [],
-      footer: MessageFooter(
-        showHop: false,
-        hopCount: 0,
-        formattedPath: nil,
-        regionToShow: nil,
-        sendTimeToShow: nil,
-        sendTimeWasCorrected: false,
-        showStatusRow: true,
-        status: status,
-        isChannelMessage: isChannelMessage,
-        heardRepeats: heardRepeats,
-        retryAttempt: retryAttempt,
-        maxRetryAttempts: maxRetryAttempts,
-        sendCount: sendCount
-      ),
-      grouping: GroupingFlags(
-        showTimestamp: false,
-        showDirectionGap: false,
-        showSenderName: false,
-        showNewMessagesDivider: false
-      ),
-      shouldRequestPreviewFetch: false
+  ) -> MessageFooter {
+    MessageFooter(
+      showHop: false,
+      hopCount: 0,
+      formattedPath: nil,
+      regionToShow: nil,
+      sendTimeToShow: nil,
+      sendTimeWasCorrected: false,
+      showStatusRow: true,
+      status: status,
+      isChannelMessage: isChannelMessage,
+      heardRepeats: 0,
+      retryAttempt: retryAttempt,
+      maxRetryAttempts: maxRetryAttempts,
+      sendCount: 1
     )
   }
 
@@ -57,46 +31,66 @@ struct MessageStatusTextTests {
   /// in-progress so the user never sees a settled "Sent" that later fails.
   @Test
   func `DM .sent renders as Sending`() {
-    let text = MessageStatusText.text(for: makeItem(status: .sent, isChannelMessage: false).footer)
+    let text = MessageStatusText.text(for: makeFooter(status: .sent, isChannelMessage: false))
     #expect(text == L10n.Chats.Chats.Message.Status.sending)
   }
 
   /// A channel broadcast has no ACK, so `.sent` is its terminal success state.
   @Test
   func `Channel .sent renders as Sent`() {
-    let text = MessageStatusText.text(for: makeItem(status: .sent, isChannelMessage: true).footer)
+    let text = MessageStatusText.text(for: makeFooter(status: .sent, isChannelMessage: true))
     #expect(text == L10n.Chats.Chats.Message.Status.sent)
   }
 
   @Test
   func `DM .delivered still renders as Delivered`() {
-    let text = MessageStatusText.text(for: makeItem(status: .delivered, isChannelMessage: false).footer)
+    let text = MessageStatusText.text(for: makeFooter(status: .delivered, isChannelMessage: false))
     #expect(text == L10n.Chats.Chats.Message.Status.delivered)
   }
 
   @Test
   func `DM .failed still renders as Failed`() {
-    let text = MessageStatusText.text(for: makeItem(status: .failed, isChannelMessage: false).footer)
+    let text = MessageStatusText.text(for: makeFooter(status: .failed, isChannelMessage: false))
     #expect(text == L10n.Chats.Chats.Message.Status.failed)
   }
 
+  @Test(arguments: [
+    (0, 7, 2, 8),
+    (6, 7, 8, 8),
+    (1, 2, 3, 3),
+  ])
+  func `DM retry progress includes the initial send in both counts`(
+    retryAttempt: Int,
+    maxRetryAttempts: Int,
+    attempt: Int,
+    total: Int
+  ) {
+    let footer = makeFooter(
+      status: .retrying,
+      isChannelMessage: false,
+      retryAttempt: retryAttempt,
+      maxRetryAttempts: maxRetryAttempts
+    )
+    #expect(MessageStatusText.text(for: footer) == L10n.Chats.Chats.Message.Status.retryingAttempt(attempt, total))
+  }
+
   /// The retry loop stores the retry index (0 for the second send) and the retry budget,
-  /// `maxAttempts - 1`. The count reads as sends out of the config's total: the second send
-  /// reads 2/4, the last (flood) send 4/4.
+  /// `totalAttempts - 1`. The count reads as sends out of the default budget's total: the
+  /// second send reads 2/8, the last (flood) send 8/8.
   @Test
-  func `DM .retrying counts the send in flight out of the config's total sends`() {
-    let maxAttempts = MessageServiceConfig.default.maxAttempts
-    #expect(maxAttempts == 4)
+  func `DM .retrying counts the send in flight out of the default budget's total sends`() {
+    let totalAttempts = DMSendBudget.default.totalAttempts
+    #expect(totalAttempts == 8)
     func text(retryAttempt: Int, maxRetryAttempts: Int) -> String {
-      MessageStatusText.text(for: makeItem(
+      MessageStatusText.text(for: makeFooter(
         status: .retrying, isChannelMessage: false,
         retryAttempt: retryAttempt, maxRetryAttempts: maxRetryAttempts
-      ).footer)
+      ))
     }
-    #expect(text(retryAttempt: 0, maxRetryAttempts: maxAttempts - 1)
-      == L10n.Chats.Chats.Message.Status.retryingAttempt(2, maxAttempts))
-    #expect(text(retryAttempt: maxAttempts - 2, maxRetryAttempts: maxAttempts - 1)
-      == L10n.Chats.Chats.Message.Status.retryingAttempt(maxAttempts, maxAttempts))
+    #expect(text(retryAttempt: 0, maxRetryAttempts: totalAttempts - 1)
+      == L10n.Chats.Chats.Message.Status.retryingAttempt(2, totalAttempts))
+    #expect(text(retryAttempt: totalAttempts - 2, maxRetryAttempts: totalAttempts - 1)
+      == L10n.Chats.Chats.Message.Status.retryingAttempt(totalAttempts, totalAttempts))
     #expect(text(retryAttempt: 0, maxRetryAttempts: 0) == L10n.Chats.Chats.Message.Status.retrying)
   }
 }

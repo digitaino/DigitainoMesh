@@ -365,8 +365,8 @@ private struct BubbleStatusFooter: View {
       case .retrying:
         HStack(spacing: 3) {
           spinner
-          if let progress = footer.sendProgress {
-            Text("\(progress.send)/\(progress.of)")
+          if let progress = footer.sendAttemptProgress {
+            Text("\(progress.attempt)/\(progress.total)")
               .font(.caption2)
           }
         }
@@ -449,8 +449,8 @@ enum MessageStatusText {
     case .failed:
       return L10n.Chats.Chats.Message.Status.failed
     case .retrying:
-      if let progress = footer.sendProgress {
-        return L10n.Chats.Chats.Message.Status.retryingAttempt(progress.send, progress.of)
+      if let progress = footer.sendAttemptProgress {
+        return L10n.Chats.Chats.Message.Status.retryingAttempt(progress.attempt, progress.total)
       }
       return L10n.Chats.Chats.Message.Status.retrying
     }
@@ -458,12 +458,9 @@ enum MessageStatusText {
 }
 
 private extension MessageFooter {
-  /// The send in flight and the total, both counted as sends: "2/4" while the second of four
-  /// goes out, "4/4" for the last (flood) one. The retry loop stores the retry index (0 for
-  /// the second send) and the retry budget, `MessageServiceConfig.maxAttempts - 1`, so the
-  /// total follows the config. Nil for a row saved without a budget.
-  var sendProgress: (send: Int, of: Int)? {
+  var sendAttemptProgress: (attempt: Int, total: Int)? {
     guard maxRetryAttempts > 0 else { return nil }
+    // The retry index starts at zero and the retry budget excludes the initial send.
     return (retryAttempt + 2, maxRetryAttempts + 1)
   }
 }

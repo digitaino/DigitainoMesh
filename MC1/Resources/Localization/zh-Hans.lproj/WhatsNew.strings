@@ -56,7 +56,7 @@
 "whatsNew.credit.body" = "DigitainoMesh 是 MeshCore One 的非官方分支，通过 TestFlight 与一小群人分享。应用本身是 Avi0n 的作品；此分支只加了一些实验功能。如果它对你有用，请支持 Avi0n。";
 
 /* What's New - link to MeshCore One's own release notes for this version */
-"whatsNew.credit.upstreamNotes" = "MeshCore One 1.6 新功能";
+"whatsNew.credit.upstreamNotes" = "MeshCore One 1.7 新功能";
 
 /* What's New - button opening Avi0n's GitHub Sponsors page */
 "whatsNew.supportButton" = "支持 Avi0n";
@@ -105,3 +105,22 @@
 "whatsNew.favoritesEveryRadio.title" = "每台电台上的收藏";
 /* What's New v1.6 (fork) - favorites written to every radio carrying the node, description */
 "whatsNew.favoritesEveryRadio.description" = "如果你的节点运行在多台电台上，应用会把你的收藏写入你连接的电台，让每台电台保持相同的收藏。";
+/* What's New v1.7 - Direct messages, title */
+"whatsNew.directMessages.title" = "私信";
+/* What's New v1.7 - Direct messages, description */
+"whatsNew.directMessages.description" = "私信现在会先沿路径尝试 4 次，然后泛洪 4 次。可在高级设置中更改路径尝试、泛洪尝试和回退到泛洪。";
+
+/* What's New v1.7 - Blocks and filters, title */
+"whatsNew.blocksAndFilters.title" = "屏蔽与过滤";
+/* What's New v1.7 - Blocks and filters, description */
+"whatsNew.blocksAndFilters.description" = "可隐藏与一个词或一段文字匹配的消息。规则的查找范围可以是消息、发送者名称或两者，并可选择将规则用于哪些聊天。隐藏消息可在设置 > 屏蔽与过滤下的“最近隐藏的消息”中查看。";
+
+/* What's New v1.7 - Node telemetry, title */
+"whatsNew.nodeTelemetry.title" = "节点遥测数据";
+/* What's New v1.7 - Node telemetry, description */
+"whatsNew.nodeTelemetry.description" = "设置 > 设备信息会显示当前所连接节点的遥测数据。";
+
+/* What's New v1.7 - Live Activity, title */
+"whatsNew.liveActivity.title" = "实时活动";
+/* What's New v1.7 - Live Activity, description */
+"whatsNew.liveActivity.description" = "未读消息更醒目，每分钟的数据包速率更容易理解。";

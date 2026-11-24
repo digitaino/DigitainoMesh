@@ -136,8 +136,14 @@ struct SharedIdentityFavoriteTests {
       lastConnected: Date(timeIntervalSince1970: 1_000)
     ))
 
-    try await store.updateDeviceNodeName(radioID: radioID, name: "New name")
-    try await store.updateDeviceTxPower(radioID: radioID, txPower: 7)
+    // Settings writes go to the connected radio's row by its id (upstream 1.7).
+    let written = try await store.updateConnectionDevice(id: radioID) { current in
+      current.copy {
+        $0.nodeName = "New name"
+        $0.txPower = 7
+      }
+    }
+    #expect(written)
 
     let rows = try await store.fetchDevices(radioID: radioID)
     let connected = try #require(rows.first { $0.id == radioID })

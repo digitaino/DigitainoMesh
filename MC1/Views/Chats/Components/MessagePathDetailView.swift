@@ -265,8 +265,8 @@ struct MessagePathDetailView: View {
   /// it is a wire format other clients parse back into a shared-route card
   /// (`SharedRouteParser`), so the shape must stay stable across locales.
   private var routeInfoText: String? {
-    let hopCount = displayedMessage.hopCount
-    guard hopCount > 0 else { return nil }
+    // Nil when the path byte is reserved: no hop count to state.
+    guard let hopCount = displayedMessage.hopCount, hopCount > 0 else { return nil }
     let pathHex = displayedMessage.pathNodesHex.joined(separator: ",")
     guard !pathHex.isEmpty else { return nil }
     let hopWord = hopCount == 1 ? "hop" : "hops"
@@ -282,7 +282,7 @@ struct MessagePathDetailView: View {
     let formatted = Measurement(value: distance, unit: UnitLength.meters)
       .formatted(.measurement(width: .abbreviated, usage: .road))
     let locatedHops = locatedNodes.count(where: { $0.point.pinStyle == .repeaterHop })
-    return locatedHops < displayedMessage.hopCount ? "≥ \(formatted)" : formatted
+    return locatedHops < (displayedMessage.hopCount ?? 0) ? "≥ \(formatted)" : formatted
   }
 
   /// Reference for disambiguating hop hashes in the list — the same rule the

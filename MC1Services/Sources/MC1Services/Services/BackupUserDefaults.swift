@@ -27,6 +27,9 @@ public struct BackupUserDefaults: Codable, Sendable, Equatable {
   public var showIncomingHeardCount: Bool?
   public var showIncomingSendTime: Bool?
   public var autoDeleteStaleNodesDays: Int?
+  public var dmDirectAttempts: Int?
+  public var dmFloodAttempts: Int?
+  public var remoteFloodFallback: Bool?
   public var discoverySortOrder: String?
   public var nodesSortOrder: String?
   public var tracePathViewMode: String?
@@ -63,19 +66,17 @@ public struct BackupUserDefaults: Codable, Sendable, Equatable {
 
   public init() {}
 
-  // MARK: - UserDefaults keys for special-cased (non-Bool/String) properties
+  // MARK: - UserDefaults keys for special-cased properties
 
-  private static let autoDeleteStaleNodesDaysKey = AppStorageKey.autoDeleteStaleNodesDays.rawValue
   private static let frequentEmojisKey = AppStorageKey.frequentEmojis.rawValue
   private static let recentReactionEmojisKey = AppStorageKey.recentReactionEmojis.rawValue
   /// Public so `AppState` (and tests) can persist via the same key without a duplicated literal.
   public static let regionSelectionKey = "userPrefs.region"
 
   /// Property names handled by hand-rolled branches in `snapshot`/`restore`
-  /// rather than the bool/string mappings. Internal solely for testability —
+  /// rather than the scalar mappings. Internal solely for testability —
   /// do not consume from non-test code.
   static let specialCasedPropertyNames: Set<String> = [
-    "autoDeleteStaleNodesDays",
     "frequentEmojis",
     "recentEmojis",
     "regionSelection"
@@ -137,6 +138,7 @@ public struct BackupUserDefaults: Codable, Sendable, Equatable {
     (\.signalMapperCardExpanded, AppStorageKey.signalMapperCardExpanded.rawValue),
     (\.useDefaultTranslationApp, AppStorageKey.useDefaultTranslationApp.rawValue),
     (\.translationOffersEnabled, AppStorageKey.translationOffersEnabled.rawValue),
+    (\.remoteFloodFallback, AppStorageKey.remoteFloodFallback.rawValue),
     (\.notifyContactMessages, AppStorageKey.notifyContactMessages.rawValue),
     (\.notifyChannelMessages, AppStorageKey.notifyChannelMessages.rawValue),
     (\.notifyRoomMessages, AppStorageKey.notifyRoomMessages.rawValue),
@@ -178,6 +180,18 @@ public struct BackupUserDefaults: Codable, Sendable, Equatable {
     Set(stringMappings.map(\.1))
   }
 
+  /// See `boolMappings` for the `nonisolated(unsafe)` rationale.
+  private nonisolated(unsafe) static let intMappings: [(WritableKeyPath<BackupUserDefaults, Int?>, String)] = [
+    (\.autoDeleteStaleNodesDays, AppStorageKey.autoDeleteStaleNodesDays.rawValue),
+    (\.dmDirectAttempts, AppStorageKey.dmDirectAttempts.rawValue),
+    (\.dmFloodAttempts, AppStorageKey.dmFloodAttempts.rawValue),
+  ]
+
+  /// Key strings used by `intMappings`. Internal solely for testability.
+  static var intMappingKeys: Set<String> {
+    Set(intMappings.map(\.1))
+  }
+
   // MARK: - Read from UserDefaults
 
   /// Creates a snapshot by reading all known keys from UserDefaults.
@@ -197,8 +211,10 @@ public struct BackupUserDefaults: Codable, Sendable, Equatable {
       }
     }
 
-    if defaults.object(forKey: Self.autoDeleteStaleNodesDaysKey) != nil {
-      result.autoDeleteStaleNodesDays = defaults.integer(forKey: Self.autoDeleteStaleNodesDaysKey)
+    for (keyPath, key) in intMappings {
+      if defaults.object(forKey: key) != nil {
+        result[keyPath: keyPath] = defaults.integer(forKey: key)
+      }
     }
 
     // frequentEmojis is stored as JSON-encoded [String] via @AppStorage Data binding
@@ -238,17 +254,16 @@ public struct BackupUserDefaults: Codable, Sendable, Equatable {
       }
     }
 
-    if let value = autoDeleteStaleNodesDays,
-       defaults.object(forKey: Self.autoDeleteStaleNodesDaysKey) == nil {
-      defaults.set(value, forKey: Self.autoDeleteStaleNodesDaysKey)
-      setKeys.append(Self.autoDeleteStaleNodesDaysKey)
+    for (keyPath, key) in Self.intMappings {
+      if let value = self[keyPath: keyPath], defaults.object(forKey: key) == nil {
+        defaults.set(value, forKey: key)
+        setKeys.append(key)
+      }
     }
 
-    if let emojis = frequentEmojis, defaults.object(forKey: Self.frequentEmojisKey) == nil {
-      if let data = try? JSONEncoder().encode(emojis) {
-        defaults.set(data, forKey: Self.frequentEmojisKey)
-        setKeys.append(Self.frequentEmojisKey)
-      }
+    if let emojis = frequentEmojis, defaults.object(forKey: Self.frequentEmojisKey) == nil, let data = try? JSONEncoder().encode(emojis) {
+      defaults.set(data, forKey: Self.frequentEmojisKey)
+      setKeys.append(Self.frequentEmojisKey)
     }
 
     if let emojis = recentEmojis, defaults.object(forKey: Self.recentReactionEmojisKey) == nil {

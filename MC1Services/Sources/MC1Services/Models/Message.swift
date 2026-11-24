@@ -27,10 +27,14 @@ public final class Message {
     [\.radioID, \.channelIndex, \.createdAt],
     [\.radioID, \.channelIndex, \.sortDate],
     [\.radioID, \.channelIndex, \.timestamp],
+    [\.radioID, \.channelIndex, \.senderTimestamp],
     [\.contactID, \.createdAt],
     [\.contactID, \.sortDate],
     [\.contactID, \.containsSelfMention, \.mentionSeen],
     [\.radioID, \.channelIndex, \.containsSelfMention, \.mentionSeen],
+    [\.radioID, \.senderKeyPrefix, \.senderTimestamp],
+    [\.radioID, \.senderKeyPrefix, \.timestamp],
+    [\.reactionTargetMessageID],
     [\.deduplicationKey]
   )
 
@@ -173,6 +177,10 @@ public final class Message {
   /// and this carries no behaviour.
   public var txPowerDbm: Int8?
 
+  /// Target and local sender retained for outgoing reaction recovery.
+  public var reactionTargetMessageID: UUID?
+  public var reactionSenderName: String?
+
   /// Route type from RxLog correlation (-1 = unknown/uncorrelated)
   public var routeTypeRawValue: Int = -1
 
@@ -248,6 +256,8 @@ public final class Message {
     timestampCorrected: Bool = false,
     senderTimestamp: UInt32? = nil,
     reactionSummary: String? = nil,
+    reactionTargetMessageID: UUID? = nil,
+    reactionSenderName: String? = nil,
     routeTypeRawValue: Int = -1,
     regionScope: String? = nil,
     regionScopeMatches: [String] = []
@@ -288,6 +298,8 @@ public final class Message {
     self.timestampCorrected = timestampCorrected
     self.senderTimestamp = senderTimestamp
     self.reactionSummary = reactionSummary
+    self.reactionTargetMessageID = reactionTargetMessageID
+    self.reactionSenderName = reactionSenderName
     self.routeTypeRawValue = routeTypeRawValue
     self.regionScope = regionScope
     self.regionScopeMatches = regionScopeMatches
@@ -335,6 +347,8 @@ public final class Message {
       timestampCorrected: dto.timestampCorrected,
       senderTimestamp: dto.senderTimestamp,
       reactionSummary: dto.reactionSummary,
+      reactionTargetMessageID: dto.reactionTargetMessageID,
+      reactionSenderName: dto.reactionSenderName,
       routeTypeRawValue: dto.routeType.map { Int($0.rawValue) } ?? -1,
       regionScope: dto.regionScope,
       regionScopeMatches: dto.regionScopeMatches
@@ -430,6 +444,8 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable, Codable {
   public var timestampCorrected: Bool
   public var senderTimestamp: UInt32?
   public var reactionSummary: String?
+  public var reactionTargetMessageID: UUID?
+  public var reactionSenderName: String?
   public var routeType: RouteType?
   public var regionScope: String?
   /// Sorted multi-match set. Empty when the backup key is missing.
@@ -456,7 +472,8 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable, Codable {
          roundTripTime, heardRepeats, sendCount, retryAttempt, maxRetryAttempts,
          deduplicationKey, linkPreviewURL, linkPreviewTitle, linkPreviewImageData,
          linkPreviewIconData, linkPreviewFetched, containsSelfMention, mentionSeen,
-         failureSeen, timestampCorrected, senderTimestamp, reactionSummary, routeType,
+         failureSeen, timestampCorrected, senderTimestamp, reactionSummary,
+         reactionTargetMessageID, reactionSenderName, routeType,
          regionScope, regionScopeMatches, userLatitude, userLongitude,
          packetContentHash, packetObserverCount, packetObserversCheckedAt
   }
@@ -500,6 +517,8 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable, Codable {
     timestampCorrected = try container.decode(Bool.self, forKey: .timestampCorrected)
     senderTimestamp = try container.decodeIfPresent(UInt32.self, forKey: .senderTimestamp)
     reactionSummary = try container.decodeIfPresent(String.self, forKey: .reactionSummary)
+    reactionTargetMessageID = try container.decodeIfPresent(UUID.self, forKey: .reactionTargetMessageID)
+    reactionSenderName = try container.decodeIfPresent(String.self, forKey: .reactionSenderName)
     routeType = try container.decodeIfPresent(RouteType.self, forKey: .routeType)
     regionScope = try container.decodeIfPresent(String.self, forKey: .regionScope)
     // Missing key → []; do not invent matches from regionScope.
@@ -557,6 +576,8 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable, Codable {
     timestampCorrected = message.timestampCorrected
     senderTimestamp = message.senderTimestamp
     reactionSummary = message.reactionSummary
+    reactionTargetMessageID = message.reactionTargetMessageID
+    reactionSenderName = message.reactionSenderName
     routeType = UInt8(exactly: message.routeTypeRawValue)
       .flatMap(RouteType.init(rawValue:))
     regionScope = message.regionScope
@@ -606,6 +627,8 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable, Codable {
     timestampCorrected: Bool = false,
     senderTimestamp: UInt32? = nil,
     reactionSummary: String? = nil,
+    reactionTargetMessageID: UUID? = nil,
+    reactionSenderName: String? = nil,
     routeType: RouteType? = nil,
     regionScope: String? = nil,
     regionScopeMatches: [String] = [],
@@ -651,6 +674,8 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable, Codable {
     self.timestampCorrected = timestampCorrected
     self.senderTimestamp = senderTimestamp
     self.reactionSummary = reactionSummary
+    self.reactionTargetMessageID = reactionTargetMessageID
+    self.reactionSenderName = reactionSenderName
     self.routeType = routeType
     self.regionScope = regionScope
     self.regionScopeMatches = regionScopeMatches
@@ -708,9 +733,9 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable, Codable {
     Date(timeIntervalSince1970: TimeInterval(senderTimestamp ?? timestamp))
   }
 
-  /// Hop count decoded from pathLength (lower 6 bits)
-  public var hopCount: Int {
-    decodePathLen(pathLength)?.hopCount ?? Int(pathLength & 63)
+  /// Hop count from a path-length byte `decodePathLen` accepts. A rejected byte, including 0xFF, has none.
+  public var hopCount: Int? {
+    decodePathLen(pathLength)?.hopCount
   }
 
   /// Whether this message was flood-routed (broadcast).
@@ -817,8 +842,7 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable, Codable {
   }
 
   private static func isSameSender(_ a: MessageDTO, _ b: MessageDTO) -> Bool {
-    guard a.direction == b.direction else { return false }
-    guard a.isChannelMessage == b.isChannelMessage else { return false }
+    guard a.direction == b.direction, a.isChannelMessage == b.isChannelMessage else { return false }
 
     // For channel messages, compare sender node name (nil = unknown, treat as different).
     // senderNodeName isn't unique — two users with the same name may be falsely clustered.

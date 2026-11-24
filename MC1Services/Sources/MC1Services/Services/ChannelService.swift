@@ -578,6 +578,16 @@ public actor ChannelService {
     )
   }
 
+  /// Sleeps on `MeshCoreSession.clock` when the session has one, so a test clock can elapse the retry.
+  private func pauseBeforeChannelRetry(milliseconds: Int) async throws {
+    let delay = Duration.milliseconds(milliseconds)
+    if let meshSession = session as? MeshCoreSession {
+      try await meshSession.clock.sleep(for: delay)
+    } else {
+      try await Task.sleep(for: delay)
+    }
+  }
+
   /// Fetches a single channel from the device with retry logic for transient BLE failures.
   /// - Parameter index: The channel index
   /// - Returns: Channel info if found, nil if not configured
@@ -629,7 +639,7 @@ public actor ChannelService {
             let jitterMs = Int.random(in: -100...100)
             let delayMs = baseDelayMs + jitterMs
             logger.info("Channel \(index) fetch timeout, retry \(attempt)/\(maxAttempts) in \(delayMs)ms")
-            try await Task.sleep(for: .milliseconds(delayMs))
+            try await pauseBeforeChannelRetry(milliseconds: delayMs)
             continue
           }
         }
@@ -916,7 +926,7 @@ public actor ChannelService {
 
   /// Acquires the channel operation gate, runs `operation` on this task, and releases on every exit.
   /// A cancelled waiter may sit until it acquires, then leaves without a command or a store write.
-  private func withChannelOperation<T: Sendable>(
+  func withChannelOperation<T: Sendable>(
     _ operation: () async throws -> T
   ) async throws -> T {
     await channelOperationSerializer.acquire()
@@ -1024,7 +1034,7 @@ public actor ChannelService {
           errorType: .transportError,
           description: transportError.localizedDescription
         )
-      case .notConnected, .connectionFailed, .deviceNotFound, .serviceNotFound, .characteristicNotFound:
+      case .notConnected, .connectionFailed, .deviceNotFound, .serviceNotFound, .characteristicNotFound, .cancelledBeforeSubmission:
         return ChannelSyncError(
           index: index,
           errorType: .transportError,

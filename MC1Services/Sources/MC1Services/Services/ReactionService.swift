@@ -20,6 +20,7 @@ public struct PendingDMReaction: Sendable {
   public let rawText: String
   public let radioID: UUID
   public let receivedAt: Date
+  public let directMessage: (scope: ReceiveScope, contact: ContactDTO)?
 }
 
 /// Result of persisting a reaction
@@ -202,7 +203,8 @@ public actor ReactionService {
   /// Logs errors instead of silently discarding them.
   public func persistReactionAndUpdateSummary(
     _ reaction: ReactionDTO,
-    using dataStore: any PersistenceStoreProtocol
+    using dataStore: any PersistenceStoreProtocol,
+    directMessage: (scope: ReceiveScope, contact: ContactDTO)? = nil
   ) async -> ReactionPersistResult? {
     #if DEBUG
       if let hold = reactionAdmitHoldForTesting {
@@ -210,9 +212,12 @@ public actor ReactionService {
       }
     #endif
     do {
-      guard let admission = try await dataStore.admitReaction(reaction), admission.inserted else {
-        return nil
+      let admission: ReactionAdmission? = if let (scope, contact) = directMessage {
+        try await dataStore.admitDirectMessageReaction(reaction, contact: contact, scope: scope)
+      } else {
+        try await dataStore.admitReaction(reaction)
       }
+      guard let admission, admission.inserted else { return nil }
       return ReactionPersistResult(messageID: admission.messageID, summary: admission.summary)
     } catch {
       logger.error("Failed to save reaction for message \(reaction.messageID): \(error.localizedDescription)")
@@ -263,8 +268,10 @@ public actor ReactionService {
     contactID: UUID,
     senderName: String,
     rawText: String,
-    radioID: UUID
+    radioID: UUID,
+    directMessage: (scope: ReceiveScope, contact: ContactDTO)? = nil
   ) {
+    guard directMessage?.scope.isCurrent != false else { return }
     let key = PendingDMReactionKey(contactID: contactID, messageHash: parsed.messageHash)
     let pending = PendingDMReaction(
       parsed: parsed,
@@ -272,7 +279,8 @@ public actor ReactionService {
       senderName: senderName,
       rawText: rawText,
       radioID: radioID,
-      receivedAt: Date()
+      receivedAt: Date(),
+      directMessage: directMessage
     )
 
     if pendingDMReactions[key] != nil {

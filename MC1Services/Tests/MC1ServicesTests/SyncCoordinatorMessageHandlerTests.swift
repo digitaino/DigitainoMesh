@@ -13,7 +13,7 @@ struct SyncCoordinatorMessageHandlerTests {
   private func createTestDataStore(radioID: UUID) async throws -> PersistenceStore {
     let container = try PersistenceStore.createContainer(inMemory: true)
     let store = PersistenceStore(modelContainer: container)
-    let device = DeviceDTO.testDevice(id: radioID, nodeName: "TestNode")
+    let device = DeviceDTO.testDevice(id: radioID, radioID: radioID, nodeName: "TestNode")
     try await store.saveDevice(device)
     return store
   }
@@ -279,9 +279,15 @@ struct SyncCoordinatorMessageHandlerTests {
       startEventMonitoring: { _, _ in },
       exportPrivateKey: { Data() }
     )
+    let radioID = UUID()
+    try await store.saveDevice(DeviceDTO.testDevice(id: radioID, radioID: radioID, nodeName: "TestNode"))
     let coordinator = SyncCoordinator()
-    await coordinator.wireMessageHandlers(dependencies: deps, radioID: UUID())
-    let handler = try #require(await polling.capturedContactMessageHandler)
+    await coordinator.wireMessageHandlers(dependencies: deps, radioID: radioID)
+    let wired = try #require(await polling.capturedContactMessageHandler)
+    let scope = try #require(await store.captureReceiveScope(radioID: radioID, link: .init()))
+    let handler: @Sendable (ContactMessage, ContactDTO?, DeliveryContext) async -> Void = { message, contact, context in
+      await wired(message, contact, context, scope, nil)
+    }
     return (handler, container, coordinator)
   }
 
@@ -412,7 +418,9 @@ struct SyncCoordinatorMessageHandlerTests {
       text: "hello mesh",
       snr: nil
     )
-    await mockPolling.capturedContactMessageHandler?(message, contact, .live)
+    let scope = try #require(await dataStore.captureReceiveScope(radioID: radioID, link: .init()))
+    let persisted = try #require(await dataStore.fetchContact(id: contact.id))
+    await mockPolling.capturedContactMessageHandler?(message, persisted, .live, scope, nil)
 
     let updated = try #require(
       await dataStore.fetchContact(radioID: radioID, publicKey: publicKey)
@@ -449,11 +457,241 @@ struct SyncCoordinatorMessageHandlerTests {
       text: "get cad",
       snr: nil
     )
-    await mockPolling.capturedContactMessageHandler?(message, contact, .live)
+    let scope = try #require(await dataStore.captureReceiveScope(radioID: radioID, link: .init()))
+    let persisted = try #require(await dataStore.fetchContact(id: contact.id))
+    await mockPolling.capturedContactMessageHandler?(message, persisted, .live, scope, nil)
 
     let saved = try await dataStore.fetchMessages(contactID: contact.id)
     #expect(saved.count == 1)
     #expect(saved[0].textType == .cliCommand)
+  }
+
+  @Test
+  func `DM rule drop and replay leave conversation effects untouched`() async throws {
+    let radioID = UUID()
+    let store = try await createTestDataStore(radioID: radioID)
+    let key = Data(repeating: 0xB6, count: 32)
+    let inputContact = ContactDTO.testContact(radioID: radioID, publicKey: key, name: "Peer", lastHeardTimestamp: 0)
+    try await store.saveContact(inputContact)
+    let scope = try #require(await store.captureReceiveScope(radioID: radioID, link: .init()))
+    let contact = try #require(await store.fetchContact(id: inputContact.id))
+    let polling = MockMessagePollingService()
+    let (_, services) = try await createTestServices()
+    let coordinator = SyncCoordinator()
+    await coordinator.wireMessageHandlers(
+      dependencies: services.syncDependencies.with(dataStore: store, messagePollingService: polling),
+      radioID: radioID
+    )
+    let deliver = try #require(await polling.capturedContactMessageHandler)
+    var preference = TextRulesPreference()
+    preference.setSelection(.all, for: .directMessage)
+    preference.append(.init(phrase: "ALERT", lookIn: .message, match: .contains))
+
+    let arrival = makeDirectArrival("  alert!  ", key: key, timestamp: 50)
+    await deliver(arrival, contact, .live, scope, preference)
+    await deliver(arrival, contact, .live, scope, nil)
+
+    let entries = try await store.recentlyBlockedMessages()
+    #expect(entries.count == 1)
+    #expect(entries.first?.body == arrival.text)
+    #expect(entries.first?.identity.senderTimestamp == 50)
+    #expect(entries.first?.contactID == contact.id)
+    #expect(try await store.fetchMessages(contactID: contact.id).isEmpty)
+    let current = try #require(await store.fetchContact(id: contact.id))
+    #expect(current.unreadCount == 0)
+    #expect(current.lastMessageDate == nil)
+    #expect(current.lastHeardTimestamp == contact.lastHeardTimestamp)
+    #expect(await coordinator.conversationsVersion == 0)
+
+    await deliver(makeDirectArrival("safe", key: key, timestamp: 51), contact, .live, scope, preference)
+    #expect(try await store.fetchMessages(contactID: contact.id).map(\.text) == ["safe"])
+    #expect(try await store.fetchContact(id: contact.id)?.unreadCount == 1)
+    #expect(await coordinator.conversationsVersion == 1)
+  }
+
+  @Test
+  func `DM short key collision uses current policy and exact saved replay`() async throws {
+    let radioID = UUID()
+    let store = try await createTestDataStore(radioID: radioID)
+    let key = Data(repeating: 0xB7, count: 32)
+    let inputContact = ContactDTO.testContact(radioID: radioID, publicKey: key)
+    try await store.saveContact(inputContact)
+    let scope = try #require(await store.captureReceiveScope(radioID: radioID, link: .init()))
+    let contact = try #require(await store.fetchContact(id: inputContact.id))
+    let polling = MockMessagePollingService()
+    let (_, services) = try await createTestServices()
+    let coordinator = SyncCoordinator()
+    await coordinator.wireMessageHandlers(
+      dependencies: services.syncDependencies.with(dataStore: store, messagePollingService: polling),
+      radioID: radioID
+    )
+    let deliver = try #require(await polling.capturedContactMessageHandler)
+    let first = makeDirectArrival("collision fixture 58777", key: key, timestamp: 50)
+    let second = makeDirectArrival("collision fixture 123682", key: key, timestamp: 50)
+    let firstKey = DeduplicationKey.contentBased(
+      contactID: contact.id, channelIndex: nil, senderNodeName: nil, timestamp: 50, content: first.text
+    )
+    let secondKey = DeduplicationKey.contentBased(
+      contactID: contact.id, channelIndex: nil, senderNodeName: nil, timestamp: 50, content: second.text
+    )
+    try #require(firstKey == secondKey)
+
+    await deliver(first, contact, .live, scope, nil)
+    var preference = TextRulesPreference()
+    preference.setSelection(.all, for: .directMessage)
+    preference.append(.init(phrase: "collision", lookIn: .message, match: .contains))
+    await deliver(second, contact, .live, scope, preference)
+    await deliver(first, contact, .live, scope, preference)
+    #expect(try await store.fetchMessages(contactID: contact.id).map(\.text) == [first.text])
+    #expect(try await store.recentlyBlockedMessages().map(\.body) == [second.text])
+  }
+
+  @Test
+  func `removed Contact authority cannot write after same ID is restored`() async throws {
+    let radioID = UUID()
+    let store = try await createTestDataStore(radioID: radioID)
+    let key = Data(repeating: 0xB8, count: 32)
+    let inputContact = ContactDTO.testContact(radioID: radioID, publicKey: key)
+    try await store.saveContact(inputContact)
+    let scope = try #require(await store.captureReceiveScope(radioID: radioID, link: .init()))
+    let captured = try #require(await store.fetchContact(id: inputContact.id))
+    let polling = MockMessagePollingService()
+    let (_, services) = try await createTestServices()
+    let coordinator = SyncCoordinator()
+    await coordinator.wireMessageHandlers(
+      dependencies: services.syncDependencies.with(dataStore: store, messagePollingService: polling),
+      radioID: radioID
+    )
+    let deliver = try #require(await polling.capturedContactMessageHandler)
+    try await store.deleteContact(id: captured.id)
+    try await store.saveContact(inputContact)
+    let restored = try #require(await store.fetchContact(id: captured.id))
+    try #require(restored.textRulesID != captured.textRulesID)
+    var preference = TextRulesPreference()
+    preference.setSelection(.all, for: .directMessage)
+    preference.append(.init(phrase: "alert", lookIn: .message, match: .contains))
+
+    await deliver(makeDirectArrival("alert", key: key, timestamp: 50), captured, .live, scope, preference)
+    await deliver(makeDirectArrival("safe", key: key, timestamp: 51), captured, .live, scope, preference)
+    #expect(try await store.fetchMessages(contactID: captured.id).isEmpty)
+    #expect(try await store.recentlyBlockedMessages().isEmpty)
+    #expect(await coordinator.conversationsVersion == 0)
+  }
+
+  @Test
+  func `DM sender rule lets reactions through while existing Contact block keeps ordinary history`() async throws {
+    let radioID = UUID()
+    let store = try await createTestDataStore(radioID: radioID)
+    let key = Data(repeating: 0xB9, count: 32)
+    let inputContact = ContactDTO.testContact(radioID: radioID, publicKey: key, name: "Peer")
+    try await store.saveContact(inputContact)
+    let scope = try #require(await store.captureReceiveScope(radioID: radioID, link: .init()))
+    let contact = try #require(await store.fetchContact(id: inputContact.id))
+    let polling = MockMessagePollingService()
+    let (_, services) = try await createTestServices()
+    let coordinator = SyncCoordinator()
+    await coordinator.wireMessageHandlers(
+      dependencies: services.syncDependencies.with(dataStore: store, messagePollingService: polling),
+      radioID: radioID
+    )
+    let deliver = try #require(await polling.capturedContactMessageHandler)
+    let target = MessageDTO.testDirectMessage(radioID: radioID, contactID: contact.id, text: "Ready")
+    try await store.saveMessage(target)
+    let reaction = services.reactionService.buildDMReactionText(
+      emoji: "👍", targetText: target.text, targetTimestamp: target.timestamp
+    )
+    let arrival = makeDirectArrival(reaction, key: key, timestamp: target.timestamp)
+    var preference = TextRulesPreference()
+    preference.setSelection(.all, for: .directMessage)
+    preference.append(.init(phrase: "Peer", lookIn: .sender, match: .wholeField))
+    // Text Rules do not hide reactions (fork decision, differs from upstream): the sender
+    // rule matches "Peer", yet the reaction lands and nothing enters Recently Blocked.
+    await deliver(arrival, contact, .live, scope, preference)
+    #expect(try await store.fetchReactions(for: target.id).map(\.emoji) == ["👍"])
+    #expect(try await store.recentlyBlockedMessages().isEmpty)
+
+    // The same rule still blocks an ordinary message from that sender.
+    await deliver(makeDirectArrival("ordinary text", key: key, timestamp: 55), contact, .live, scope, preference)
+    #expect(try await store.fetchMessages(contactID: contact.id).contains { $0.text == "ordinary text" } == false)
+    #expect(try await store.recentlyBlockedMessages().map(\.body) == ["ordinary text"])
+
+    _ = try await store.updateContactLocalPreferences(
+      contactID: contact.id, nickname: .unchanged, isBlocked: true, isFavorite: nil, clearRemoteCLI: false
+    )
+    await deliver(makeDirectArrival("ordinary body", key: key, timestamp: 60), contact, .live, scope, preference)
+    #expect(try await store.recentlyBlockedMessages().map(\.body) == ["ordinary text"])
+    #expect(try await store.fetchMessages(contactID: contact.id).contains { $0.text == "ordinary body" })
+    #expect(try await store.fetchContact(id: contact.id)?.unreadCount == 0)
+  }
+
+  @Test
+  func `channel sender rule lets reactions through and still blocks ordinary messages`() async throws {
+    let radioID = UUID()
+    let store = try await createTestDataStore(radioID: radioID)
+    let channelID = try await store.saveChannel(
+      radioID: radioID,
+      from: .init(index: 1, name: "Filtered", secret: Data(repeating: 0x11, count: ProtocolLimits.channelSecretSize))
+    )
+    let channel = try #require(try await store.fetchChannel(id: channelID))
+    let conversationID = try #require(channel.textRulesID)
+    try await store.setTextRulesOverride(
+      .on, kind: .privateChannel, key: .init(radioID: radioID, conversationID: conversationID)
+    )
+    let scope = try #require(await store.captureReceiveScope(radioID: radioID, link: .init()))
+    let polling = MockMessagePollingService()
+    let (_, services) = try await createTestServices()
+    let coordinator = SyncCoordinator()
+    await coordinator.wireMessageHandlers(
+      dependencies: services.syncDependencies.with(dataStore: store, messagePollingService: polling),
+      radioID: radioID
+    )
+    let deliver = try #require(await polling.capturedChannelMessageHandler)
+
+    let target = MessageDTO.testChannelMessage(
+      radioID: radioID,
+      channelIndex: channel.index,
+      text: "Ready",
+      direction: .incoming,
+      senderNodeName: "Alice"
+    )
+    try await store.saveMessage(target)
+    let reaction = services.reactionService.buildReactionText(
+      emoji: "👍", targetSender: "Alice", targetText: target.text, targetTimestamp: target.timestamp
+    )
+    #expect(ReactionParser.isReactionText(reaction, isDM: false))
+    var preference = TextRulesPreference()
+    preference.append(.init(phrase: "Peer", lookIn: .sender, match: .wholeField))
+
+    // Text Rules do not hide reactions (fork decision, differs from upstream).
+    let reactionArrival = ChannelMessage(
+      channelIndex: channel.index, pathLength: 0, textType: 0,
+      senderTimestamp: Date(), text: "Peer: \(reaction)", snr: nil
+    )
+    await deliver(reactionArrival, channel, .live, scope, preference, .now)
+    #expect(try await store.fetchReactions(for: target.id).map(\.emoji) == ["👍"])
+    #expect(try await store.recentlyBlockedMessages().isEmpty)
+
+    // The same rule still blocks an ordinary message from that sender.
+    let ordinaryArrival = ChannelMessage(
+      channelIndex: channel.index, pathLength: 0, textType: 0,
+      senderTimestamp: Date(), text: "Peer: ordinary text", snr: nil
+    )
+    await deliver(ordinaryArrival, channel, .live, scope, preference, .now)
+    let texts = try await store.fetchMessages(radioID: radioID, channelIndex: channel.index).map(\.text)
+    #expect(!texts.contains("ordinary text"))
+    #expect(try await store.recentlyBlockedMessages().map(\.body) == ["ordinary text"])
+  }
+
+  private func makeDirectArrival(_ text: String, key: Data, timestamp: UInt32) -> ContactMessage {
+    ContactMessage(
+      senderPublicKeyPrefix: Data(key.prefix(6)),
+      pathLength: 0,
+      textType: 0,
+      senderTimestamp: Date(timeIntervalSince1970: TimeInterval(timestamp)),
+      signature: nil,
+      text: text,
+      snr: nil
+    )
   }
 
   @Test
@@ -528,7 +766,8 @@ struct SyncCoordinatorMessageHandlerTests {
       text: "ChannelPeer: hello channel",
       snr: nil
     )
-    await mockPolling.capturedChannelMessageHandler?(channelMessage, nil, .live)
+    let scope = try #require(await dataStore.captureReceiveScope(radioID: radioID, link: .init()))
+    await mockPolling.capturedChannelMessageHandler?(channelMessage, nil, .live, scope, nil, .now)
 
     let updated = try #require(
       await dataStore.fetchContact(radioID: radioID, publicKey: publicKey)
@@ -537,6 +776,61 @@ struct SyncCoordinatorMessageHandlerTests {
   }
 
   // MARK: - Live receive region propagation
+
+  @Test(.timeLimit(.minutes(1)))
+  func `channel arrival cannot cross a retired receive scope`() async throws {
+    let radioID = UUID()
+    let store = try await createTestDataStore(radioID: radioID)
+    let radio = try #require(await store.fetchDevice(radioID: radioID))
+    let lifetime = ReceiveScope.Lifetime()
+    let mesh = MockMeshCoreSession()
+    let poller = MessagePollingService(
+      session: mesh, dataStore: store, receiveLifetime: lifetime
+    )
+    let mockPolling = MockMessagePollingService()
+    let (_, services) = try await createTestServices()
+    let dependencies = services.syncDependencies.with(dataStore: store, messagePollingService: mockPolling)
+    let coordinator = SyncCoordinator()
+    await coordinator.wireMessageHandlers(dependencies: dependencies, radioID: radioID)
+    let handler = try #require(await mockPolling.capturedChannelMessageHandler)
+
+    let (captured, capture) = AsyncStream<ReceiveScope>.makeStream()
+    let (released, release) = AsyncStream<Void>.makeStream()
+    await poller.setChannelMessageHandler { message, channel, context, scope, preference, arrivedAt in
+      if message.text == "Peer: before erase" {
+        capture.yield(scope)
+        var iterator = released.makeAsyncIterator()
+        _ = await iterator.next()
+      }
+      await handler(message, channel, context, scope, preference, arrivedAt)
+    }
+    await poller.startMessageEventMonitoring(radioID: radioID)
+    try await waitUntil("poller did not subscribe") { await mesh.eventSubscriptionCount == 1 }
+    let stamp = Date()
+    await mesh.yieldEvent(.channelMessageReceived(ChannelMessage(
+      channelIndex: 0, pathLength: 0, textType: 0, senderTimestamp: stamp, text: "Peer: before erase", snr: nil
+    )))
+    var captureIterator = captured.makeAsyncIterator()
+    let oldScope = try #require(await captureIterator.next())
+
+    _ = try await store.beginRadioErase(radio)
+    try await store.cancelRadioErase(radioID: radioID)
+    #expect(!oldScope.isCurrent)
+    let lateWrite = MessageDTO.testChannelMessage(radioID: radioID, channelIndex: 0, text: "Before erase")
+    #expect(try await store.saveReceivedChannelMessage(lateWrite, scope: oldScope, conversationID: nil) == false)
+
+    release.finish()
+    await mesh.yieldEvent(.channelMessageReceived(ChannelMessage(
+      channelIndex: 0, pathLength: 0, textType: 0, senderTimestamp: stamp, text: "Peer: after cancellation", snr: nil
+    )))
+    try await waitUntil("fresh channel arrival was not published") {
+      await coordinator.conversationsVersion == 1
+    }
+    #expect(try await store.fetchMessages(radioID: radioID, channelIndex: 0).map(\.text) == ["after cancellation"])
+
+    await poller.stopMessageEventMonitoring()
+    await mesh.finishEventStreams()
+  }
 
   @Test
   func `live channel receive with undecryptable RX does not copy regionScope onto Message`() async throws {
@@ -587,7 +881,8 @@ struct SyncCoordinatorMessageHandlerTests {
       text: "NodeAlpha: region scope test",
       snr: nil
     )
-    await mockPolling.capturedChannelMessageHandler?(channelMessage, nil, .live)
+    let scope = try #require(await dataStore.captureReceiveScope(radioID: radioID, link: .init()))
+    await mockPolling.capturedChannelMessageHandler?(channelMessage, nil, .live, scope, nil, .now)
 
     let saved = try await dataStore.fetchMessages(radioID: radioID, channelIndex: channelIndex)
     let message = try #require(saved.first)
@@ -634,6 +929,7 @@ struct SyncCoordinatorMessageHandlerTests {
     let events = coordinator.dataEventBroadcaster.subscribe()
     await coordinator.wireMessageHandlers(dependencies: dependencies, radioID: radioID)
 
+    let scope = try #require(await dataStore.captureReceiveScope(radioID: radioID, link: .init()))
     await mockPolling.capturedChannelMessageHandler?(
       ChannelMessage(
         channelIndex: channelIndex,
@@ -644,7 +940,7 @@ struct SyncCoordinatorMessageHandlerTests {
         snr: nil
       ),
       nil,
-      .live
+      .live, scope, nil, .now
     )
 
     let saved = try await dataStore.fetchMessages(radioID: radioID, channelIndex: channelIndex)
@@ -657,7 +953,7 @@ struct SyncCoordinatorMessageHandlerTests {
     var broadcast: MessageDTO?
     for _ in 0..<8 {
       guard let event = await iterator.next() else { break }
-      if case let .channelMessageReceived(message, _) = event {
+      if case let .channelMessageReceived(message, _, _) = event {
         broadcast = message
         break
       }
@@ -713,6 +1009,7 @@ struct SyncCoordinatorMessageHandlerTests {
     let coordinator = SyncCoordinator()
     await coordinator.wireMessageHandlers(dependencies: dependencies, radioID: radioID)
 
+    let scope = try #require(await dataStore.captureReceiveScope(radioID: radioID, link: .init()))
     await mockPolling.capturedChannelMessageHandler?(
       ChannelMessage(
         channelIndex: channelIndex,
@@ -723,7 +1020,7 @@ struct SyncCoordinatorMessageHandlerTests {
         snr: nil
       ),
       channel,
-      .live
+      .live, scope, nil, .now
     )
 
     let saved = try await dataStore.fetchMessages(radioID: radioID, channelIndex: channelIndex)
@@ -781,6 +1078,7 @@ struct SyncCoordinatorMessageHandlerTests {
     let coordinator = SyncCoordinator()
     await coordinator.wireMessageHandlers(dependencies: dependencies, radioID: radioID)
 
+    let scope = try #require(await dataStore.captureReceiveScope(radioID: radioID, link: .init()))
     await mockPolling.capturedChannelMessageHandler?(
       ChannelMessage(
         channelIndex: channelIndex,
@@ -791,7 +1089,7 @@ struct SyncCoordinatorMessageHandlerTests {
         snr: nil
       ),
       nil,
-      .live
+      .live, scope, nil, .now
     )
 
     #expect(try await dataStore.fetchMessages(radioID: radioID, channelIndex: channelIndex).count == 1)

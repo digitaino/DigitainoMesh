@@ -867,7 +867,7 @@ private final class ChatNativeSplitHarnessModel {
   var consumedAnchorCount = 0
   var displayEpoch = 0
   var timelineItems: [MessageItem] = []
-  var firstSnapshotDecision: ChatInitialScrollPolicy.FirstSnapshotDecision = .present(target: nil)
+  var firstSnapshotDecision: ChatOpenAnchorState.FirstSnapshotDecision = .present(target: nil)
   var selectedMessageForActions: MessageDTO?
   var imageViewerData: ImageViewerData?
 
@@ -896,7 +896,8 @@ private final class ChatNativeSplitHarnessModel {
       columnVisibility: columnVisibility,
       tabBarPlacement: placement,
       preferredColumn: preferredCompactColumn,
-      hasSelection: selectedRoute != nil
+      hasSelection: selectedRoute != nil,
+      sectionIsSelected: true
     )
   }
 

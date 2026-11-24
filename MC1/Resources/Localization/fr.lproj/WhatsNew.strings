@@ -56,7 +56,7 @@
 "whatsNew.credit.body" = "DigitainoMesh est un fork non officiel de MeshCore One, partagé via TestFlight avec un petit groupe. L'app est le travail d'Avi0n ; ce fork ajoute seulement quelques expériences. Si elle vous est utile, soutenez Avi0n.";
 
 /* What's New - link to MeshCore One's own release notes for this version */
-"whatsNew.credit.upstreamNotes" = "Nouveautés de MeshCore One 1.6";
+"whatsNew.credit.upstreamNotes" = "Nouveautés de MeshCore One 1.7";
 
 /* What's New - button opening Avi0n's GitHub Sponsors page */
 "whatsNew.supportButton" = "Soutenir Avi0n";
@@ -105,3 +105,22 @@
 "whatsNew.favoritesEveryRadio.title" = "Favoris sur chaque radio";
 /* What's New v1.6 (fork) - favorites written to every radio carrying the node, description */
 "whatsNew.favoritesEveryRadio.description" = "Si votre nœud fonctionne sur plusieurs radios, l'app écrit vos favoris sur la radio que vous connectez, pour que toutes aient les mêmes.";
+/* What's New v1.7 - Direct messages, title */
+"whatsNew.directMessages.title" = "Messages directs";
+/* What's New v1.7 - Direct messages, description */
+"whatsNew.directMessages.description" = "Les messages directs tentent maintenant le chemin 4 fois, puis Flood 4 fois. Modifiez Tentatives sur le chemin, Tentatives Flood et Repli vers Flood dans Réglages avancés.";
+
+/* What's New v1.7 - Blocks and filters, title */
+"whatsNew.blocksAndFilters.title" = "Blocage et filtres";
+/* What's New v1.7 - Blocks and filters, description */
+"whatsNew.blocksAndFilters.description" = "Masquez les messages qui correspondent à un mot ou un texte. Une règle peut chercher dans le Message, l'Expéditeur ou les deux, et vous choisissez les discussions auxquelles elle s'applique. Les messages masqués sont visibles dans Masqués récemment, sous Réglages > Blocage et filtres.";
+
+/* What's New v1.7 - Node telemetry, title */
+"whatsNew.nodeTelemetry.title" = "Télémétrie du nœud";
+/* What's New v1.7 - Node telemetry, description */
+"whatsNew.nodeTelemetry.description" = "Réglages > Infos de l'appareil affiche la télémétrie du nœud auquel vous êtes connecté.";
+
+/* What's New v1.7 - Live Activity, title */
+"whatsNew.liveActivity.title" = "Activité en direct";
+/* What's New v1.7 - Live Activity, description */
+"whatsNew.liveActivity.description" = "Les messages non lus sont plus en évidence et le taux de paquets par minute est plus facile à comprendre.";

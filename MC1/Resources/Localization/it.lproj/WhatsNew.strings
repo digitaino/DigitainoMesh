@@ -56,7 +56,7 @@
 "whatsNew.credit.body" = "DigitainoMesh è un fork non ufficiale di MeshCore One, condiviso su TestFlight con un piccolo gruppo. L'app è opera di Avi0n; questo fork aggiunge solo qualche esperimento. Se ti è utile, sostieni Avi0n.";
 
 /* What's New - link to MeshCore One's own release notes for this version */
-"whatsNew.credit.upstreamNotes" = "Novità di MeshCore One 1.6";
+"whatsNew.credit.upstreamNotes" = "Novità di MeshCore One 1.7";
 
 /* What's New - button opening Avi0n's GitHub Sponsors page */
 "whatsNew.supportButton" = "Sostieni Avi0n";
@@ -105,3 +105,22 @@
 "whatsNew.favoritesEveryRadio.title" = "Preferiti su ogni radio";
 /* What's New v1.6 (fork) - favorites written to every radio carrying the node, description */
 "whatsNew.favoritesEveryRadio.description" = "Se il tuo nodo funziona su più radio, l'app scrive i tuoi preferiti sulla radio che colleghi, così tutte hanno gli stessi.";
+/* What's New v1.7 - Direct messages, title */
+"whatsNew.directMessages.title" = "Messaggi diretti";
+/* What's New v1.7 - Direct messages, description */
+"whatsNew.directMessages.description" = "I messaggi diretti ora provano il percorso 4 volte, poi 4 volte con routing flood. Cambia Tentativi sul percorso, Tentativi con routing flood e Ripiego sul routing flood in Impostazioni avanzate.";
+
+/* What's New v1.7 - Blocks and filters, title */
+"whatsNew.blocksAndFilters.title" = "Blocco e filtri";
+/* What's New v1.7 - Blocks and filters, description */
+"whatsNew.blocksAndFilters.description" = "Nascondi i messaggi che corrispondono a una parola o una frase. Una regola può cercare nel messaggio, nel nome del mittente o in entrambi, e scegli a quali chat si applica. I messaggi nascosti si vedono in Bloccati di recente in Impostazioni > Blocco e filtri.";
+
+/* What's New v1.7 - Node telemetry, title */
+"whatsNew.nodeTelemetry.title" = "Telemetria del nodo";
+/* What's New v1.7 - Node telemetry, description */
+"whatsNew.nodeTelemetry.description" = "Impostazioni > Info dispositivo mostra la telemetria del nodo a cui sei connesso.";
+
+/* What's New v1.7 - Live Activity, title */
+"whatsNew.liveActivity.title" = "Attività Live";
+/* What's New v1.7 - Live Activity, description */
+"whatsNew.liveActivity.description" = "I messaggi non letti sono più in evidenza e il tasso di pacchetti al minuto è più facile da capire.";

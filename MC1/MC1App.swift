@@ -35,6 +35,7 @@ struct MC1App: App {
   private let pendingExternalURL = PendingExternalURL()
 
   init() {
+    MacSuspendLockMarker.markIfNeeded()
     OfflineMapNetwork.configure()
     // Register the bridge synchronously here: a background-launched intent
     // runs only `App.init` (no scene, no `.task`), so a deferred
@@ -298,6 +299,7 @@ struct MC1App: App {
   }
 
   private func handleScenePhaseChange(from oldPhase: ScenePhase, to newPhase: ScenePhase) {
+    MacSuspendLockMarker.markIfNeeded()
     // The ride run's auto-end + screen-awake bookkeeping. `.inactive` counts as active
     // here on purpose: Control Centre or a notification banner mid-ride must neither
     // sleep the screen nor tick the background budget (M3.5 review M16).

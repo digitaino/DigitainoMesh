@@ -15,9 +15,12 @@ extension AppState {
   /// After the first sync on a radio: asks a blank one (a node with no history here that no
   /// other saved radio carries) whether to set it up as one of the user's saved nodes
   /// (docs/RADIO_SWAP.md, flow B). Called from `onDeviceSynced`.
-  func evaluateRadioSetUp() async {
-    guard IdentityKeyVault.isEnabled(), let device = connectedDevice, let services else { return }
-    let store = services.dataStore
+  func evaluateRadioSetUp(snapshot: ConnectionSnapshot) async {
+    guard IdentityKeyVault.isEnabled(), connectionManager.isCurrent(snapshot) else { return }
+    // The synced row when it is still this radio's (it carries the radio's own name after
+    // sync); the connect-time one otherwise.
+    let device = connectedDevice.flatMap { $0.id == snapshot.device.id ? $0 : nil } ?? snapshot.device
+    let store = snapshot.services.dataStore
     guard let saved = try? await IdentityKeyVault.shared.savedIdentities(),
           let radioHasHistory = try? await store.hasMessages(radioID: device.radioID),
           let radioRows = try? await store.deviceCount(publicKey: device.publicKey) else { return }
@@ -35,7 +38,7 @@ extension AppState {
       hasRadioRow: { (rowsByKey[$0] ?? 0) > 0 }
     )
     // The connection may have moved on during the reads.
-    guard connectedDevice?.id == device.id, !candidates.isEmpty else { return }
+    guard connectionManager.isCurrent(snapshot), !candidates.isEmpty else { return }
     radioSetUpPrompt.offer(PendingRadioSetUp(
       deviceID: device.id,
       radioName: device.nodeName,

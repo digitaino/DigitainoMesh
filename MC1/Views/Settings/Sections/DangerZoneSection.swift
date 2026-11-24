@@ -35,6 +35,26 @@ struct DangerZoneSection: View {
       } label: {
         Label(L10n.Settings.DangerZone.forgetDevice, systemImage: "trash")
       }
+      .confirmationDialog(
+        L10n.Settings.DangerZone.Dialog.Forget.title,
+        isPresented: $viewModel.showingForgetConfirmation,
+        titleVisibility: .visible
+      ) {
+        Button(L10n.Settings.DangerZone.Dialog.Forget.keepData, role: .destructive) {
+          forgetDevice(deleteData: false)
+        }
+        // History another radio carries is not this radio's to delete.
+        if viewModel.otherRadios.isEmpty {
+          Button(L10n.Settings.DangerZone.Dialog.Forget.deleteAll, role: .destructive) {
+            forgetDevice(deleteData: true)
+          }
+        }
+        Button(L10n.Localizable.Common.cancel, role: .cancel) {}
+      } message: {
+        Text(viewModel.otherRadios.isEmpty
+          ? L10n.Settings.DangerZone.Dialog.Forget.message
+          : L10n.Settings.DangerZone.Dialog.Forget.sharedMessage(viewModel.otherRadiosDescription))
+      }
 
       Button(role: .destructive) {
         viewModel.showingResetAlert = true
@@ -62,26 +82,6 @@ struct DangerZoneSection: View {
         connectionManager: appState.connectionManager
       )
       await viewModel.loadOtherRadios()
-    }
-    .confirmationDialog(
-      L10n.Settings.DangerZone.Dialog.Forget.title,
-      isPresented: $viewModel.showingForgetConfirmation,
-      titleVisibility: .visible
-    ) {
-      Button(L10n.Settings.DangerZone.Dialog.Forget.keepData, role: .destructive) {
-        forgetDevice(deleteData: false)
-      }
-      // History another radio carries is not this radio's to delete.
-      if viewModel.otherRadios.isEmpty {
-        Button(L10n.Settings.DangerZone.Dialog.Forget.deleteAll, role: .destructive) {
-          forgetDevice(deleteData: true)
-        }
-      }
-      Button(L10n.Localizable.Common.cancel, role: .cancel) {}
-    } message: {
-      Text(viewModel.otherRadios.isEmpty
-        ? L10n.Settings.DangerZone.Dialog.Forget.message
-        : L10n.Settings.DangerZone.Dialog.Forget.sharedMessage(viewModel.otherRadiosDescription))
     }
     .alert(L10n.Settings.DangerZone.Alert.Reset.title, isPresented: $viewModel.showingResetAlert) {
       Button(L10n.Localizable.Common.cancel, role: .cancel) {}

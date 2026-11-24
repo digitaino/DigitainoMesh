@@ -104,7 +104,7 @@ struct ContentView: View {
         set: { if $0 == nil { appState.radioSwapPrompt.dismiss() } }
       )) { offer in
         NavigationStack {
-          NodeConfigImportView(source: .records, swapIdentityName: offer.identityName) {
+          NodeConfigRecordsCopyView(swapIdentityName: offer.identityName) {
             appState.radioSwapPrompt.dismiss()
           }
         }

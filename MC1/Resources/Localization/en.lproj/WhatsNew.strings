@@ -56,7 +56,7 @@
 "whatsNew.credit.body" = "DigitainoMesh is an unofficial fork of MeshCore One, shared on TestFlight with a small group. The app is Avi0n's work; this fork only adds a few experiments. If it's useful to you, please support Avi0n.";
 
 /* What's New - link to MeshCore One's own release notes for this version */
-"whatsNew.credit.upstreamNotes" = "What's new in MeshCore One 1.6";
+"whatsNew.credit.upstreamNotes" = "What's new in MeshCore One 1.7";
 
 /* What's New - button opening Avi0n's GitHub Sponsors page */
 "whatsNew.supportButton" = "Support Avi0n";
@@ -105,3 +105,22 @@
 "whatsNew.favoritesEveryRadio.title" = "Favorites on every radio";
 /* What's New v1.6 (fork) - favorites written to every radio carrying the node, description */
 "whatsNew.favoritesEveryRadio.description" = "If your node runs on more than one radio, the app writes your favorites to whichever radio you connect, so they all keep the same ones.";
+/* What's New v1.7 - Direct messages, title */
+"whatsNew.directMessages.title" = "Direct messages";
+/* What's New v1.7 - Direct messages, description */
+"whatsNew.directMessages.description" = "Direct messages now try the path 4 times, then flood 4 times. Change Attempts on Path, Flood Attempts, and Fall Back to Flood in Advanced Settings.";
+
+/* What's New v1.7 - Blocks and filters, title */
+"whatsNew.blocksAndFilters.title" = "Blocks & Filters";
+/* What's New v1.7 - Blocks and filters, description */
+"whatsNew.blocksAndFilters.description" = "Hide messages that match a word or phrase. A rule can look at the message, the sender's name, or both, and you choose which chats it applies to. Hidden messages can be seen in Recently Blocked under Settings > Blocks & Filters.";
+
+/* What's New v1.7 - Node telemetry, title */
+"whatsNew.nodeTelemetry.title" = "Node telemetry";
+/* What's New v1.7 - Node telemetry, description */
+"whatsNew.nodeTelemetry.description" = "Settings > Device Info shows telemetry from the node you are connected to.";
+
+/* What's New v1.7 - Live Activity, title */
+"whatsNew.liveActivity.title" = "Live Activity";
+/* What's New v1.7 - Live Activity, description */
+"whatsNew.liveActivity.description" = "Unread messages are more prominent and the packets per minute rate is easier to understand.";

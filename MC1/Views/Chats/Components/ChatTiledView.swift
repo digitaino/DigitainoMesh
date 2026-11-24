@@ -52,6 +52,10 @@ struct ChatTiledView<Item: Identifiable & Hashable & Sendable, Content: View>: V
   /// unchanged items. Nil measures on each open.
   var sizeCache: TiledSizeCache<Item>?
 
+  var accessibilityHeadingIDs: [UUID]
+
+  @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @Environment(\.appTheme) private var appTheme
   @Environment(\.colorScheme) private var colorScheme
   @Environment(\.colorSchemeContrast) private var colorSchemeContrast
@@ -84,7 +88,8 @@ struct ChatTiledView<Item: Identifiable & Hashable & Sendable, Content: View>: V
     onInitialTargetConsumed: (() -> Void)? = nil,
     onSearchRevealEvent: ((ChatSearchRevealEvent) -> Void)? = nil,
     isSearchBarActive: Bool = false,
-    sizeCache: TiledSizeCache<Item>? = nil
+    sizeCache: TiledSizeCache<Item>? = nil,
+    accessibilityHeadingIDs: [UUID] = []
   ) {
     self.items = items
     self.cellContent = cellContent
@@ -102,6 +107,7 @@ struct ChatTiledView<Item: Identifiable & Hashable & Sendable, Content: View>: V
     self.onSearchRevealEvent = onSearchRevealEvent
     self.isSearchBarActive = isSearchBarActive
     self.sizeCache = sizeCache
+    self.accessibilityHeadingIDs = accessibilityHeadingIDs
     // Defer append-follow while an initial target is positioning so incoming messages cannot displace it.
     _scrollPosition = State(initialValue: TiledScrollPosition(
       autoScrollsToBottomOnAppend: scrollTargetID == nil && initialScrollTargetID == nil,
@@ -116,6 +122,11 @@ struct ChatTiledView<Item: Identifiable & Hashable & Sendable, Content: View>: V
 
     return TiledView(items: items, scrollPosition: $scrollPosition) { item in
       ChatTiledCell(item: item, host: host)
+    }
+    .accessibilityItemIdentifier { ChatScrollConstants.messageAccessibilityIdentifier($0) }
+    .accessibilityHeadings(accessibilityHeadingIDs) {
+      scrollPosition.cancel()
+      scrollPosition.autoScrollsToBottomOnAppend = false
     }
     .sizeCache(sizeCache)
     .prependLoader(onLoadOlder.map { load in
@@ -201,7 +212,11 @@ struct ChatTiledView<Item: Identifiable & Hashable & Sendable, Content: View>: V
   /// and by `userScrollToBottomRequest`. Distinct from `scrollToBottomRequest`,
   /// which must not yank a scrolled-up thread.
   private func scrollUserToBottom() {
-    scrollPosition.scrollTo(edge: .bottom)
+    scrollPosition.scrollTo(
+      edge: .bottom,
+      animated: !reduceMotion,
+      focusBottomAccessibilityElement: voiceOverEnabled
+    )
   }
 
   /// Rebuild on theme or appearance changes because the library does not reconfigure environment-only cell updates.

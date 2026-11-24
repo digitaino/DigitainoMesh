@@ -56,7 +56,7 @@
 "whatsNew.credit.body" = "DigitainoMesh is een onofficiële fork van MeshCore One, via TestFlight gedeeld met een kleine groep. De app is het werk van Avi0n; deze fork voegt alleen wat experimenten toe. Heb je er iets aan, steun dan Avi0n.";
 
 /* What's New - link to MeshCore One's own release notes for this version */
-"whatsNew.credit.upstreamNotes" = "Nieuw in MeshCore One 1.6";
+"whatsNew.credit.upstreamNotes" = "Nieuw in MeshCore One 1.7";
 
 /* What's New - button opening Avi0n's GitHub Sponsors page */
 "whatsNew.supportButton" = "Steun Avi0n";
@@ -105,3 +105,22 @@
 "whatsNew.favoritesEveryRadio.title" = "Favorieten op elke radio";
 /* What's New v1.6 (fork) - favorites written to every radio carrying the node, description */
 "whatsNew.favoritesEveryRadio.description" = "Draait je node op meer dan één radio, dan schrijft de app je favorieten naar de radio waarmee je verbindt, zodat ze allemaal dezelfde hebben.";
+/* What's New v1.7 - Direct messages, title */
+"whatsNew.directMessages.title" = "Directe berichten";
+/* What's New v1.7 - Direct messages, description */
+"whatsNew.directMessages.description" = "Directe berichten proberen het pad nu 4 keer en doen daarna 4 Flood-pogingen. Wijzig Pogingen op het pad, Flood-pogingen en Terugval op flood-routing in Geavanceerde instellingen.";
+
+/* What's New v1.7 - Blocks and filters, title */
+"whatsNew.blocksAndFilters.title" = "Blokkering en filters";
+/* What's New v1.7 - Blocks and filters, description */
+"whatsNew.blocksAndFilters.description" = "Verberg berichten die overeenkomen met een woord of tekst. Een regel kan zoeken in het bericht, de naam van de afzender of beide, en je kiest voor welke chats die geldt. Verborgen berichten kun je zien in Onlangs geblokkeerd onder Instellingen > Blokkering en filters.";
+
+/* What's New v1.7 - Node telemetry, title */
+"whatsNew.nodeTelemetry.title" = "Knooppunttelemetrie";
+/* What's New v1.7 - Node telemetry, description */
+"whatsNew.nodeTelemetry.description" = "Instellingen > Apparaatinfo toont de telemetrie van het knooppunt waarmee je verbonden bent.";
+
+/* What's New v1.7 - Live Activity, title */
+"whatsNew.liveActivity.title" = "Live Activity";
+/* What's New v1.7 - Live Activity, description */
+"whatsNew.liveActivity.description" = "Ongelezen berichten vallen meer op en de snelheid in pakketten per minuut is makkelijker te begrijpen.";

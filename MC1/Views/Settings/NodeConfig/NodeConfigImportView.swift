@@ -2,27 +2,23 @@ import MC1Services
 import SwiftUI
 
 struct NodeConfigImportView: View {
-  @Environment(\.appState) private var appState
-  @State private var viewModel: NodeConfigImportViewModel
+  @Bindable var viewModel: NodeConfigImportViewModel
   /// Set when the screen opens as the offer after a radio takes on an identity: the name the
   /// intro uses for that identity.
-  private let swapIdentityName: String?
+  var swapIdentityName: String?
   /// Closes the screen when it is presented as that offer's sheet.
-  private let onClose: (() -> Void)?
+  var onClose: (() -> Void)?
 
-  init(
-    source: NodeConfigImportViewModel.Source = .file,
-    swapIdentityName: String? = nil,
-    onClose: (() -> Void)? = nil
-  ) {
-    _viewModel = State(initialValue: NodeConfigImportViewModel(source: source))
-    self.swapIdentityName = swapIdentityName
-    self.onClose = onClose
+  private var title: String {
+    if viewModel.recovery != nil { return L10n.Settings.ConfigImport.retryIdentityImport }
+    return viewModel.source == .records ? L10n.Settings.ConfigImport.CopyFromRecords.title : L10n.Settings.ConfigImport.title
   }
 
   var body: some View {
     Group {
-      if let config = viewModel.importedConfig {
+      if let recovery = viewModel.recovery {
+        NodeConfigImportRecoveryList(viewModel: viewModel, recovery: recovery)
+      } else if let config = viewModel.importedConfig {
         ImportPreviewList(viewModel: viewModel, config: config, swapIdentityName: swapIdentityName)
       } else if viewModel.source == .records {
         RecordsLoadingList(viewModel: viewModel)
@@ -30,16 +26,7 @@ struct NodeConfigImportView: View {
         SelectFileList(viewModel: viewModel)
       }
     }
-    .navigationTitle(
-      viewModel.source == .records ? L10n.Settings.ConfigImport.CopyFromRecords.title : L10n.Settings.ConfigImport.title
-    )
-    .task {
-      viewModel.loadFromRecords(
-        nodeConfigService: appState.services?.nodeConfigService,
-        settingsService: appState.services?.settingsService,
-        radioID: appState.connectedDevice?.radioID
-      )
-    }
+    .navigationTitle(title)
     .onDisappear { viewModel.handleDismissal() }
     .toolbar {
       if let onClose {
@@ -62,7 +49,7 @@ struct NodeConfigImportView: View {
       switch result {
       case let .success(url):
         viewModel.parseFile(at: url)
-        Task { await viewModel.loadCurrentDeviceState(settingsService: appState.services?.settingsService) }
+        Task { await viewModel.loadCurrentDeviceState() }
       case let .failure(error):
         viewModel.errorMessage = error.userFacingMessage
       }
@@ -71,17 +58,12 @@ struct NodeConfigImportView: View {
       viewModel.confirmTitle,
       isPresented: $viewModel.showConfirmation
     ) {
-      Button(viewModel.applyButtonLabel) {
-        viewModel.applyConfig(
-          nodeConfigService: appState.services?.nodeConfigService,
-          settingsService: appState.services?.settingsService,
-          radioID: appState.connectedDevice?.radioID,
-          deviceID: appState.connectedDevice?.id
-        )
+      Button(viewModel.applyButtonLabel, role: viewModel.confirmButtonRole) {
+        viewModel.applyConfig()
       }
-      Button(L10n.Localizable.Common.cancel, role: .cancel) {}
+      Button(L10n.Localizable.Common.cancel, role: .cancel) { viewModel.cancelConfirmation() }
     } message: {
-      Text(viewModel.confirmMessage(deviceName: appState.connectedDevice?.nodeName ?? L10n.Settings.ConfigImport.thisDevice))
+      Text(viewModel.confirmMessage)
     }
   }
 }
@@ -119,6 +101,36 @@ private struct SelectFileList: View {
       }
     }
     .themedCanvas(theme)
+  }
+}
+
+// MARK: - Copy From Records
+
+/// "Copy to This Radio": the import screen on a view model of its own, built from this phone's
+/// records of the identity rather than a file (docs/RADIO_SWAP.md R3).
+struct NodeConfigRecordsCopyView: View {
+  @Environment(\.appState) private var appState
+  @State private var viewModel = NodeConfigImportViewModel(source: .records)
+  private let swapIdentityName: String?
+  private let onClose: (() -> Void)?
+
+  init(swapIdentityName: String? = nil, onClose: (() -> Void)? = nil) {
+    self.swapIdentityName = swapIdentityName
+    self.onClose = onClose
+  }
+
+  var body: some View {
+    NodeConfigImportView(viewModel: viewModel, swapIdentityName: swapIdentityName, onClose: onClose)
+      .task {
+        let appState = appState
+        viewModel.configure(
+          nodeConfigService: { appState.services?.nodeConfigService },
+          settingsService: { appState.services?.settingsService },
+          connectedDevice: { appState.connectedDevice },
+          connectionManager: appState.connectionManager
+        )
+        viewModel.loadFromRecords()
+      }
   }
 }
 
@@ -308,7 +320,6 @@ private struct PositionSection: View {
 
 private struct ChannelsSection: View {
   @Environment(\.appTheme) private var theme
-  @Environment(\.appState) private var appState
   @Bindable var viewModel: NodeConfigImportViewModel
   let channels: [MeshCoreNodeConfig.ChannelConfig]
 
@@ -335,10 +346,7 @@ private struct ChannelsSection: View {
         Toggle(L10n.Settings.ConfigImport.makeRoom, isOn: $viewModel.makeRoomForChannels)
           .disabled(!viewModel.sections.channels || viewModel.isLoadingRecords)
           .onChange(of: viewModel.makeRoomForChannels) {
-            viewModel.refreshRecordsPreview(
-              nodeConfigService: appState.services?.nodeConfigService,
-              radioID: appState.connectedDevice?.radioID
-            )
+            viewModel.refreshRecordsPreview()
           }
       }
     } footer: {
@@ -372,7 +380,6 @@ private struct ContactsSection: View {
 
 private struct ApplySection: View {
   @Environment(\.appTheme) private var theme
-  @Environment(\.appState) private var appState
   @Bindable var viewModel: NodeConfigImportViewModel
 
   var body: some View {
@@ -389,10 +396,7 @@ private struct ApplySection: View {
         }
       } else if !viewModel.importComplete {
         Button(viewModel.applyButtonLabel) {
-          viewModel.prepareConfirmation(
-            nodeConfigService: appState.services?.nodeConfigService,
-            radioID: appState.connectedDevice?.radioID
-          )
+          viewModel.prepareConfirmation()
         }
         .disabled(viewModel.isPreparingConfirmation || viewModel.isLoadingRecords)
       }

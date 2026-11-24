@@ -10,6 +10,7 @@ enum SettingsDetail: Hashable {
   case advanced
   case notifications
   case chats
+  case blocksAndFilters
   case appearance
   case maps
   case language
@@ -26,7 +27,8 @@ enum SettingsDetail: Hashable {
       true
     // The observation table outlives every radio — it is 90 days of what *this phone* heard,
     // and a rider who unpairs a radio must still be able to export and delete it.
-    case .notifications, .chats, .appearance, .maps, .language, .backup, .support, .feedback, .signalMapperData:
+    case .notifications, .chats, .blocksAndFilters, .appearance, .maps, .language, .backup, .support, .feedback,
+         .signalMapperData:
       false
     }
   }

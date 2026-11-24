@@ -20,10 +20,9 @@ struct ChatSettingsView: View {
       MapPreviewSettingsSection()
       MessagesSettingsSection()
       PacketScopeSettingsSection()
-      BlockingSection()
+      RadioCleanupSection()
     }
     .themedCanvas(theme)
-    .settingsSubpageDestinations()
     .navigationTitle(L10n.Settings.ChatSettings.title)
     .navigationBarTitleDisplayMode(.inline)
   }

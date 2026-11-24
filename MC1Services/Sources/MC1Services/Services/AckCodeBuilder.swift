@@ -4,38 +4,20 @@ import Foundation
 private let attemptMask: UInt8 = 0x03
 private let ackCodeByteCount = 4
 
-/// Computes the expected ACK CRC for an outgoing direct message, mirroring
-/// firmware `BaseChatMesh::sendMessage`'s derivation:
+/// Matches `BaseChatMesh::composeMsgPacket` so ACKs can be tracked before the send returns.
+/// Hash input is LE32(timestamp), attempt & 0x03, UTF-8 text, then sender public key.
+/// The recipient is excluded, so identical inputs can share an ACK code across contacts.
+/// Attempts 4...7 reuse codes 0...3; firmware appends the full attempt byte after the text
+/// to distinguish packet hashes, while `PendingAck.ackCodes` retains each attempt's code.
 ///
-///     sha256( LE32(timestamp) || byte(attempt & 0x03) || text || pubkey )[0..3]
-///
-/// Used to populate `pendingAcks` *before* the send round-trip so the
-/// persistent ACK listener cannot race ahead of `trackPendingAck`.
-///
-/// # Firmware contract invariants
-///
-/// - **Recipient is not in the hash.** Same sender + same text + same UInt32
-///   timestamp + same `attempt & 0x03` produces an identical ACK code across
-///   *every* contact. Currently low-risk because regular DMs are serialized
-///   through a per-radioID `dmQueue` (`SendQueue<DirectMessageEnvelope>`), so
-///   two regular DMs cannot complete in the same wall-clock second on one
-///   radio; the reaction path bypasses that queue via the single-shot send,
-///   but each reaction carries a per-target message-hash discriminator. Any
-///   future feature that dispatches identical-text sends in parallel (bulk
-///   send, broadcast-to-many, scripted sends, or any pipelined DM path that
-///   removes the serialized `dmQueue` guarantee) must either serialize with
-///   ≥1s spacing or replace `pendingAcks`'s ackCode lookup with a
-///   `[Data: Set<UUID>]` index in `MessageService.handleAcknowledgement`.
-/// - **Attempt index is masked to two bits.** Firmware hashes `attempt & 0x03`,
-///   so attempt 4 would repeat attempt 0's code. Firmware does accept
-///   `attempt > 3` in `composeMsgPacket` (the full attempt byte follows the
-///   hash, so `packet_hash` stays unique), but a v1.15 repeater drops an ACK
-///   code it already relayed: a 5th send's confirmation can be lost even when
-///   the message arrived. `expectedAck` therefore allows `attempt < 4`, and
-///   `MessageServiceConfig` keeps `maxAttempts <= 4` (3 on the stored path +
-///   1 flood). Cross-*message* collision stays mitigated by the per-radioID
-///   `dmQueue` serialization.
+/// Known limit: a v1.15 repeater drops an ACK code it has already relayed. Attempts 4...7
+/// repeat the codes of attempts 0...3, so when a late attempt is the one that arrives, its
+/// ACK can be dropped on the way back through such a repeater and the message shows Failed
+/// although it was delivered. Not re-verified against current firmware.
 enum AckCodeBuilder {
+  /// Exclusive upper bound for a DM attempt byte. Attempts 0..<attemptCount share one timestamp.
+  static let attemptCount: UInt8 = 8
+
   static func expectedAck(
     timestamp: UInt32,
     attempt: UInt8,
@@ -43,8 +25,8 @@ enum AckCodeBuilder {
     senderPublicKey: Data
   ) -> Data {
     precondition(
-      attempt < 4,
-      "MessageServiceConfig caps maxAttempts at 4 (attempt indices 0-3); attempt \(attempt) would repeat attempt \(attempt & attemptMask)'s ACK code"
+      attempt < attemptCount,
+      "DM attempt bytes run 0..<\(attemptCount); attempt \(attempt) exceeds the index range and would over-wrap the & 0x03 ACK mask"
     )
     var input = Data()
     var le = timestamp.littleEndian
