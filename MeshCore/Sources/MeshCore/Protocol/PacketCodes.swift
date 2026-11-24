@@ -151,6 +151,10 @@ public enum SyncID: UInt8, Sendable {
   /// when its own GPS is off or idle. ``CommandCode/setSync`` only: `[version][level]`
   /// with level 0/1/2 (stationary/walking/driving).
   case motionHint = 3
+  /// How many rules per list the firmware keeps from a ``notifPrefs`` blob (radio → app).
+  /// ``CommandCode/getSync`` only: `[version][max_channel_rules][max_contact_rules]`.
+  /// Firmware that predates the slot answers with an empty blob.
+  case notifCaps = 4
 }
 
 /// One entry of a ``CommandCode/listSync`` reply: a sync_id the device knows about

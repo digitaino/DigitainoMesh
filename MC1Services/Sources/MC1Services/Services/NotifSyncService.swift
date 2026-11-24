@@ -53,6 +53,15 @@ public actor NotifSyncService {
   /// the level already in force) must not cost a radio round-trip.
   public private(set) var lastPushedBlob: NotifPrefsBlob?
 
+  /// How many rules per list the connected radio keeps. Starts at
+  /// ``NotifPrefsBlob/Limits/legacy``, which every Digitaino firmware accepts, and is raised by
+  /// ``loadLimitsIfNeeded()`` once the radio reports its own caps.
+  public private(set) var limits: NotifPrefsBlob.Limits = .legacy
+
+  /// Whether ``limits`` came from the radio (or the radio said it predates the caps slot).
+  /// A timeout leaves it `false` so the next call asks again.
+  private var limitsLoaded = false
+
   public init(
     session: any ConfigurationSessionOps,
     dataStore: any ChannelPersisting & ContactPersisting
@@ -81,7 +90,7 @@ public actor NotifSyncService {
     guard force || blob != lastPushedBlob else { return .unchanged }
 
     do {
-      try await session.setSync(.notifPrefs, payload: blob.encode())
+      try await session.setSync(.notifPrefs, payload: blob.encode(limits: limits))
       support = .supported
       lastPushedBlob = blob
       logger.info("Pushed notif prefs: \(blob.channelRules.count) channel, \(blob.contactRules.count) contact rules")
@@ -96,12 +105,14 @@ public actor NotifSyncService {
     }
   }
 
-  /// Pulls the device's stored rules, then pushes the iOS-side set if it differs.
+  /// Learns the radio's rule caps, pulls its stored rules, then pushes the iOS-side set if it
+  /// differs.
   ///
-  /// Runs once per connection. The pull doubles as the support probe and as the seed for
-  /// the redundant-write check, so a reconnect that changed nothing costs one read
-  /// instead of a read and a write.
+  /// Runs once per connection. The caps read doubles as the support probe, and the rules pull
+  /// seeds the redundant-write check, so a reconnect that changed nothing costs two reads
+  /// and no write.
   public func reconcileOnConnect(radioID: UUID) async {
+    await loadLimitsIfNeeded()
     guard support != .unsupported else { return }
 
     do {
@@ -116,6 +127,27 @@ public actor NotifSyncService {
       try await syncNow(radioID: radioID)
     } catch {
       logger.warning("Notif prefs reconcile failed: \(error.localizedDescription)")
+    }
+  }
+
+  // MARK: - Limits
+
+  /// Reads the radio's rule caps from the ``SyncID/notifCaps`` slot, once per connection.
+  ///
+  /// Firmware that predates the slot answers with an empty blob, which keeps
+  /// ``NotifPrefsBlob/Limits/legacy``: it reads a longer list wrongly. Never throws; a failed
+  /// read keeps the current limits and is retried on the next call.
+  public func loadLimitsIfNeeded() async {
+    guard !limitsLoaded, support != .unsupported else { return }
+    do {
+      let raw = try await session.getSync(.notifCaps)
+      support = .supported
+      limits = NotifPrefsBlob.Limits(decoding: raw) ?? .legacy
+      limitsLoaded = true
+      logger.info("Radio keeps \(self.limits.channelRules) channel, \(self.limits.contactRules) contact rules")
+    } catch {
+      if markUnsupportedIfRejected(error) { return }
+      logger.warning("Could not read notif-prefs caps: \(error.localizedDescription)")
     }
   }
 
@@ -149,9 +181,9 @@ public actor NotifSyncService {
   ///
   /// Only overrides are emitted: a channel at `.all` and an unmuted contact both match
   /// the blob's `globalMode`, so leaving them out keeps the payload inside the firmware's
-  /// 16-rule-per-list cap on realistic devices.
+  /// per-list caps on realistic devices.
   ///
-  /// Past that cap the surplus is dropped *here* rather than in ``NotifPrefsBlob/encode()``:
+  /// Past ``limits`` the surplus is dropped *here* rather than in ``NotifPrefsBlob/encode(limits:)``:
   /// the returned blob is what gets cached as ``lastPushedBlob``, so it has to be equal to
   /// what the wire carries or the cache would claim rules the device never received. The
   /// rules that survive are the first of each list in the order the store returns them —
@@ -166,14 +198,15 @@ public actor NotifSyncService {
 
     let channelRules = Self.channelRules(from: channels)
     let contactRules = Self.contactRules(from: contacts)
-    if channelRules.count > NotifPrefsBlob.maxChannelRules || contactRules.count > NotifPrefsBlob.maxContactRules {
+    let limits = limits
+    if channelRules.count > limits.channelRules || contactRules.count > limits.contactRules {
       logger.warning("Notif prefs exceed the firmware cap: \(channelRules.count) channel, \(contactRules.count) contact rules")
     }
 
     return NotifPrefsBlob(
       globalMode: .all,
-      channelRules: Array(channelRules.prefix(NotifPrefsBlob.maxChannelRules)),
-      contactRules: Array(contactRules.prefix(NotifPrefsBlob.maxContactRules))
+      channelRules: Array(channelRules.prefix(limits.channelRules)),
+      contactRules: Array(contactRules.prefix(limits.contactRules))
     )
   }
 
@@ -211,6 +244,8 @@ public actor NotifSyncService {
           meshError.deviceErrorCode == .unsupportedCommand else { return false }
     support = .unsupported
     lastPushedBlob = nil
+    limits = .legacy
+    limitsLoaded = false
     logger.info("Device rejected the notif-prefs sync slot; disabling notification sync for this connection")
     return true
   }
