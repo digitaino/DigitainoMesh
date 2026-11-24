@@ -366,8 +366,12 @@ favourites 81, contact pins 79, channel pins 20 unchanged; no pending erase.
   This Radio through the reworked import screen.
 - An 8-send DM through a v1.15 repeater (decision 1's known limit); a reaction to a DM and a
   channel message; a Text Rule with a reaction from the same sender.
-- iPad layout pass. Beta notes (BETA_CHANGES.md) and the curated What's New wording.
-- Merge `upstream-sync-1.6` and `upstream-sync-1.7` into `main`, push, `fastlane beta` (new
-  App Store Connect version: Beta App Review).
+- iPad layout pass.
+- `fastlane beta` (new App Store Connect version: Beta App Review).
+
+**Done 2026-11-24 after the install:** beta notes (BETA_CHANGES.md) and the What's New
+sheet (884c5bde: the fork's "Forget one radio, keep the rest" first, then upstream's four
+items, 12 languages); `upstream-sync-1.7` merged into `main` as 5d541471 (which also
+brings in `upstream-sync-1.6`); `main` and both sync branches pushed.
 - Next sync: `upstream/dev` is 24 commits past 1.7.1 (repeater watchlist, expanded Rx Log,
   MECP 1.4.1, background battery work).
